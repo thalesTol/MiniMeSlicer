@@ -20,8 +20,8 @@ Done:
   (network plugin, server headers, settings file depend on them).
 
 Open:
-- Sliced Preview still draws gradient / glow filaments in one colour (tool colours live in a shared 1-row texture,
-  `AdvancedRenderer::bind_tool_colors_texture`).
+- Sliced Preview: gradient / multi-colour / glow drawn in the Summary and ColorPrint views (`u_look_*` uniforms in
+  `140/gcode.fs`, `AdvancedRenderer::set_filament_look_uniforms`). Gradient spans the whole print height.
 - Sidebar colour square shows no glow halo.
 - Curved / polyline cut (new mode next to `CutMode::cutTongueAndGroove`, using `MeshBoolean` minus/intersect).
 

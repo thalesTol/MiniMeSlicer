@@ -32,6 +32,30 @@ uniform samplerBuffer s_per_move_data_texture;
 in float moveId;
 in vec3 frag_normal;
 in vec3 frag_pos;
+// SliceOfMe: gradient / multi-colour / glow filaments in the preview (Summary and ColorPrint views).
+in vec3 world_pos_v;
+uniform int u_look_enabled;
+uniform vec4 u_look_colors[128]; // 4 per filament slot
+uniform vec4 u_look_info[32];    // x = colour count, y = mode (1 gradient, 2 split)
+uniform vec4 u_look_glow[32];    // rgb = glow colour, a = strength
+uniform vec4 u_look_box;         // x/y = print min/max Z, z/w = print XY centre
+
+vec3 look_color(int slot, vec3 fallback)
+{
+    int n = int(u_look_info[slot].x + 0.5);
+    if (n < 2)
+        return fallback;
+    int base = slot * 4;
+    if (u_look_info[slot].y < 1.5) {
+        float h = max(u_look_box.y - u_look_box.x, 0.0001);
+        float t = clamp((world_pos_v.z - u_look_box.x) / h, 0.0, 1.0) * float(n - 1);
+        int i = int(min(floor(t), float(n - 2)));
+        return mix(u_look_colors[base + i].rgb, u_look_colors[base + i + 1].rgb, t - float(i));
+    }
+    float a = atan(world_pos_v.y - u_look_box.w, world_pos_v.x - u_look_box.z);
+    int i = int(min(floor((a + 3.14159265) / 6.28318531 * float(n)), float(n - 1)));
+    return u_look_colors[base + i].rgb;
+}
 
 out vec4 frag_color;
 
@@ -142,6 +166,15 @@ void main()
 
     vec3 type_rangeData_deltaExtruder = texelFetch(s_per_move_data_texture, int(moveId)).rgb;
     vec4 base_color = get_base_color(type_rangeData_deltaExtruder);
+    // SliceOfMe: filament looks for extrusions coloured by filament
+    int look_slot = -1;
+    if (u_look_enabled > 0 && type_rangeData_deltaExtruder.x > 9.5 && type_rangeData_deltaExtruder.x < 10.5) {
+        look_slot = int(type_rangeData_deltaExtruder.y + 0.5);
+        if (look_slot >= 0 && look_slot < 32)
+            base_color.rgb = look_color(look_slot, base_color.rgb);
+        else
+            look_slot = -1;
+    }
 
     vec4 mixed_color = mix(custom_option_color, base_color, u_isTopLayer_hasCustomOptins.y > 0.5 ? 0.0 : 1.0);
     // x = tainted, y = specular;
@@ -166,5 +199,10 @@ void main()
         t_emission_factor = emission_factor;
     }
 
-    frag_color = vec4(vec3(intensity.y) + mixed_color.rgb * (intensity.x + t_emission_factor), mixed_color.a);
+    vec3 glow = vec3(0.0);
+    if (look_slot >= 0 && u_look_glow[look_slot].a > 0.0) {
+        float rim = 1.0 - abs(normalize(normal_matrix * normalize(frag_normal)).z);
+        glow = u_look_glow[look_slot].rgb * u_look_glow[look_slot].a * (0.35 + 0.65 * rim * rim);
+    }
+    frag_color = vec4(vec3(intensity.y) + mixed_color.rgb * (intensity.x + t_emission_factor) + glow, mixed_color.a);
 }

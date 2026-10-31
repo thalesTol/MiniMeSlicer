@@ -1224,6 +1224,8 @@ namespace Slic3r
                 // end helio
                 }
 
+                set_filament_look_uniforms(*p_shader);
+
                 for (size_t i = 0; i < layer_index_list.size(); ++i) {
 
                     auto& t_layer = (*p_layer_manager)[layer_index_list[i]];
@@ -1721,6 +1723,42 @@ namespace Slic3r
                 if (m_p_tool_colors_texture) {
                     m_p_tool_colors_texture->bind(stage);
                 }
+            }
+
+            // SliceOfMe: gradient / multi-colour / glow filaments in the Summary and ColorPrint views.
+            // Slot i of the tool colours is filament i, so the shader indexes these arrays by the same id.
+            void AdvancedRenderer::set_filament_look_uniforms(const GLShaderProgram& shader) const
+            {
+                const bool by_filament = m_view_type == EViewType::Summary || m_view_type == EViewType::ColorPrint;
+                const auto looks = by_filament ? GLVolumeCollection::load_filament_looks() : std::vector<GLVolumeCollection::FilamentLook>();
+                constexpr size_t max_slots = 32;
+                const size_t     slots     = std::min(looks.size(), max_slots);
+                bool             any       = false;
+                std::vector<float> colors(max_slots * 4 * 4, 0.f), info(max_slots * 4, 0.f), glow(max_slots * 4, 0.f);
+                for (size_t i = 0; i < slots; ++i) {
+                    const auto& look = looks[i];
+                    if (look.mode != GLVolumeCollection::FilamentLook::Mode::Single) {
+                        info[i * 4]     = float(look.colors.size());
+                        info[i * 4 + 1] = float(look.mode);
+                        for (size_t c = 0; c < look.colors.size(); ++c)
+                            std::copy(look.colors[c].begin(), look.colors[c].end(), colors.begin() + (i * 4 + c) * 4);
+                        any = true;
+                    }
+                    std::copy(look.glow.begin(), look.glow.end(), glow.begin() + i * 4);
+                    any |= look.glow[3] > 0.f;
+                }
+                shader.set_uniform("u_look_enabled", any ? 1 : 0);
+                if (!any)
+                    return;
+                if (const int id = shader.get_uniform_location("u_look_colors[0]"); id >= 0)
+                    glsafe(::glUniform4fv(id, GLsizei(max_slots * 4), colors.data()));
+                if (const int id = shader.get_uniform_location("u_look_info[0]"); id >= 0)
+                    glsafe(::glUniform4fv(id, GLsizei(max_slots), info.data()));
+                if (const int id = shader.get_uniform_location("u_look_glow[0]"); id >= 0)
+                    glsafe(::glUniform4fv(id, GLsizei(max_slots), glow.data()));
+                const BoundingBoxf3& box    = get_paths_bounding_box();
+                const Vec3d          center = box.center();
+                shader.set_uniform("u_look_box", std::array<float, 4>{float(box.min.z()), float(box.max.z()), float(center.x()), float(center.y())});
             }
 
             void AdvancedRenderer::unbind_tool_colors_texture()

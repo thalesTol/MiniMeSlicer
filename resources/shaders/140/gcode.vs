@@ -10,6 +10,7 @@ uniform samplerBuffer s_segment_texture;
 out float moveId;
 out vec3 frag_normal;
 out vec3 frag_pos;
+out vec3 world_pos_v; // SliceOfMe: world position for gradient / multi-colour filaments
 
 void main()
 {
@@ -103,6 +104,7 @@ void main()
         }
     }
 
+    world_pos_v = position;
     vec4 final_position = view_model_matrix * vec4(position, 1.0);
     frag_pos = final_position.xyz;
     frag_normal = normalize(frag_normal);

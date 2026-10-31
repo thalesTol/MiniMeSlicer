@@ -113,6 +113,8 @@ namespace Slic3r {
 
                 void bind_tool_colors_texture(uint8_t stage);
                 void unbind_tool_colors_texture();
+                // SliceOfMe: gradient / multi-colour / glow filament uniforms for the gcode shader
+                void set_filament_look_uniforms(const GLShaderProgram& shader) const;
 
                 void initialize_triangular_prism();
                 void initialize_diamond();
