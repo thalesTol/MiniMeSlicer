@@ -396,6 +396,10 @@ set(SLIC3R_GUI_SOURCES
     GUI/FilamentPickerDialog.hpp
     GUI/FilamentBitmapUtils.cpp
     GUI/FilamentBitmapUtils.hpp
+    GUI/FilamentColourDialog.cpp
+    GUI/FilamentColourDialog.hpp
+    GUI/FilamentLookDialog.cpp
+    GUI/FilamentLookDialog.hpp
     GUI/WipeTowerDialog.cpp
     GUI/WipeTowerDialog.hpp
     GUI/RemovableDriveManager.cpp

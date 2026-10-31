@@ -87,11 +87,55 @@ bool is_upper_dovetail_part(vec3 local_pos)
     return abs(skewed_x) <= half_width;
 }
 
+// SliceOfMe: gradient / dual / multi-colour filaments.
+// multi_color_mode: 1 = gradient along Z, 2 = split into sectors around the volume centre.
+uniform int multi_color_count;
+uniform int multi_color_mode;
+uniform vec4 multi_colors[4];
+// x/y = min/max Z for gradients, z/w = XY centre for split colours.
+uniform vec4 multi_color_box;
+
+vec3 multi_color_at(int i)
+{
+    if (i <= 0) return multi_colors[0].rgb;
+    if (i == 1) return multi_colors[1].rgb;
+    if (i == 2) return multi_colors[2].rgb;
+    return multi_colors[3].rgb;
+}
+
+// SliceOfMe: glow filaments. rgb = glow colour, a = strength (0 = no glow).
+uniform vec4 glow_color;
+
+vec3 glow_term()
+{
+    if (glow_color.a <= 0.0)
+        return vec3(0.0);
+    // Brighter towards the silhouette, like light scattering out of the part.
+    float rim = 1.0 - abs(normalize(eye_normal).z);
+    return glow_color.rgb * glow_color.a * (0.35 + 0.65 * rim * rim);
+}
+
+vec3 filament_look_color()
+{
+    int n = multi_color_count;
+    if (multi_color_mode == 1) {
+        float h = max(multi_color_box.y - multi_color_box.x, EPSILON);
+        float t = clamp((world_pos.z - multi_color_box.x) / h, 0.0, 1.0) * float(n - 1);
+        int i = int(min(floor(t), float(n - 2)));
+        return mix(multi_color_at(i), multi_color_at(i + 1), t - float(i));
+    }
+    float a = atan(world_pos.y - multi_color_box.w, world_pos.x - multi_color_box.z);
+    int i = int(min(floor((a + 3.14159265) / 6.28318531 * float(n)), float(n - 1)));
+    return multi_color_at(i);
+}
+
 void main()
 {
     if (any(lessThan(clipping_planes_dots, ZERO)))
         discard;
     vec3  color = uniform_color.rgb;
+    if (multi_color_count > 1 && !is_outline)
+        color = filament_look_color();
     float alpha = uniform_color.a;
 
     if (use_color_clip_plane){
@@ -143,7 +187,7 @@ void main()
         gl_FragColor = vec4(0.45 * texture2D(environment_tex, normalize(eye_normal).xy * 0.5 + 0.5).xyz + 0.8 * color * intensity.x, alpha);
 #endif
 	else
-        gl_FragColor = vec4(vec3(intensity.y) + color * intensity.x, alpha);
+        gl_FragColor = vec4(vec3(intensity.y) + color * intensity.x + glow_term(), alpha);
 
     // In the support painting gizmo and the seam painting gizmo are painted triangles rendered over the already
     // rendered object. To resolved z-fighting between previously rendered object and painted triangles, values

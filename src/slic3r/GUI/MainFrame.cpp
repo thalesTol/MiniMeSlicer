@@ -1221,8 +1221,8 @@ void MainFrame::update_title()
     if (m_topbar)
         m_topbar->SetTitle(title);
     // Also reflect the "*" in the window/taskbar title, which set_project_name builds
-    // as "<name> - BambuStudio".
-    SetTitle(title + " - BambuStudio");
+    // as "<name> - BambuStudio". SliceOfMe: show the product name instead.
+    SetTitle(title + " - " + SLIC3R_APP_FULL_NAME);
 #else
     SetTitle(title);
 #ifdef __APPLE__

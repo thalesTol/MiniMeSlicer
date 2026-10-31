@@ -2476,6 +2476,15 @@ void PrintConfigDef::init_fff_params()
     def->mode     = comAdvanced;
     def->set_default_value(new ConfigOptionStrings{""});
 
+    // SliceOfMe: glow-in-the-dark / luminous filaments. Only changes how the filament looks on screen.
+    def           = this->add("filament_glow_colour", coStrings);
+    def->label    = L("Glow color");
+    def->tooltip  = L("For glow-in-the-dark filaments: the color it glows. Leave empty for normal filaments. "
+                      "Only changes how the filament looks in the 3D view.");
+    def->gui_type = ConfigOptionDef::GUIType::color;
+    def->mode     = comAdvanced;
+    def->set_default_value(new ConfigOptionStrings{""});
+
     def = this->add("filament_colour", coStrings);
     def->label = L("Color");
     def->tooltip = L("Only used as a visual help on UI");

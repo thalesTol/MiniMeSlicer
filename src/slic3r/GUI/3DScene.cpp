@@ -625,6 +625,65 @@ void GLVolume::set_render_color()
 
 }
 
+// Refreshed at the start of every GLVolumeCollection::render().
+static std::vector<GLVolumeCollection::FilamentLook> s_filament_looks;
+
+std::vector<GLVolumeCollection::FilamentLook> GLVolumeCollection::load_filament_looks()
+{
+    std::vector<FilamentLook> looks;
+    GUI::Plater *plater = GUI::wxGetApp().plater();
+    if (plater == nullptr)
+        return looks;
+
+    const std::vector<std::string> packs = plater->get_filament_colors_render_info();
+    const std::vector<std::string> types = plater->get_filament_color_render_type();
+    looks.resize(packs.size());
+    for (size_t i = 0; i < packs.size(); ++i) {
+        FilamentLook &look = looks[i];
+        for (const std::string &token : split_string(packs[i], ' ')) {
+            if (token.empty() || look.colors.size() == FilamentLook::MaxColors)
+                continue;
+            ColorRGBA rgba;
+            if (decode_color(token, rgba))
+                look.colors.push_back(adjust_color_for_rendering(rgba.get_data()));
+        }
+        if (look.colors.size() > 1)
+            look.mode = (i < types.size() && types[i] == "0") ? FilamentLook::Mode::Gradient : FilamentLook::Mode::Split;
+    }
+
+    // Glow comes from the filament preset (filament_glow_colour), mirrored into the plater config.
+    if (const DynamicPrintConfig *config = plater->config()) {
+        if (const auto *glow_opt = config->option<ConfigOptionStrings>("filament_glow_colour")) {
+            if (looks.size() < glow_opt->values.size())
+                looks.resize(glow_opt->values.size());
+            for (size_t i = 0; i < glow_opt->values.size(); ++i) {
+                ColorRGBA glow;
+                if (!glow_opt->values[i].empty() && decode_color(glow_opt->values[i], glow))
+                    looks[i].glow = {glow.r(), glow.g(), glow.b(), 0.6f};
+            }
+        }
+    }
+    return looks;
+}
+
+void GLVolumeCollection::set_filament_look_uniforms(const GLShaderProgram &shader, const std::vector<FilamentLook> &looks, int filament_idx, const BoundingBoxf3 &world_box)
+{
+    const FilamentLook *look = (filament_idx >= 0 && filament_idx < (int) looks.size()) ? &looks[filament_idx] : nullptr;
+    shader.set_uniform("glow_color", look ? look->glow : std::array<float, 4>{0.f, 0.f, 0.f, 0.f});
+    if (look == nullptr || look->mode == FilamentLook::Mode::Single) {
+        shader.set_uniform("multi_color_count", 0);
+        return;
+    }
+    shader.set_uniform("multi_color_count", (int) look->colors.size());
+    shader.set_uniform("multi_color_mode", (int) look->mode);
+    static const char *names[FilamentLook::MaxColors] = {"multi_colors[0]", "multi_colors[1]", "multi_colors[2]", "multi_colors[3]"};
+    for (size_t i = 0; i < look->colors.size(); ++i)
+        shader.set_uniform(names[i], look->colors[i]);
+    const Vec3d center = world_box.center();
+    // x/y = Z range for gradients, z/w = XY centre for split colours.
+    shader.set_uniform("multi_color_box", std::array<float, 4>{float(world_box.min.z()), float(world_box.max.z()), float(center.x()), float(center.y())});
+}
+
 std::array<float, 4> color_from_model_volume(const ModelVolume& model_volume)
 {
     std::array<float, 4> color = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -914,6 +973,7 @@ void GLVolume::render(const GUI::Camera &camera, const std::vector<std::array<fl
                     continue;
 
                 if (shader) {
+                    int filament_idx = 0; // SliceOfMe: 0-based filament for the gradient / multi-colour look
                     if (idx == 0) {
                         ModelObject* mo = model_objects[object_idx()];
                         ModelVolume* mv = mo->volumes[volume_idx()];
@@ -923,12 +983,14 @@ void GLVolume::render(const GUI::Camera &camera, const std::vector<std::array<fl
                         if (extruder_id > (int)cp_colors.size()) { extruder_id = 1; }
                         std::array<float, 4> new_color = adjust_color_for_rendering(cp_colors[extruder_id - 1]);
                         shader->set_uniform("uniform_color", new_color);
+                        filament_idx = extruder_id - 1;
                     }
                     else {
                         if (idx <= colors.size()) {
                             //to make black not too hard too see
                             std::array<float, 4> new_color = adjust_color_for_rendering(cp_colors[idx - 1]);
                             shader->set_uniform("uniform_color", new_color);
+                            filament_idx = idx - 1;
                         }
                         else {
                             //to make black not too hard too see
@@ -936,6 +998,7 @@ void GLVolume::render(const GUI::Camera &camera, const std::vector<std::array<fl
                             shader->set_uniform("uniform_color", new_color);
                         }
                     }
+                    GLVolumeCollection::set_filament_look_uniforms(*shader, s_filament_looks, filament_idx, transformed_bounding_box());
                 }
                 iva->render(shader, this->tverts_range, this->qverts_range);
                 /*if (force_native_color && (render_color[3] < 1.0)) {
@@ -1707,6 +1770,9 @@ void GLVolumeCollection::render(GUI::ERenderPipelineStage             render_pip
     if (shader == nullptr)
         return;
 
+    // SliceOfMe: gradient / multi-colour filament looks, also read by GLVolume::render() for painted volumes.
+    s_filament_looks = load_filament_looks();
+
     if (type == ERenderType::Transparent) {
         glsafe(::glEnable(GL_BLEND));
         glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
@@ -1829,7 +1895,13 @@ void GLVolumeCollection::render(GUI::ERenderPipelineStage             render_pip
             // Only disable MMU colors if this specific volume has a color override
             bool this_volume_has_override = m_use_volume_color_override &&
                                            m_volume_color_overrides.find(volume.second.first) != m_volume_color_overrides.end();
+            // SliceOfMe: only volumes drawn in their filament colour get the gradient / multi-colour look.
+            const GLVolume &v = *volume.first;
+            const bool uses_filament_color = !this_volume_has_override && !v.disabled && v.printable && !v.force_native_color &&
+                                             !v.force_neutral_color && !v.is_modifier && !v.is_wipe_tower && !v.slice_error;
+            set_filament_look_uniforms(*shader, s_filament_looks, uses_filament_color ? std::max(v.extruder_id, 1) - 1 : -1, world_box);
             volume.first->render(camera, colors,model,with_outline && volume.first->selected, volume.first->slice_error ? red_color : body_color, this_volume_has_override);
+            set_filament_look_uniforms(*shader, s_filament_looks, -1, world_box);
         }
         else {
             if (volume.first->selected) {

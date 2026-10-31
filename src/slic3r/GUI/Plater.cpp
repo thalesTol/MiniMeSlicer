@@ -4432,6 +4432,7 @@ size_t Sidebar::add_custom_filaments(const std::vector<std::pair<wxColour, std::
         rotate_strings("filament_colour");
         rotate_strings("filament_multi_colour");
         rotate_strings("filament_colour_type");
+        rotate_strings("filament_glow_colour"); // SliceOfMe
         rotate_ints("filament_map");
         rotate_ints("filament_nozzle_map");
         rotate_ints("filament_volume_map");
@@ -7489,6 +7490,7 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         "enable_prime_tower", "wipe_tower_x", "wipe_tower_y", "prime_tower_width", "prime_tower_brim_width", "prime_tower_skip_points", "prime_tower_enable_framework","prime_tower_max_speed",
         "prime_tower_rib_wall","prime_tower_extra_rib_length", "prime_tower_rib_width","prime_tower_fillet_wall", "prime_tower_infill_gap","filament_prime_volume","filament_prime_volume_nc",
         "extruder_colour", "filament_colour", "filament_type", "filament_is_support", "material_colour", "printable_height", "extruder_printable_height", "printer_model", "printer_technology",
+        "filament_glow_colour", // SliceOfMe: read by the 3D view for glow filaments
         // These values are necessary to construct SlicingParameters by the Canvas3D variable layer height editor.
         "layer_height", "initial_layer_print_height", "min_layer_height", "max_layer_height",
         "brim_width", "wall_loops", "wall_filament", "sparse_infill_density", "sparse_infill_filament", "top_shell_layers",
@@ -25182,7 +25184,7 @@ void Plater::on_config_change(const DynamicPrintConfig &config)
             p->sidebar->update_mixed_filament_list();
             continue;
         }
-        if (opt_key == "material_colour") {
+        if (opt_key == "material_colour" || opt_key == "filament_glow_colour") { // SliceOfMe: glow colour
             update_scheduled = true; // update should be scheduled (for update 3DScene)
         }
 

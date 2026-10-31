@@ -42,6 +42,8 @@
 #include "MsgDialog.hpp"
 #include "ParamsDialog.hpp"
 #include "FilamentPickerDialog.hpp"
+#include "FilamentColourDialog.hpp"
+#include "FilamentLookDialog.hpp"
 #include "wxExtensions.hpp"
 
 #include "DeviceCore/DevManager.h"
@@ -869,8 +871,15 @@ PlaterPresetComboBox::PlaterPresetComboBox(wxWindow *parent, Preset::Type preset
         clr_picker->SetBackgroundColour(StateColor::darkModeColorFor(*wxWHITE));
         clr_picker->SetToolTip(_L("Click to pick filament color"));
         clr_picker->Bind(wxEVT_BUTTON, [this](wxCommandEvent& e) {
-            // Check if it's an official filament
             auto fila_type = Preset::remove_suffix_modified(GetValue().ToUTF8().data());
+            // SliceOfMe: one tabbed "Filament look" window for every filament (solid, gradient,
+            // multi-color, translucent, glow). Official colours are listed when the preset has them.
+            if (show_filament_look_dialog(fila_type)) {
+                wxCommandEvent *evt = new wxCommandEvent(EVT_FILAMENT_COLOR_CHANGED);
+                evt->SetInt(m_filament_idx);
+                wxQueueEvent(wxGetApp().plater(), evt);
+                return;
+            }
             bool is_official = boost::algorithm::starts_with(fila_type, "Bambu");
             if (is_official) {
                 // Get filament_id from filament_presets
@@ -1506,12 +1515,57 @@ void PlaterPresetComboBox::show_default_color_picker()
 
     m_clrData.SetColour(current_clr);
 
-    wxColourData data = show_sys_picker_dialog(this, m_clrData);
-    if (m_clrData.GetColour() != data.GetColour()) {
-        std::vector<std::string> color = {data.GetColour().GetAsString(wxC2S_HTML_SYNTAX).ToStdString()};
-        m_clrData.SetColour(data.GetColour());
+    // SliceOfMe: own dialog so the colour can carry an opacity (#RRGGBBAA).
+    FilamentColourDialog dialog(this, current_clr);
+    if (dialog.ShowModal() == wxID_OK && dialog.GetColour() != current_clr) {
+        std::vector<std::string> color = {dialog.GetColour().GetAsString(wxC2S_HTML_SYNTAX).ToStdString()};
+        m_clrData.SetColour(dialog.GetColour());
         sync_colour_config(color, false);
     }
+}
+
+bool PlaterPresetComboBox::show_filament_look_dialog(const std::string &fila_type)
+{
+    const std::string &preset_name     = m_preset_bundle->filament_presets[m_filament_idx];
+    const Preset      *selected_preset = m_collection->find_preset(preset_name);
+    const wxString     fila_id         = selected_preset ? wxString::FromUTF8(selected_preset->filament_id) : wxString();
+
+    DynamicPrintConfig *cfg      = &wxGetApp().preset_bundle->project_config;
+    auto               *glow_opt = cfg->option<ConfigOptionStrings>("filament_glow_colour");
+    wxColour            glow;
+    if (glow_opt && m_filament_idx < (int) glow_opt->values.size() && !glow_opt->values[m_filament_idx].empty())
+        glow = wxColour(glow_opt->values[m_filament_idx]);
+
+    FilamentColor current = get_cur_color_info();
+    if (current.ColorCount() == 0) {
+        auto *colour_opt = cfg->option<ConfigOptionStrings>("filament_colour");
+        if (colour_opt && m_filament_idx < (int) colour_opt->values.size()) {
+            current.AddColor(wxColour(colour_opt->values[m_filament_idx]));
+            current.EndSet(1);
+        }
+    }
+
+    FilamentLookDialog dialog(this, fila_id, current, glow, fila_type);
+    if (dialog.ShowModal() != wxID_OK)
+        return true; // handled: the user cancelled
+
+    const FilamentColor &look = dialog.GetFilamentColor();
+    if (look.GetColors().empty())
+        return true;
+
+    // Glow first, so the colour sync below carries it to the plater and redraws the 3D view.
+    if (glow_opt) {
+        if ((int) glow_opt->values.size() <= m_filament_idx)
+            glow_opt->values.resize(m_filament_idx + 1, "");
+        const wxColour new_glow           = dialog.GetGlowColour();
+        glow_opt->values[m_filament_idx] = new_glow.IsOk() ? new_glow.GetAsString(wxC2S_HTML_SYNTAX).ToStdString() : std::string();
+    }
+
+    std::vector<std::string> colors;
+    for (const wxColour &color : look.GetColors())
+        colors.push_back(color.GetAsString(wxC2S_HTML_SYNTAX).ToStdString());
+    sync_colour_config(colors, look.m_color_type == FilamentColor::ColorType::GRADIENT_CLR);
+    return true;
 }
 
 void PlaterPresetComboBox::sync_colour_config(const std::vector<std::string> &clrs, bool is_gradient)

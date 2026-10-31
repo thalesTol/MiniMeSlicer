@@ -48,6 +48,7 @@ static std::vector<std::string> s_project_options {
     "filament_colour",
     "filament_colour_type",
     "filament_multi_colour",
+    "filament_glow_colour", // SliceOfMe
     "wipe_tower_x",
     "wipe_tower_y",
     "wipe_tower_rotation_angle",
@@ -2085,6 +2086,14 @@ void PresetBundle::load_selections(AppConfig &config, const PresetPreferences& p
     filament_color_types.resize(filament_presets.size(), "1");
     project_config.option<ConfigOptionStrings>("filament_colour_type")->values = filament_color_types;
 
+    // SliceOfMe: glow colour per filament ("" = no glow)
+    std::vector<std::string> filament_glow_colors;
+    if (config.has("presets", "filament_glow_colors")) {
+        boost::algorithm::split(filament_glow_colors, config.get("presets", "filament_glow_colors"), boost::algorithm::is_any_of(","));
+    }
+    filament_glow_colors.resize(filament_presets.size(), "");
+    project_config.option<ConfigOptionStrings>("filament_glow_colour")->values = filament_glow_colors;
+
     std::vector<int> filament_maps(filament_colors.size(), 1);
     project_config.option<ConfigOptionInts>("filament_map")->values = filament_maps;
 
@@ -2297,6 +2306,10 @@ void PresetBundle::export_selections(AppConfig &config)
     std::string           filament_color_types = boost::algorithm::join(project_config.option<ConfigOptionStrings>("filament_colour_type")->values, ",");
     config.set("presets", "filament_color_types", filament_color_types);
 
+    // SliceOfMe: glow colours
+    if (auto *glow_opt = project_config.option<ConfigOptionStrings>("filament_glow_colour"))
+        config.set("presets", "filament_glow_colors", boost::algorithm::join(glow_opt->values, ","));
+
     std::string flush_volumes_matrix = boost::algorithm::join(project_config.option<ConfigOptionFloats>("flush_volumes_matrix")->values |
                                                              boost::adaptors::transformed(static_cast<std::string (*)(double)>(std::to_string)),
                                                          "|");
@@ -2384,6 +2397,8 @@ void PresetBundle::set_num_filaments(unsigned int n, std::string new_color)
     filament_color->resize(n);
     filament_multi_color->resize(n);
     filament_color_type->resize(n);
+    if (auto *glow_opt = project_config.option<ConfigOptionStrings>("filament_glow_colour")) // SliceOfMe
+        glow_opt->values.resize(n, "");
     filament_map->values.resize(n, 1);
     ams_multi_color_filment.resize(n);
     filament_nozzle_map->values.resize(n, 0);
@@ -2464,6 +2479,8 @@ void PresetBundle::update_num_filaments(unsigned int to_del_flament_id)
 
     erase_or_resize(filament_multi_color->values);
     erase_or_resize(filament_color_type->values);
+    if (auto *glow_opt = project_config.option<ConfigOptionStrings>("filament_glow_colour")) // SliceOfMe
+        erase_or_resize(glow_opt->values);
     erase_or_resize(ams_multi_color_filment);
 
     {

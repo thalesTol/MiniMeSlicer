@@ -2,7 +2,9 @@
 #define _libslic3r_h_
 
 #include "libslic3r_version.h"
-#define SLIC3R_APP_FULL_NAME "Bambu Studio"
+// SliceOfMe: visible product name. SLIC3R_APP_NAME / SLIC3R_APP_KEY stay "BambuStudio" because
+// the network plugin, server headers and the settings file name depend on them.
+#define SLIC3R_APP_FULL_NAME "MiniMe Slicer"
 #define GCODEVIEWER_APP_NAME "BambuStudio G-code Viewer"
 #define GCODEVIEWER_APP_KEY  "BambuStudioGcodeViewer"
 #define GCODEVIEWER_BUILD_ID std::string("BambuStudio G-code Viewer-") + std::string(SLIC3R_VERSION) + std::string("-RC")

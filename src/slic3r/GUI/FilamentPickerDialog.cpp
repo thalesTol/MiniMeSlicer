@@ -1,4 +1,5 @@
 #include "FilamentPickerDialog.hpp"
+#include "FilamentColourDialog.hpp"
 #include "GUI.hpp"
 #include "I18N.hpp"
 #include "GUI_App.hpp"
@@ -628,15 +629,17 @@ void FilamentPickerDialog::BindEvents()
             // Pause click detection while color picker is open
             StopClickDetection();
 
+            // SliceOfMe: own dialog so the custom colour can carry an opacity.
             wxColourData original_data = GetSingleColorData();
-            wxColourData result = show_sys_picker_dialog(this, original_data);
+            FilamentColourDialog colour_dialog(this, original_data.GetColour());
+            const bool accepted = colour_dialog.ShowModal() == wxID_OK;
 
             // Resume click detection after color picker closes
             StartClickDetection();
 
             // Check if user actually selected a different color
-            if (result.GetColour() != original_data.GetColour()) {
-                wxColour selected_color = result.GetColour();
+            if (accepted && colour_dialog.GetColour() != original_data.GetColour()) {
+                wxColour selected_color = colour_dialog.GetColour();
 
                 // Update m_current_filament_color with the selected color
                 m_cur_filament_color = FilamentColor();

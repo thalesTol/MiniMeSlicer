@@ -691,6 +691,22 @@ private:
     Vec4f       m_dovetail_clip_params{Vec4f::Zero()};
     Vec2f       m_dovetail_clip_tolerance{Vec2f::Zero()};
 
+    // SliceOfMe: extra colours of gradient / dual / multi-colour filaments, per filament (index 0 = filament 1).
+public:
+    struct FilamentLook
+    {
+        enum class Mode : int { Single = 0, Gradient = 1, Split = 2 };
+        Mode                              mode{Mode::Single};
+        std::vector<std::array<float, 4>> colors; // up to MaxColors, already adjusted for rendering
+        std::array<float, 4>              glow{0.f, 0.f, 0.f, 0.f}; // rgb + strength, from filament_glow_colour
+        static constexpr size_t           MaxColors = 4;
+    };
+    // Reads filament_multi_colour / filament_colour_type from the project config.
+    static std::vector<FilamentLook> load_filament_looks();
+    // Sets the multi_color_* uniforms for one draw call; filament_idx is 0-based, -1 disables.
+    static void set_filament_look_uniforms(const GLShaderProgram &shader, const std::vector<FilamentLook> &looks, int filament_idx, const BoundingBoxf3 &world_box);
+private:
+
     // Volume-based color override for gizmos (e.g., mesh boolean)
     bool m_use_volume_color_override{false};
     std::unordered_map<unsigned int, std::array<float, 4>> m_volume_color_overrides;
