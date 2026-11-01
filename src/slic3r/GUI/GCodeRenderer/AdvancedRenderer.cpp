@@ -1750,6 +1750,9 @@ namespace Slic3r
                 shader.set_uniform("u_look_enabled", any ? 1 : 0);
                 if (!any)
                     return;
+                // Only real filament slots: ids past the filament count are M600 colour changes.
+                const size_t filaments = m_gcode_result ? std::min(m_gcode_result->filaments_count, slots) : slots;
+                shader.set_uniform("u_look_count", int(filaments));
                 if (const int id = shader.get_uniform_location("u_look_colors[0]"); id >= 0)
                     glsafe(::glUniform4fv(id, GLsizei(max_slots * 4), colors.data()));
                 if (const int id = shader.get_uniform_location("u_look_info[0]"); id >= 0)

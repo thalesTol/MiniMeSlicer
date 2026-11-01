@@ -2896,6 +2896,9 @@ unsigned int PresetBundle::sync_ams_list(std::vector<std::pair<DynamicPrintConfi
     else {//overwrite;
         filament_color->values = ams_filament_colors;
         filament_color_type->values = ams_filament_color_types;
+        // SliceOfMe: the AMS spools replace the filaments, so their glow settings no longer apply
+        if (auto *glow_opt = project_config.option<ConfigOptionStrings>("filament_glow_colour"))
+            glow_opt->values.clear();
         this->filament_presets = ams_filament_presets;
         filament_map->values.resize(ams_filament_colors.size(), 1);
 
@@ -2936,6 +2939,10 @@ unsigned int PresetBundle::sync_ams_list(std::vector<std::pair<DynamicPrintConfi
             if (mixed_per_part_opt)   mixed_per_part_opt->values.push_back((unsigned char)snap.mixed_gradient_per_part);
         }
     }
+
+    // SliceOfMe: one glow entry per filament (kept for existing filaments, empty for new ones)
+    if (auto *glow_opt = project_config.option<ConfigOptionStrings>("filament_glow_colour"))
+        glow_opt->values.resize(this->filament_presets.size(), "");
 
     // Update ams_multi_color_filment
     update_filament_multi_color();

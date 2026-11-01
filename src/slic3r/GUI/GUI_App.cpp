@@ -2582,7 +2582,9 @@ static LogEncOptions s_get_log_enc_opts()
         assert(0 && "get_value_from_config failed");
     }// there are file errors
 
-    enc_options.enc_type = LogEncOptions::LOG_ENC_AES_256_CBC;
+    // SliceOfMe: plain-text logs. Encrypted logs can only be read with Bambu Lab's server-side key,
+    // which is of no use for a fork; plain logs let us debug crashes and hangs.
+    enc_options.enc_type = LogEncOptions::LOG_ENC_NONE;
     if (enc_options.enc_type == LogEncOptions::LOG_ENC_AES_256_CBC) {
         std::string enc_key_url;
         std::string enc_key_host_env;

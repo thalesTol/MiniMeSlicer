@@ -35,6 +35,7 @@ in vec3 frag_pos;
 // SliceOfMe: gradient / multi-colour / glow filaments in the preview (Summary and ColorPrint views).
 in vec3 world_pos_v;
 uniform int u_look_enabled;
+uniform int u_look_count;        // number of filament slots; higher ids are colour changes (M600)
 uniform vec4 u_look_colors[128]; // 4 per filament slot
 uniform vec4 u_look_info[32];    // x = colour count, y = mode (1 gradient, 2 split)
 uniform vec4 u_look_glow[32];    // rgb = glow colour, a = strength
@@ -168,9 +169,12 @@ void main()
     vec4 base_color = get_base_color(type_rangeData_deltaExtruder);
     // SliceOfMe: filament looks for extrusions coloured by filament
     int look_slot = -1;
-    if (u_look_enabled > 0 && type_rangeData_deltaExtruder.x > 9.5 && type_rangeData_deltaExtruder.x < 10.5) {
+    // Leave the greyed-out paths alone (other layers in "top layer only", ids past the visible range).
+    bool greyed = (u_isRangeView_isRangeVaild_topLayerOnly_viewType.z > 0.5 && !is_top_layer()) ||
+                  int(type_rangeData_deltaExtruder.y + 0.5) > int(u_pathDataRange.y + 0.5);
+    if (u_look_enabled > 0 && !greyed && type_rangeData_deltaExtruder.x > 9.5 && type_rangeData_deltaExtruder.x < 10.5) {
         look_slot = int(type_rangeData_deltaExtruder.y + 0.5);
-        if (look_slot >= 0 && look_slot < 32)
+        if (look_slot >= 0 && look_slot < u_look_count && look_slot < 32)
             base_color.rgb = look_color(look_slot, base_color.rgb);
         else
             look_slot = -1;

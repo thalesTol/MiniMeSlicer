@@ -13,6 +13,8 @@
 #include <wx/stattext.h>
 #include <wx/wrapsizer.h>
 
+#include <boost/log/trivial.hpp>
+
 #include "GUI_App.hpp"
 #include "I18N.hpp"
 #include "MainFrame.hpp"
@@ -237,6 +239,9 @@ wxScrolledWindow *FilamentLookDialog::create_page(Page page)
     wxScrolledWindow *win = new wxScrolledWindow(m_book, wxID_ANY, wxDefaultPosition, PAGE_SIZE, wxVSCROLL);
     win->SetBackgroundColour(*wxWHITE);
     win->SetScrollRate(0, FromDIP(10));
+    // Keep the vertical scrollbar visible: with a wrap sizer, a scrollbar that appears and disappears
+    // changes the width, re-wraps the swatches and can make the layout loop forever (UI freeze).
+    win->ShowScrollbars(wxSHOW_SB_NEVER, wxSHOW_SB_ALWAYS);
     win->SetMinSize(PAGE_SIZE);
     wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -598,6 +603,7 @@ void FilamentLookDialog::update_preview()
 
 wxString FilamentLookDialog::describe() const
 {
+    const wxString SEP = wxString::FromUTF8(" \xC2\xB7 "); // middle dot, independent of the Windows code page
     wxString text;
     switch (m_color.m_color_type) {
     case FilamentColor::ColorType::GRADIENT_CLR: text = wxString::Format(_L("Gradient, %d colours"), int(m_color.ColorCount())); break;
@@ -605,9 +611,9 @@ wxString FilamentLookDialog::describe() const
     default: text = _L("Solid"); break;
     }
     if (!all_opaque(m_color))
-        text += wxString::Format(" · " + _L("%d%% opaque"), int(std::lround(m_color.GetColors().front().Alpha() * 100.0 / 255.0)));
+        text += wxString::Format(SEP + _L("%d%% opaque"), int(std::lround(m_color.GetColors().front().Alpha() * 100.0 / 255.0)));
     if (m_glow.IsOk())
-        text += " · " + _L("glows") + " " + m_glow.GetAsString(wxC2S_HTML_SYNTAX);
+        text += SEP + _L("glows") + " " + m_glow.GetAsString(wxC2S_HTML_SYNTAX);
     return text;
 }
 
@@ -650,7 +656,9 @@ wxColour FilamentLookDialog::pick_colour(const wxColour &initial)
     wxColourData data;
     data.SetChooseFull(true);
     data.SetColour(with_alpha(initial, wxALPHA_OPAQUE));
+    BOOST_LOG_TRIVIAL(warning) << "FilamentLookDialog: opening system colour picker";
     const wxColourData result = show_sys_picker_dialog(this, data);
+    BOOST_LOG_TRIVIAL(warning) << "FilamentLookDialog: system colour picker closed";
     const wxColour &picked    = result.GetColour();
     if (!picked.IsOk() || picked == data.GetColour())
         return wxNullColour;

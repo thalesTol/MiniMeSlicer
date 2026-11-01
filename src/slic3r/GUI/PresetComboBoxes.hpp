@@ -210,7 +210,7 @@ public:
 
     FilamentColor get_cur_color_info();
     void show_default_color_picker();
-    // SliceOfMe: tabbed Filament look window; returns true when it handled the click.
+    // SliceOfMe: tabbed Filament look window; returns true when the look was changed.
     bool show_filament_look_dialog(const std::string &fila_type);
     void sync_colour_config(const std::vector<std::string> &clrs, bool is_gradient);
     void sys_color_changed() override;

@@ -164,6 +164,7 @@ set(SLIC3R_GUI_SOURCES
     GUI/Gizmos/GLGizmoFlatten.hpp
     GUI/Gizmos/GLGizmoAdvancedCut.cpp
     GUI/Gizmos/GLGizmoAdvancedCut.hpp
+    GUI/Gizmos/GLGizmoAdvancedCutCurve.cpp
     GUI/Gizmos/GLGizmoHollow.cpp
     GUI/Gizmos/GLGizmoHollow.hpp
     GUI/Gizmos/GLGizmoPainterBase.cpp

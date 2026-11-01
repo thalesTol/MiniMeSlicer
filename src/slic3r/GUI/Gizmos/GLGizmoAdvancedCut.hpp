@@ -6,6 +6,7 @@
 #include "FacetPicker.hpp"
 #include "libslic3r/Model.hpp"
 #include "libslic3r/CutUtils.hpp"
+#include <optional>
 
 namespace Slic3r {
 enum class CutConnectorType : int;
@@ -372,6 +373,91 @@ private:
     bool cut_line_processing() const;
     void discard_cut_line_processing();
     bool process_cut_line(SLAGizmoEventType action, const Vec2d &mouse_position);
+
+    // SliceOfMe: curved and shape cuts (GLGizmoAdvancedCutCurve.cpp).
+    // The outline drawn on the cut plane is pushed through the object along the plane normal and the
+    // object is split into the part inside (A) and outside (B) with mesh booleans. Both are sub-modes of
+    // the planar mode so the libslic3r CutMode enum stays untouched.
+    //  - Curved: a curvature pen. Every click adds a point and the path runs smoothly through all of them;
+    //    Shift+click makes a corner, click-drag pulls out handles. Right-click stops drawing; then the line
+    //    can be grabbed and bent, points dragged, and right-clicking a point removes it.
+    //  - Shape: circle, ellipse, rectangle, rounded rectangle or polygon, drawn by dragging on the plane.
+    // The split is previewed in the background; right-clicking a preview piece moves it between A and B.
+public: // used by helpers in GLGizmoAdvancedCutCurve.cpp
+    struct CurveAnchor
+    {
+        Vec2d p{Vec2d::Zero()};     // point in the cut plane frame, mm
+        Vec2d h_in{Vec2d::Zero()};  // incoming handle, relative to p (used when 'manual')
+        Vec2d h_out{Vec2d::Zero()}; // outgoing handle, relative to p (used when 'manual')
+        bool  corner{false};        // sharp point, no handles
+        bool  manual{false};        // handles set by the user; otherwise computed from the neighbours
+    };
+    enum class ShapeType : int { Circle = 0, Ellipse, Rectangle, RoundedRect, Polygon };
+    struct CurveShape
+    {
+        ShapeType type{ShapeType::Circle};
+        Vec2d     center{Vec2d::Zero()}; // plane frame, mm
+        Vec2d     size{Vec2d::Zero()};   // full width / height, mm
+        double    corner_radius{3.0};
+        int       sides{6};
+        double    rotation{0.0};         // degrees
+        bool      valid() const { return size.x() > 0.1 && size.y() > 0.1; }
+    };
+    struct CurveState
+    {
+        std::vector<CurveAnchor> anchors;
+        bool                     drawing{true};
+        CurveShape               shape;
+    };
+private:
+    struct CurvePreview; // background boolean result
+    struct CurvePiece;   // one connected piece of the preview, with its render model and raycaster
+
+    bool                     m_curve_mode{false};  // Curved or Shape mode is active
+    bool                     m_shape_mode{false};  // Shape mode (subset of m_curve_mode)
+    std::vector<CurveAnchor> m_curve_anchors;
+    CurveShape               m_curve_shape;
+    bool                     m_curve_drawing{true}; // Curved: clicks add points
+    std::optional<Vec2d>     m_curve_hover;         // rubber-band point under the mouse
+    int                      m_curve_drag_idx{-1};  // point being moved
+    bool                     m_curve_drag_handle{false}; // pulling out the handles of a new point
+    int                      m_curve_bend_span{-1}; // span being bent by dragging the line
+    double                   m_curve_bend_t{0.5};   // where on that span the line was grabbed
+    int                      m_shape_drag{0};       // 1 = drawing the shape, 2 = moving it
+    Vec2d                    m_shape_drag_start{Vec2d::Zero()};
+    std::vector<CurveState>  m_curve_undo, m_curve_redo; // drawing history, separate from the project undo
+
+    GLModel                                  m_curve_model;
+    std::shared_ptr<CurvePreview>            m_curve_preview;
+    std::vector<std::shared_ptr<CurvePiece>> m_curve_pieces; // built from the preview on the UI thread
+    size_t                                   m_curve_generation{0};
+    size_t                                   m_curve_preview_shown{size_t(-1)};
+    Transform3d                              m_curve_last_plane{Transform3d::Identity()}; // preview is redone when the plane moves
+
+    Transform3d              curve_plane_matrix() const;
+    bool                     curve_unproject(const Vec2d &mouse_pos, Vec2d &local);
+    std::vector<CurveAnchor> curve_effective_anchors(const std::vector<CurveAnchor> &anchors) const; // fills automatic handles
+    std::vector<Vec2d>       curve_outline(bool with_hover) const; // path or shape sampled into a polyline
+    TriangleMesh             curve_cutter_mesh() const;            // world coordinates, empty if not possible
+    void                     curve_changed();                      // restart the background preview
+    bool                     curve_preview_ready() const;   // preview matches the current outline
+    bool                     curve_preview_visible() const; // some preview is shown (may be one step behind)
+    void                     curve_update_pieces();                // take over a finished preview
+    int                      curve_pick_piece(const Vec2d &mouse_pos) const;
+    void                     curve_reset();
+    bool                     curve_gizmo_event(SLAGizmoEventType action, const Vec2d &mouse_position, bool shift_down);
+    bool                     shape_gizmo_event(SLAGizmoEventType action, const Vec2d &mouse_position, bool shift_down);
+    void                     curve_on_mouse(const wxMouseEvent &mouse_event);
+    void                     render_curve();
+    void                     render_curve_panel();
+    bool                     can_perform_curve_cut() const;
+    void                     perform_curve_cut(const Selection &selection);
+    void                     curve_push_undo(); // call before every change of the path or shape
+
+public:
+    // Ctrl+Z / Ctrl+Y while drawing a curved or shape cut. Returns false when there is nothing to undo,
+    // so the key falls through to the normal project undo.
+    bool curve_undo(bool redo);
 };
 
 } // namespace GUI

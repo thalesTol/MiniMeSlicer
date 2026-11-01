@@ -146,13 +146,18 @@ bool GLGizmoAdvancedCut::gizmo_event(SLAGizmoEventType action, const Vec2d &mous
 {
     CutConnectors &connectors = m_c->selection_info()->model_object()->cut_connectors;
 
-    if (shift_down && !m_connectors_editing &&
+    // SliceOfMe: in the curved / shape cut Shift belongs to the drawing tools
+    if (shift_down && !m_connectors_editing && !m_curve_mode &&
         (action == SLAGizmoEventType::LeftDown || action == SLAGizmoEventType::LeftUp || action == SLAGizmoEventType::Dragging)) {
         process_cut_line(action, mouse_position);
         return true;
     } else { // if (!shift_down)
         discard_cut_line_processing();
     }
+
+    // SliceOfMe: curved cut - clicks add points, right-click removes the last one
+    if (curve_gizmo_event(action, mouse_position, shift_down))
+        return true;
 
     if (action == SLAGizmoEventType::LeftDown) {
         // Pick-face mode is armed deliberately by the user, so while it is on, a click
@@ -266,7 +271,7 @@ std::string GLGizmoAdvancedCut::get_tooltip() const
         return tooltip;
     }
 
-    if (!m_dragging && m_cut_mode == CutMode::cutPlanar && !m_connectors_editing) {
+    if (!m_dragging && m_cut_mode == CutMode::cutPlanar && !m_curve_mode && !m_connectors_editing) {
         // Hybrid hover: GLVolume picking works before PartSelection hides source volumes;
         // once cut-part preview is active, raycast cut-part meshes instead (overlay is not pickable).
         const bool hovering_source_volume = m_parent.get_hover_volume_idx_before_gizmo() >= 0;
@@ -276,8 +281,14 @@ std::string GLGizmoAdvancedCut::get_tooltip() const
             return _u8L("Right-click a part to assign it to the other side");
     }
 
-    if (!m_dragging && m_hover_id == c_plate_move_id)
+    if (!m_dragging && m_hover_id == c_plate_move_id) {
+        // SliceOfMe: in the curved / shape cut the plane is the drawing surface
+        if (m_shape_mode)
+            return _u8L("Drag to draw the shape");
+        if (m_curve_mode)
+            return m_curve_drawing ? _u8L("Click to add a point, Shift+click for a corner") : _u8L("Drag the line to bend it");
         return _u8L("Drag to move the cut plane");
+    }
 
     if (tooltip.empty() && (m_hover_id == X || m_hover_id == Y || m_hover_id == Z)) {
         std::string axis = m_hover_id == X ? "X" : m_hover_id == Y ? "Y" : "Z";
@@ -339,14 +350,25 @@ bool GLGizmoAdvancedCut::is_looking_forward() const
 // Return false if no intersection was found, true otherwise.
 bool GLGizmoAdvancedCut::unproject_on_cut_plane(const Vec2d &mouse_pos, Vec3d &pos, Vec3d &pos_world, bool respect_contours)
 {
+    // SliceOfMe: called on every mouse move by the curved cut, also right after a cut replaced the
+    // object - the selection info or the clipping plane may not be set up yet.
+    if (m_c == nullptr || m_c->selection_info() == nullptr || m_c->object_clipper() == nullptr)
+        return false;
     const float sla_shift = m_c->selection_info()->get_sla_shift();
 
-    const ModelObject *  mo     = m_c->selection_info()->model_object();
-    const ModelInstance *mi     = mo->instances[m_c->selection_info()->get_active_instance()];
+    const ModelObject *mo = m_c->selection_info()->model_object();
+    if (mo == nullptr)
+        return false;
+    const int instance_idx = m_c->selection_info()->get_active_instance();
+    if (instance_idx < 0 || instance_idx >= int(mo->instances.size()))
+        return false;
+    const ModelInstance *mi     = mo->instances[instance_idx];
     const Camera &       camera = wxGetApp().plater()->get_camera();
 
     // Calculate intersection with the clipping plane.
     const ClippingPlane *cp = m_c->object_clipper()->get_clipping_plane();
+    if (cp == nullptr)
+        return false;
     Vec3d                point;
     Vec3d                direction;
     Vec3d                hit;
@@ -469,6 +491,7 @@ void GLGizmoAdvancedCut::reset_all()
         m_groove.width_tolerance = CUT_TOLERANCE;
     }
     reset_cut_plane();
+    curve_reset(); // SliceOfMe
     m_keep_upper = true;
     m_keep_lower = true;
     m_cut_to_parts = false;
@@ -603,6 +626,17 @@ void GLGizmoAdvancedCut::on_load(cereal::BinaryInputArchive &ar)
     set_center_pos(m_ar_plane_center);
     m_rotation = Geometry::extract_euler_angles(m_rotate_matrix);
     m_movement = 0;
+    // SliceOfMe: mode 2 / 3 in the archive = curved / shape cut (planar mode with m_curve_mode set)
+    const bool curve = mode == 2 || mode == 3;
+    const bool shape = mode == 3;
+    if (curve)
+        mode = size_t(CutMode::cutPlanar);
+    if (m_curve_mode != curve || m_shape_mode != shape) {
+        m_curve_mode = curve;
+        m_shape_mode = shape;
+        m_parent.set_use_color_clip_plane(!curve);
+        curve_changed();
+    }
     if (m_cut_mode != (CutMode) mode)
         switch_to_mode((CutMode) mode);
     else if (m_cut_mode == CutMode::cutTongueAndGroove) {
@@ -628,7 +662,7 @@ void GLGizmoAdvancedCut::on_load(cereal::BinaryInputArchive &ar)
 
 void GLGizmoAdvancedCut::on_save(cereal::BinaryOutputArchive &ar) const
 {
-    ar(m_keep_upper, m_keep_lower, m_rotate_lower, m_rotate_upper, m_hide_cut_plane, (size_t) m_cut_mode, m_connectors_editing, m_ar_plane_center, m_start_dragging_m,
+    ar(m_keep_upper, m_keep_lower, m_rotate_lower, m_rotate_upper, m_hide_cut_plane, m_shape_mode ? size_t(3) : m_curve_mode ? size_t(2) : (size_t) m_cut_mode, m_connectors_editing, m_ar_plane_center, m_start_dragging_m,
        m_groove.depth, m_groove.width, m_groove.flaps_angle, m_groove.angle, m_groove.depth_tolerance, m_groove.width_tolerance);
 }
 
@@ -681,6 +715,7 @@ void GLGizmoAdvancedCut::on_set_state()
         m_selected.clear();
         m_parent.set_use_color_clip_plane(false);
         m_c->selection_info()->set_use_shift(false);
+        curve_reset(); // SliceOfMe
 
         // Make sure that the part selection data are released when the gizmo is closed.
         // The CallAfter is needed because in perform_cut, the gizmo is closed BEFORE
@@ -880,7 +915,11 @@ void GLGizmoAdvancedCut::on_render()
         render_connectors();
     }
 
-    if (m_part_selection) {
+    // SliceOfMe: the curved cut draws its own preview; the planar part colouring would be misleading
+    if (m_curve_mode)
+        m_parent.set_use_color_clip_plane(false);
+
+    if (m_part_selection && !m_curve_mode) {
         if (!m_connectors_editing) {
             if (m_is_dragging == false) {
                 m_part_selection->part_render(nullptr, nullptr);
@@ -896,9 +935,11 @@ void GLGizmoAdvancedCut::on_render()
     if (m_facet_picker.is_active() && !m_connectors_editing)
         m_facet_picker.render(wxGetApp().plater()->get_camera());
     // render_clipper_cut for get the cut plane result
-    render_clipper_cut();
+    if (!m_curve_mode)
+        render_clipper_cut();
     // render a cut line on screen by shift key and mouse move
     render_cut_line();
+    render_curve(); // SliceOfMe: curved cut outline
 
     // THE VISIBILITY FIX: Draw the ghost absolute last so it paints ON TOP of everything
     if (m_connectors_editing && m_hover_id < c_connectors_group_id) {
@@ -908,6 +949,8 @@ void GLGizmoAdvancedCut::on_render()
 
 bool GLGizmoAdvancedCut::on_mouse(const wxMouseEvent &mouse_event)
 {
+    curve_on_mouse(mouse_event); // SliceOfMe: rubber-band point for the curved cut
+
     if (m_facet_picker.is_active() && !m_connectors_editing) {
         if (mouse_event.Moving() || mouse_event.Dragging()) {
             m_facet_picker.update(Vec2d(mouse_event.GetX(), mouse_event.GetY()), m_c, m_parent.get_selection(),
@@ -1467,6 +1510,9 @@ void GLGizmoAdvancedCut::perform_cut(const Selection& selection)
 
 bool GLGizmoAdvancedCut::can_perform_cut() const
 {
+    if (m_curve_mode)
+        return !m_connectors_editing && can_perform_curve_cut(); // SliceOfMe
+
     if (!m_invalid_connectors_idxs.empty() || (!m_keep_upper && !m_keep_lower) || m_connectors_editing) return false;
 
     if (m_cut_mode == CutMode::cutTongueAndGroove) return has_valid_groove();
@@ -2401,7 +2447,9 @@ void GLGizmoAdvancedCut::render_flip_plane_button(bool disable_pred /*=false*/)
 
 void GLGizmoAdvancedCut::toggle_model_objects_visibility(bool show_in_3d)
 {
-    if (m_part_selection && m_part_selection->valid() && show_in_3d == false && (m_is_dragging == false || m_connectors_editing)) // BBL
+    if (m_curve_mode && !show_in_3d && curve_preview_visible()) // SliceOfMe: the curved cut preview replaces the object
+        m_parent.toggle_model_objects_visibility(false);
+    else if (!m_curve_mode && m_part_selection && m_part_selection->valid() && show_in_3d == false && (m_is_dragging == false || m_connectors_editing)) // BBL
         m_parent.toggle_model_objects_visibility(false);
     else // if (!m_part_selection.valid())
     {
@@ -2581,15 +2629,20 @@ void GLGizmoAdvancedCut::update_buffer_data() {
 bool GLGizmoAdvancedCut::render_cut_mode_combo(double label_width, float item_width)
 {
     ImGui::AlignTextToFramePadding();
-    size_t                   selection_idx = int(m_cut_mode);
-    std::vector<std::string> modes         = {_u8L("Planar"), _u8L("Dovetail")};
+    // SliceOfMe: "Curved" and "Shape" are the planar mode with m_curve_mode (and m_shape_mode) set
+    size_t                   selection_idx = m_shape_mode ? 3 : m_curve_mode ? 2 : int(m_cut_mode);
+    std::vector<std::string> modes         = {_u8L("Planar"), _u8L("Dovetail"), _u8L("Curved"), _u8L("Shape")};
     bool                     is_changed    = false;
 
     ImGuiWrapper::push_combo_style(m_parent.get_scale());
     if (render_combo(_u8L("Mode"), modes, selection_idx, label_width, item_width)) {
         is_changed = true;
         Plater::TakeSnapshot snapshot(wxGetApp().plater(), "Change cut mode");
-        switch_to_mode((CutMode) selection_idx);
+        m_curve_mode = selection_idx >= 2;
+        m_shape_mode = selection_idx == 3;
+        m_parent.set_use_color_clip_plane(!m_curve_mode);
+        switch_to_mode(m_curve_mode ? CutMode::cutPlanar : (CutMode) selection_idx);
+        curve_changed();
         check_and_update_connectors_state();
     }
     ImGuiWrapper::pop_combo_style();
@@ -2766,7 +2819,9 @@ void GLGizmoAdvancedCut::render_cut_plane_input_window(float x, float y, float b
     m_imgui->disabled_end();
 
     ImGui::Separator();
-    if (m_cut_mode == CutMode::cutPlanar) {
+    if (m_curve_mode) {
+        render_curve_panel(); // SliceOfMe
+    } else if (m_cut_mode == CutMode::cutPlanar) {
         m_imgui->disabled_begin(!m_keep_upper || !m_keep_lower || m_cut_to_parts);
         if (m_imgui->button(has_connectors ? _L("Edit connectors") : _L("Add connectors")))
             set_connectors_editing(true);
@@ -2829,6 +2884,7 @@ void GLGizmoAdvancedCut::render_cut_plane_input_window(float x, float y, float b
         m_imgui->disabled_end();
     };
 
+    if (!m_curve_mode) { // SliceOfMe: the curved cut has its own "After cut" options
     m_imgui->text(_L("After cut") + ": ");
     render_part_action_line( "A", "##upper", m_keep_upper, m_place_on_cut_upper, m_rotate_upper);
     render_part_action_line( "B", "##lower", m_keep_lower, m_place_on_cut_lower, m_rotate_lower);
@@ -2845,6 +2901,7 @@ void GLGizmoAdvancedCut::render_cut_plane_input_window(float x, float y, float b
         m_rotate_upper = m_rotate_lower = false;
     }
     m_imgui->disabled_end();
+    }
 
 #if 0
     // Auto segment input
@@ -2879,8 +2936,12 @@ void GLGizmoAdvancedCut::render_cut_plane_input_window(float x, float y, float b
         wxGetApp().plater()->CallAfter([this]() {
             m_perform_cut_requested = false;
             // The gizmo may have been closed or the selection changed before this ran.
-            if (m_state == On && can_perform_cut())
-                perform_cut(m_parent.get_selection());
+            if (m_state == On && can_perform_cut()) {
+                if (m_curve_mode)
+                    perform_curve_cut(m_parent.get_selection()); // SliceOfMe
+                else
+                    perform_cut(m_parent.get_selection());
+            }
         });
     }
     m_imgui->disabled_end();

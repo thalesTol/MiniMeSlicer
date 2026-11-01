@@ -996,6 +996,7 @@ void GLVolume::render(const GUI::Camera &camera, const std::vector<std::array<fl
                             //to make black not too hard too see
                             std::array<float, 4> new_color = adjust_color_for_rendering(cp_colors[0]);
                             shader->set_uniform("uniform_color", new_color);
+                            filament_idx = -1; // fallback colour, not a real filament
                         }
                     }
                     GLVolumeCollection::set_filament_look_uniforms(*shader, s_filament_looks, filament_idx, transformed_bounding_box());

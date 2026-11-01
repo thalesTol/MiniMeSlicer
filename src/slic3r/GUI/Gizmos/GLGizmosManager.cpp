@@ -1107,6 +1107,18 @@ bool GLGizmosManager::on_char(wxKeyEvent& evt)
 
     if ((evt.GetModifiers() & ctrlMask) != 0)
     {
+        // SliceOfMe: Ctrl+Z / Ctrl+Y (and Ctrl+Shift+Z) step through the curved-cut drawing first.
+        if (m_current == Cut) {
+            const bool is_z = keyCode == 'z' || keyCode == 'Z' || keyCode == WXK_CONTROL_Z;
+            const bool is_y = keyCode == 'y' || keyCode == 'Y' || keyCode == WXK_CONTROL_Y;
+            if (is_z || is_y) {
+                auto *cut = dynamic_cast<GLGizmoAdvancedCut *>(get_current());
+                if (cut != nullptr && cut->curve_undo(is_y || evt.ShiftDown())) {
+                    m_parent.set_as_dirty();
+                    return true;
+                }
+            }
+        }
         switch (keyCode)
         {
 #ifdef __APPLE__

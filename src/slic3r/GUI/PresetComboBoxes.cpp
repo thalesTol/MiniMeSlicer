@@ -878,8 +878,8 @@ PlaterPresetComboBox::PlaterPresetComboBox(wxWindow *parent, Preset::Type preset
                 wxCommandEvent *evt = new wxCommandEvent(EVT_FILAMENT_COLOR_CHANGED);
                 evt->SetInt(m_filament_idx);
                 wxQueueEvent(wxGetApp().plater(), evt);
-                return;
             }
+            return;
             bool is_official = boost::algorithm::starts_with(fila_type, "Bambu");
             if (is_official) {
                 // Get filament_id from filament_presets
@@ -1547,11 +1547,11 @@ bool PlaterPresetComboBox::show_filament_look_dialog(const std::string &fila_typ
 
     FilamentLookDialog dialog(this, fila_id, current, glow, fila_type);
     if (dialog.ShowModal() != wxID_OK)
-        return true; // handled: the user cancelled
+        return false; // cancelled: nothing changed
 
     const FilamentColor &look = dialog.GetFilamentColor();
     if (look.GetColors().empty())
-        return true;
+        return false;
 
     // Glow first, so the colour sync below carries it to the plater and redraws the 3D view.
     if (glow_opt) {
