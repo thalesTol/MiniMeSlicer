@@ -16,6 +16,7 @@
 #include <limits>
 #include <mutex>
 #include <thread>
+#include <tuple>
 
 #include <GL/glew.h>
 #include <boost/log/trivial.hpp>
@@ -67,14 +68,14 @@ constexpr int CURVE_PLATE_MOVE_ID = 5;
 const ColorRGBA CURVE_PART_A_COLOR = ColorRGBA::CYAN();
 const ColorRGBA CURVE_PART_B_COLOR = ColorRGBA::MAGENTA();
 
-// Closed solid from 2D shapes (plane frame, mm): caps at z = -depth / +depth plus side walls.
-indexed_triangle_set extrude_shapes(const ExPolygons &shapes, double depth)
+// Closed solid from 2D shapes (plane frame, mm): caps at z = z0 / z1 plus side walls.
+indexed_triangle_set extrude_shapes(const ExPolygons &shapes, double z0, double z1)
 {
     std::vector<Vec3d> soup;
     for (const ExPolygon &shape : shapes) {
         // already unscaled to mm by the tesselator
-        std::vector<Vec3d> top    = triangulate_expolygon_3d(shape, depth, false);
-        std::vector<Vec3d> bottom = triangulate_expolygon_3d(shape, -depth, true);
+        std::vector<Vec3d> top    = triangulate_expolygon_3d(shape, z1, false);
+        std::vector<Vec3d> bottom = triangulate_expolygon_3d(shape, z0, true);
         soup.insert(soup.end(), top.begin(), top.end());
         soup.insert(soup.end(), bottom.begin(), bottom.end());
         // Contour is CCW and holes CW, so (a, b) with "up" gives outward facing walls for both.
@@ -83,7 +84,7 @@ indexed_triangle_set extrude_shapes(const ExPolygons &shapes, double depth)
             for (size_t i = 0; i < m; ++i) {
                 const Vec2d a = unscale(poly.points[i]);
                 const Vec2d b = unscale(poly.points[(i + 1) % m]);
-                const Vec3d a0(a.x(), a.y(), -depth), b0(b.x(), b.y(), -depth), a1(a.x(), a.y(), depth), b1(b.x(), b.y(), depth);
+                const Vec3d a0(a.x(), a.y(), z0), b0(b.x(), b.y(), z0), a1(a.x(), a.y(), z1), b1(b.x(), b.y(), z1);
                 soup.insert(soup.end(), {a0, b0, b1, a0, b1, a1});
             }
         };
@@ -106,14 +107,15 @@ indexed_triangle_set extrude_shapes(const ExPolygons &shapes, double depth)
     return its;
 }
 
-// A op B with the default backend, CGAL as fallback. 'ok' is set to false when both failed.
-// 'cancel' (optional) is polled by the boolean backend; a cancelled run returns an empty mesh.
-indexed_triangle_set mesh_boolean(const TriangleMesh &a, const TriangleMesh &b, bool intersect, bool &ok,
-                                  const std::function<bool()> &cancel = nullptr)
+// A op B ("INTERSECTION", "A_NOT_B" or "UNION") with the default backend, CGAL as fallback.
+// 'ok' is set to false when both failed. 'cancel' (optional) is polled by the boolean backend; a
+// cancelled run returns an empty mesh.
+indexed_triangle_set mesh_boolean_op(const TriangleMesh &a, const TriangleMesh &b, const std::string &op, bool &ok,
+                                     const std::function<bool()> &cancel = nullptr)
 {
     std::vector<TriangleMesh> results;
     bool failed = false;
-    MeshBoolean::mcut::make_boolean(a, b, results, intersect ? "INTERSECTION" : "A_NOT_B", cancel, nullptr, [&failed]() { failed = true; });
+    MeshBoolean::mcut::make_boolean(a, b, results, op, cancel, nullptr, [&failed]() { failed = true; });
     if (cancel && cancel())
         return {};
     indexed_triangle_set its;
@@ -123,8 +125,10 @@ indexed_triangle_set mesh_boolean(const TriangleMesh &a, const TriangleMesh &b, 
     } else if (failed) {
         try {
             TriangleMesh tmp = a;
-            if (intersect)
+            if (op == "INTERSECTION")
                 MeshBoolean::cgal::intersect(tmp, b);
+            else if (op == "UNION")
+                MeshBoolean::cgal::plus(tmp, b);
             else
                 MeshBoolean::cgal::minus(tmp, b);
             its = tmp.its;
@@ -138,6 +142,12 @@ indexed_triangle_set mesh_boolean(const TriangleMesh &a, const TriangleMesh &b, 
     its_merge_vertices(its);
     its_compactify_vertices(its);
     return its;
+}
+
+indexed_triangle_set mesh_boolean(const TriangleMesh &a, const TriangleMesh &b, bool intersect, bool &ok,
+                                  const std::function<bool()> &cancel = nullptr)
+{
+    return mesh_boolean_op(a, b, intersect ? "INTERSECTION" : "A_NOT_B", ok, cancel);
 }
 
 Vec2d bezier(const Vec2d &p0, const Vec2d &p1, const Vec2d &p2, const Vec2d &p3, double t)
@@ -191,6 +201,167 @@ std::vector<Vec2d> shape_outline(const GLGizmoAdvancedCut::CurveShape &shape)
     for (Vec2d &p : pts)
         p = shape.center + rotate2d(p, shape.rotation);
     return pts;
+}
+
+// Arc-length access to a polyline (closed or open).
+struct OutlineSampler
+{
+    std::vector<Vec2d>  pts;
+    std::vector<double> acc; // length up to point i
+    double              total{0.0};
+
+    OutlineSampler(const std::vector<Vec2d> &points, bool closed) : pts(points)
+    {
+        if (closed && !pts.empty())
+            pts.push_back(pts.front());
+        acc.assign(pts.size(), 0.0);
+        for (size_t i = 1; i < pts.size(); ++i)
+            acc[i] = acc[i - 1] + (pts[i] - pts[i - 1]).norm();
+        total = acc.empty() ? 0.0 : acc.back();
+    }
+    bool valid() const { return pts.size() >= 2 && total > EPSILON; }
+    // point and unit tangent at fraction t of the length
+    void at(double t, Vec2d &p, Vec2d &tangent) const
+    {
+        const double d = std::clamp(t, 0.0, 1.0) * total;
+        size_t       i = 1;
+        while (i + 1 < pts.size() && acc[i] < d)
+            ++i;
+        const double seg = std::max(acc[i] - acc[i - 1], EPSILON);
+        p                = pts[i - 1] + (pts[i] - pts[i - 1]) * ((d - acc[i - 1]) / seg);
+        tangent          = (pts[i] - pts[i - 1]).normalized();
+    }
+    // fraction of the length of the point nearest to q, and its distance
+    double nearest(const Vec2d &q, double &dist) const
+    {
+        double best_t = 0.0;
+        dist          = std::numeric_limits<double>::max();
+        for (size_t i = 1; i < pts.size(); ++i) {
+            const Vec2d  ab = pts[i] - pts[i - 1];
+            const double l2 = ab.squaredNorm();
+            const double u  = l2 > 0.0 ? std::clamp((q - pts[i - 1]).dot(ab) / l2, 0.0, 1.0) : 0.0;
+            const double d  = (pts[i - 1] + u * ab - q).norm();
+            if (d < dist) {
+                dist   = d;
+                best_t = (acc[i - 1] + u * std::sqrt(l2)) / total;
+            }
+        }
+        return best_t;
+    }
+};
+
+// Connector frame on the cut wall: p = point on the outline, tangent along it, dir = into the other part.
+struct ConnFrame
+{
+    Vec2d p, tangent, dir;
+};
+
+// Dovetail cross-section in the plane: narrow at the wall, wider inside the other part.
+Polygon dovetail_profile(const ConnFrame &f, const GLGizmoAdvancedCut::CurveConnParams &c, double extra)
+{
+    const double overlap  = 0.5; // reaches into its own part so the union is clean
+    const double half_in  = 0.5 * c.width + extra;
+    const double half_out = 0.5 * c.width + c.depth * std::tan(c.angle * M_PI / 180.0) + extra;
+    const double out      = c.depth + extra;
+    const std::array<Vec2d, 4> q = {f.p - f.dir * overlap - f.tangent * half_in, f.p - f.dir * overlap + f.tangent * half_in,
+                                    f.p + f.dir * out + f.tangent * half_out, f.p + f.dir * out - f.tangent * half_out};
+    Polygon poly;
+    for (const Vec2d &v : q)
+        poly.points.emplace_back(scale_(v.x()), scale_(v.y()));
+    if (!poly.is_counter_clockwise())
+        poly.reverse();
+    return poly;
+}
+
+// Transform taking local (u along the tangent, v into the other part, w along the plane normal) to the plane frame.
+Transform3d conn_local_frame(const ConnFrame &f, double z)
+{
+    Transform3d m = Transform3d::Identity();
+    m.linear().col(0) = Vec3d(f.tangent.x(), f.tangent.y(), 0.0);
+    m.linear().col(1) = Vec3d(f.dir.x(), f.dir.y(), 0.0);
+    m.linear().col(2) = Vec3d::UnitZ();
+    m.translation()   = Vec3d(f.p.x(), f.p.y(), z);
+    return m;
+}
+
+void orient_outwards(indexed_triangle_set &its)
+{
+    if (its_volume(its) < 0.0)
+        its_flip_triangles(its);
+}
+
+// Round pin from the wall into the other part.
+indexed_triangle_set pin_solid(const ConnFrame &f, double z, const GLGizmoAdvancedCut::CurveConnParams &c, double extra)
+{
+    const double overlap = 0.5;
+    indexed_triangle_set its = its_make_cylinder(0.5 * c.pin_diameter + extra, c.pin_length + overlap + extra, 2.0 * M_PI / 48.0);
+    // cylinder axis is +Z: lay it along v, starting 'overlap' inside its own part
+    Transform3d lay = Transform3d::Identity();
+    lay.linear().col(0) = Vec3d::UnitX();
+    lay.linear().col(1) = Vec3d::UnitZ();
+    lay.linear().col(2) = Vec3d::UnitY();
+    lay.translation()   = Vec3d(0.0, -overlap, 0.0);
+    its_transform(its, conn_local_frame(f, z) * lay, true);
+    orient_outwards(its);
+    return its;
+}
+
+// Snap-fit barb: a ramp along the sliding direction ending in a flat catch face.
+indexed_triangle_set snap_solid(const ConnFrame &f, double z, const GLGizmoAdvancedCut::CurveConnParams &c, double extra)
+{
+    const double overlap = 0.5;
+    const double hu = 0.5 * c.width + extra, h0 = z - 0.5 * c.snap_height - extra, h1 = z + 0.5 * c.snap_height + extra;
+    const double tip = c.depth + extra;
+    // catch face at h0 (flat), the ramp rises towards it from h1; 'reverse' swaps the direction
+    const double catch_w = c.reverse ? h1 : h0, ramp_w = c.reverse ? h0 : h1;
+    indexed_triangle_set its;
+    for (double u : {-hu, hu}) {
+        its.vertices.emplace_back(Vec3f(float(u), float(-overlap), float(catch_w)));
+        its.vertices.emplace_back(Vec3f(float(u), float(tip), float(catch_w)));
+        its.vertices.emplace_back(Vec3f(float(u), float(-overlap), float(ramp_w)));
+    }
+    // two triangular caps, three quads
+    its.indices = {{0, 2, 1}, {3, 4, 5}, {0, 1, 4}, {0, 4, 3}, {1, 2, 5}, {1, 5, 4}, {2, 0, 3}, {2, 3, 5}};
+    its_transform(its, conn_local_frame(f, 0.0), true);
+    orient_outwards(its);
+    return its;
+}
+
+// Dovetail with a closed end: the prism only covers part of the wall height.
+indexed_triangle_set dovetail_solid(const ConnFrame &f, double z0, double z1, const GLGizmoAdvancedCut::CurveConnParams &c, double extra)
+{
+    return extrude_shapes(union_ex(Polygons{dovetail_profile(f, c, extra)}), z0, z1);
+}
+
+// Bowtie (butterfly) key across the wall: narrow at the wall, wide on both sides.
+Polygon bowtie_profile(const ConnFrame &f, const GLGizmoAdvancedCut::CurveConnParams &c, double extra)
+{
+    const double hn = 0.5 * c.width + extra;
+    const double ho = 0.5 * c.width + c.depth * std::tan(c.angle * M_PI / 180.0) + extra;
+    const double d  = c.depth + extra;
+    const std::array<Vec2d, 6> q = {f.p - f.dir * d - f.tangent * ho, f.p - f.dir * d + f.tangent * ho, f.p + f.tangent * hn,
+                                    f.p + f.dir * d + f.tangent * ho, f.p + f.dir * d - f.tangent * ho, f.p - f.tangent * hn};
+    Polygon poly;
+    for (const Vec2d &v : q)
+        poly.points.emplace_back(scale_(v.x()), scale_(v.y()));
+    if (!poly.is_counter_clockwise())
+        poly.reverse();
+    return poly;
+}
+
+// Round dowel centred on the wall, half in each part.
+indexed_triangle_set dowel_solid(const ConnFrame &f, double z, const GLGizmoAdvancedCut::CurveConnParams &c, double extra)
+{
+    const double half = 0.5 * c.pin_length + extra;
+    indexed_triangle_set its = its_make_cylinder(0.5 * c.pin_diameter + extra, 2.0 * half, 2.0 * M_PI / 48.0);
+    Transform3d lay = Transform3d::Identity();
+    lay.linear().col(0) = Vec3d::UnitX();
+    lay.linear().col(1) = Vec3d::UnitZ();
+    lay.linear().col(2) = Vec3d::UnitY();
+    lay.translation()   = Vec3d(0.0, -half, 0.0);
+    its_transform(its, conn_local_frame(f, z) * lay, true);
+    orient_outwards(its);
+    return its;
 }
 
 } // namespace
@@ -263,11 +434,11 @@ std::vector<Vec2d> GLGizmoAdvancedCut::curve_outline(bool with_hover) const
     return out;
 }
 
-TriangleMesh GLGizmoAdvancedCut::curve_cutter_mesh() const
+bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
 {
     const std::vector<Vec2d> pts = curve_outline(false);
     if (pts.size() < (m_shape_mode ? 3u : 2u))
-        return {};
+        return false;
     const double       big = std::max(10.0, 4.0 * (m_radius + (m_bb_center - m_plane_center).norm()));
     std::vector<Vec2d> outline;
     if (m_shape_mode) {
@@ -291,12 +462,97 @@ TriangleMesh GLGizmoAdvancedCut::curve_cutter_mesh() const
     for (const Vec2d &p : outline)
         poly.points.emplace_back(scale_(p.x()), scale_(p.y()));
     // union_ex fixes orientation and self intersections of a hand drawn path
-    const ExPolygons shapes = union_ex(Polygons{poly});
-    if (shapes.empty())
-        return {};
-    indexed_triangle_set its = extrude_shapes(shapes, big);
-    its_transform(its, curve_plane_matrix());
-    return TriangleMesh(its);
+    const ExPolygons base = union_ex(Polygons{poly});
+    if (base.empty())
+        return false;
+
+    // Connectors, each with its own settings. Part A lies left of an open path and inside a shape, so
+    // "into B" is the right-hand normal of the outline.
+    //   owned by A:  cutter a += solid,  cutter b += hole
+    //   owned by B:  cutter a -= hole,   cutter b -= solid
+    //   separate:    cutter a -= hole,   cutter b += hole, plus the key as its own piece
+    Polygons add_a, sub_a, add_b, sub_b; // full-height shapes, done in 2D with the outline
+    out.ops.clear();
+    out.keys.clear();
+    std::vector<std::pair<indexed_triangle_set, bool>> keys_plane; // key, already in plane frame
+    const BoundingBoxf3  tbb  = transformed_bounding_box(m_plane_center, m_rotate_matrix); // plane frame
+    const double         z_lo = tbb.defined ? tbb.min.z() : -m_radius, z_hi = tbb.defined ? tbb.max.z() : m_radius;
+    const OutlineSampler sampler(pts, m_shape_mode);
+    std::vector<std::tuple<indexed_triangle_set, bool, bool>> ops_plane; // mesh, on_a, unite
+    if (sampler.valid())
+        for (const CurveConnector &conn : m_curve_conns) {
+            const CurveConnParams &c = conn.params;
+            ConnFrame f;
+            sampler.at(conn.t, f.p, f.tangent);
+            f.dir = Vec2d(f.tangent.y(), -f.tangent.x());
+            const bool owner_b = c.on_part_b && !c.separate();
+            if (owner_b)
+                f.dir = -f.dir; // grows out of part B into part A
+            const double tol = c.tolerance;
+            const double z   = std::clamp(conn.z, z_lo, z_hi);
+            auto add_3d = [&](indexed_triangle_set solid, indexed_triangle_set hole) {
+                if (c.separate()) {
+                    ops_plane.emplace_back(hole, true, false);
+                    ops_plane.emplace_back(std::move(hole), false, true);
+                    keys_plane.emplace_back(std::move(solid), true);
+                } else if (!owner_b) {
+                    ops_plane.emplace_back(std::move(solid), true, true);
+                    ops_plane.emplace_back(std::move(hole), false, true);
+                } else {
+                    ops_plane.emplace_back(std::move(hole), true, false);
+                    ops_plane.emplace_back(std::move(solid), false, false);
+                }
+            };
+            switch (c.type) {
+            case ConnType::Dovetail:
+                if (!c.closed_end) {
+                    (owner_b ? sub_b : add_a).push_back(dovetail_profile(f, c, 0.0));
+                    (owner_b ? sub_a : add_b).push_back(dovetail_profile(f, c, tol));
+                } else {
+                    // closed at one end: the slide stops there and the part stays put
+                    const double run = (z_hi - z_lo) * std::clamp(c.length, 5.0, 100.0) / 100.0;
+                    const double z0 = c.reverse ? -big : z_hi - run, z1 = c.reverse ? z_lo + run : big;
+                    add_3d(dovetail_solid(f, z0, z1, c, 0.0), dovetail_solid(f, c.reverse ? z0 : z0 - tol, c.reverse ? z1 + tol : z1, c, tol));
+                }
+                break;
+            case ConnType::Pin: add_3d(pin_solid(f, z, c, 0.0), pin_solid(f, z, c, tol)); break;
+            case ConnType::Snap: add_3d(snap_solid(f, z, c, 0.0), snap_solid(f, z, c, tol)); break;
+            case ConnType::Dowel: add_3d(dowel_solid(f, z, c, 0.0), dowel_solid(f, z, c, tol)); break;
+            case ConnType::Bowtie: {
+                // slides in along the wall; the key is as tall as the object
+                sub_a.push_back(bowtie_profile(f, c, tol));
+                add_b.push_back(bowtie_profile(f, c, tol));
+                keys_plane.emplace_back(extrude_shapes(union_ex(Polygons{bowtie_profile(f, c, 0.0)}), z_lo, z_hi), true);
+                break;
+            }
+            }
+        }
+
+    // A = object inside cutter a, B = object outside cutter b
+    ExPolygons cut_a = base, cut_b = base;
+    if (!add_a.empty())
+        cut_a = union_ex(cut_a, add_a);
+    if (!sub_a.empty())
+        cut_a = diff_ex(cut_a, sub_a);
+    if (!add_b.empty())
+        cut_b = union_ex(cut_b, add_b);
+    if (!sub_b.empty())
+        cut_b = diff_ex(cut_b, sub_b);
+    const Transform3d plane = curve_plane_matrix();
+    indexed_triangle_set its_a = extrude_shapes(cut_a, -big, big), its_b = extrude_shapes(cut_b, -big, big);
+    its_transform(its_a, plane);
+    its_transform(its_b, plane);
+    out.a = TriangleMesh(its_a);
+    out.b = TriangleMesh(its_b);
+    for (auto &[its, on_a, unite] : ops_plane) {
+        its_transform(its, plane, true);
+        out.ops.push_back({TriangleMesh(std::move(its)), on_a, unite});
+    }
+    for (auto &[its, unused] : keys_plane) {
+        its_transform(its, plane, true);
+        out.keys.emplace_back(std::move(its));
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -305,6 +561,10 @@ TriangleMesh GLGizmoAdvancedCut::curve_cutter_mesh() const
 void GLGizmoAdvancedCut::curve_reset()
 {
     m_curve_anchors.clear();
+    m_curve_conns.clear();
+    m_conn_editing         = false;
+    m_conn_selected        = -1;
+    m_conn_dragging        = false;
     m_curve_shape.center   = Vec2d::Zero();
     m_curve_shape.size     = Vec2d::Zero();
     m_curve_shape.rotation = 0.0;
@@ -320,7 +580,7 @@ void GLGizmoAdvancedCut::curve_reset()
 
 void GLGizmoAdvancedCut::curve_push_undo()
 {
-    m_curve_undo.push_back({m_curve_anchors, m_curve_drawing, m_curve_shape});
+    m_curve_undo.push_back({m_curve_anchors, m_curve_drawing, m_curve_shape, m_curve_conns});
     if (m_curve_undo.size() > 200)
         m_curve_undo.erase(m_curve_undo.begin());
     m_curve_redo.clear();
@@ -334,10 +594,11 @@ bool GLGizmoAdvancedCut::curve_undo(bool redo)
     std::vector<CurveState> &to   = redo ? m_curve_undo : m_curve_redo;
     if (from.empty())
         return false;
-    to.push_back({m_curve_anchors, m_curve_drawing, m_curve_shape});
+    to.push_back({m_curve_anchors, m_curve_drawing, m_curve_shape, m_curve_conns});
     m_curve_anchors = std::move(from.back().anchors);
     m_curve_drawing = from.back().drawing;
     m_curve_shape   = from.back().shape;
+    m_curve_conns   = std::move(from.back().conns);
     from.pop_back();
     curve_changed();
     m_parent.set_as_dirty();
@@ -382,8 +643,8 @@ void GLGizmoAdvancedCut::curve_changed()
     const ModelObject *mo = model->objects[object_idx];
     if (instance_idx >= int(mo->instances.size()))
         return;
-    TriangleMesh cutter = curve_cutter_mesh();
-    if (cutter.empty())
+    CurveCutters cutters;
+    if (!curve_build_cutters(cutters))
         return;
     std::vector<std::pair<size_t, TriangleMesh>> parts; // volume index, mesh in world coordinates
     const Transform3d inst_trafo = mo->instances[instance_idx]->get_matrix();
@@ -393,19 +654,28 @@ void GLGizmoAdvancedCut::curve_changed()
             parts.back().second.transform(inst_trafo * mo->volumes[v]->get_matrix(), true);
         }
 
-    std::thread([state = m_curve_preview, gen, cutter = std::move(cutter), parts = std::move(parts)]() {
+    std::thread([state = m_curve_preview, gen, cutters = std::move(cutters), parts = std::move(parts)]() mutable {
         // A newer outline makes this run obsolete: stop the boolean as soon as possible.
         const std::function<bool()> cancelled = [&state, gen]() {
             std::lock_guard<std::mutex> lock(state->mutex);
             return state->wanted != gen;
         };
-        bool                             ok = true;
+        bool ok = true;
+        // 3D connectors on the cutters
+        for (const CurveCutters::Op &op : cutters.ops) {
+            if (cancelled() || !ok)
+                break;
+            TriangleMesh &target = op.on_a ? cutters.a : cutters.b;
+            target = TriangleMesh(mesh_boolean_op(target, op.mesh, op.unite ? "UNION" : "A_NOT_B", ok, cancelled));
+        }
+        if (cancelled())
+            return;
         std::vector<CurvePreview::Piece> pieces;
         for (const auto &[volume, mesh] : parts) {
             if (cancelled())
                 return;
             for (bool inside : {true, false}) {
-                const indexed_triangle_set result = mesh_boolean(mesh, cutter, inside, ok, cancelled);
+                const indexed_triangle_set result = mesh_boolean(mesh, inside ? cutters.a : cutters.b, inside, ok, cancelled);
                 if (result.indices.empty())
                     continue;
                 for (indexed_triangle_set &piece : its_split(result))
@@ -480,6 +750,52 @@ int GLGizmoAdvancedCut::curve_pick_piece(const Vec2d &mouse_pos) const
     return best;
 }
 
+bool GLGizmoAdvancedCut::curve_pick_wall(const Vec2d &mouse_pos, double &t, double &z) const
+{
+    // hit the preview pieces, then keep the hit only if it lies on the cut wall (near the outline)
+    const Camera &camera     = wxGetApp().plater()->get_camera();
+    const Vec3d   camera_pos = camera.get_position();
+    double        best_dist  = std::numeric_limits<double>::max();
+    Vec3d         best_hit;
+    bool          found = false;
+    for (const auto &piece : m_curve_pieces) {
+        if (m_conn_editing && piece->in_a == m_conn_show_b)
+            continue; // only the part that is shown
+        Vec3f pos, normal;
+        if (piece->raycaster->unproject_on_mesh(mouse_pos, Transform3d::Identity(), camera, pos, normal)) {
+            const double d = (camera_pos - pos.cast<double>()).squaredNorm();
+            if (d < best_dist) {
+                best_dist = d;
+                best_hit  = pos.cast<double>();
+                found     = true;
+            }
+        }
+    }
+    if (!found)
+        return false;
+    const Vec3d          local = curve_plane_matrix().inverse() * best_hit;
+    const OutlineSampler sampler(curve_outline(false), m_shape_mode);
+    if (!sampler.valid())
+        return false;
+    double dist = 0.0;
+    t           = sampler.nearest(Vec2d(local.x(), local.y()), dist);
+    z           = local.z();
+    // connectors may sit a little inside the other part, so allow some distance
+    return dist < std::max(1.0, m_radius * 0.05);
+}
+
+bool GLGizmoAdvancedCut::curve_delete_selected_connector()
+{
+    if (!m_curve_mode || !m_conn_editing || m_conn_selected < 0 || m_conn_selected >= int(m_curve_conns.size()))
+        return false;
+    curve_push_undo();
+    m_curve_conns.erase(m_curve_conns.begin() + m_conn_selected);
+    m_conn_selected = -1;
+    curve_changed();
+    m_parent.set_as_dirty();
+    return true;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Mouse
 
@@ -487,6 +803,75 @@ bool GLGizmoAdvancedCut::curve_gizmo_event(SLAGizmoEventType action, const Vec2d
 {
     if (!m_curve_mode || m_connectors_editing || m_state != On)
         return false;
+
+    // Connector editing: click the cut wall to add a connector there, click one to select it, drag it to
+    // move it, right-click one to remove it.
+    if (m_conn_editing) {
+        auto conn_at = [this](double t, double z) {
+            const OutlineSampler sampler(curve_outline(false), m_shape_mode);
+            const double         tol = std::max(1.5, m_radius * 0.06);
+            int                  best = -1;
+            double               best_d = tol;
+            if (sampler.valid())
+                for (size_t i = 0; i < m_curve_conns.size(); ++i) {
+                    Vec2d p, tg, q;
+                    sampler.at(m_curve_conns[i].t, p, tg);
+                    sampler.at(t, q, tg);
+                    const double d = Vec3d(p.x() - q.x(), p.y() - q.y(), m_curve_conns[i].z - z).norm();
+                    if (d < best_d) {
+                        best_d = d;
+                        best   = int(i);
+                    }
+                }
+            return best;
+        };
+        double t = 0.0, z = 0.0;
+        switch (action) {
+        case SLAGizmoEventType::LeftDown: {
+            if (m_hover_id != -1 && m_hover_id != CURVE_PLATE_MOVE_ID)
+                return false;
+            if (!curve_pick_wall(mouse_position, t, z))
+                return false; // not on the wall: let the view rotate
+            curve_push_undo();
+            if (const int idx = conn_at(t, z); idx >= 0) {
+                m_conn_selected = idx;
+                m_conn          = m_curve_conns[idx].params; // the panel edits the selected one
+            } else {
+                m_curve_conns.push_back({t, z, m_conn});
+                m_conn_selected = int(m_curve_conns.size()) - 1;
+            }
+            m_conn_dragging = true;
+            m_parent.set_as_dirty();
+            return true;
+        }
+        case SLAGizmoEventType::Dragging:
+            if (!m_conn_dragging)
+                return false;
+            if (m_conn_selected >= 0 && m_conn_selected < int(m_curve_conns.size()) && curve_pick_wall(mouse_position, t, z)) {
+                m_curve_conns[m_conn_selected].t = t;
+                m_curve_conns[m_conn_selected].z = z;
+                m_parent.set_as_dirty();
+            }
+            return true;
+        case SLAGizmoEventType::LeftUp:
+            if (!m_conn_dragging)
+                return false;
+            m_conn_dragging = false;
+            curve_changed();
+            m_parent.set_as_dirty();
+            return true;
+        case SLAGizmoEventType::RightDown:
+            if (curve_pick_wall(mouse_position, t, z))
+                if (const int idx = conn_at(t, z); idx >= 0) {
+                    m_conn_selected = idx;
+                    curve_delete_selected_connector();
+                }
+            return true;
+        case SLAGizmoEventType::RightUp: return true;
+        default: return false;
+        }
+    }
+
     if (m_shape_mode)
         return shape_gizmo_event(action, mouse_position, shift_down);
 
@@ -764,7 +1149,7 @@ void GLGizmoAdvancedCut::render_curve()
     // Preview pieces in the A / B colours
     glsafe(::glEnable(GL_DEPTH_TEST));
     for (const auto &piece : m_curve_pieces) {
-        if (piece->in_a ? !m_keep_upper : !m_keep_lower)
+        if (m_conn_editing ? piece->in_a == m_conn_show_b : (piece->in_a ? !m_keep_upper : !m_keep_lower))
             continue;
         render_glmodel(*piece->model, (piece->in_a ? CURVE_PART_A_COLOR : CURVE_PART_B_COLOR).get_data(), camera.get_view_matrix(),
                        camera.get_projection_matrix());
@@ -817,6 +1202,43 @@ void GLGizmoAdvancedCut::render_curve()
                         add_segment(a.p + h - Vec2d(s, 0), a.p + h + Vec2d(s, 0));
                         add_segment(a.p + h - Vec2d(0, s), a.p + h + Vec2d(0, s));
                     }
+        }
+    }
+    // connectors as 3D shapes (selected one highlighted); separate pieces in their own colour
+    if (!m_curve_conns.empty()) {
+        CurveCutters shapes;
+        const OutlineSampler sampler(curve_outline(false), m_shape_mode);
+        if (sampler.valid()) {
+            const BoundingBoxf3 tbb  = transformed_bounding_box(m_plane_center, m_rotate_matrix);
+            const double        z_lo = tbb.defined ? tbb.min.z() : -m_radius, z_hi = tbb.defined ? tbb.max.z() : m_radius;
+            for (size_t i = 0; i < m_curve_conns.size(); ++i) {
+                const CurveConnector  &conn = m_curve_conns[i];
+                const CurveConnParams &c    = conn.params;
+                ConnFrame f;
+                sampler.at(conn.t, f.p, f.tangent);
+                f.dir = Vec2d(f.tangent.y(), -f.tangent.x());
+                if (c.on_part_b && !c.separate())
+                    f.dir = -f.dir;
+                const double z = std::clamp(conn.z, z_lo, z_hi);
+                indexed_triangle_set its;
+                switch (c.type) {
+                case ConnType::Dovetail: {
+                    const double run = c.closed_end ? (z_hi - z_lo) * std::clamp(c.length, 5.0, 100.0) / 100.0 : (z_hi - z_lo);
+                    its = c.closed_end && c.reverse ? dovetail_solid(f, z_lo, z_lo + run, c, 0.0) : dovetail_solid(f, z_hi - run, z_hi, c, 0.0);
+                    break;
+                }
+                case ConnType::Pin: its = pin_solid(f, z, c, 0.0); break;
+                case ConnType::Snap: its = snap_solid(f, z, c, 0.0); break;
+                case ConnType::Dowel: its = dowel_solid(f, z, c, 0.0); break;
+                case ConnType::Bowtie: its = extrude_shapes(union_ex(Polygons{bowtie_profile(f, c, 0.0)}), z_lo, z_hi); break;
+                }
+                its_transform(its, plane, true);
+                GLModel model;
+                model.init_from(its);
+                const ColorRGBA color = int(i) == m_conn_selected ? ColorRGBA::GREEN() : c.separate() ? ColorRGBA::YELLOW() : ColorRGBA::ORANGE();
+                glsafe(::glEnable(GL_DEPTH_TEST));
+                render_glmodel(model, color.get_data(), camera.get_view_matrix(), camera.get_projection_matrix());
+            }
         }
     }
     if (idx == 0)
@@ -909,6 +1331,7 @@ void GLGizmoAdvancedCut::render_curve_panel()
     if (m_imgui->button(_L("Clear"))) {
         curve_push_undo(); // undoable with Ctrl+Z
         m_curve_anchors.clear();
+        m_curve_conns.clear();
         m_curve_shape.size = Vec2d::Zero();
         m_curve_drawing    = true;
         curve_changed();
@@ -921,6 +1344,9 @@ void GLGizmoAdvancedCut::render_curve_panel()
             m_curve_drawing = true;
         }
     }
+
+    ImGui::Separator();
+    render_curve_connectors_panel();
 
     const bool has_geometry = m_shape_mode ? m_curve_shape.valid() : m_curve_anchors.size() >= 2;
     if (has_geometry && m_curve_drag_idx < 0 && m_curve_bend_span < 0 && m_shape_drag == 0) {
@@ -939,6 +1365,133 @@ void GLGizmoAdvancedCut::render_curve_panel()
     m_imgui->bbl_checkbox(_L("Keep part A"), m_keep_upper);
     ImGui::SameLine();
     m_imgui->bbl_checkbox(_L("Keep part B"), m_keep_lower);
+}
+
+void GLGizmoAdvancedCut::render_curve_connectors_panel()
+{
+    if (!m_conn_editing) {
+        m_imgui->text(wxString::Format(_L("Connectors: %d"), int(m_curve_conns.size())));
+        ImGui::SameLine();
+        m_imgui->disabled_begin(!curve_preview_visible());
+        if (m_imgui->button(m_curve_conns.empty() ? _L("Add connectors") : _L("Edit connectors"))) {
+            m_conn_editing  = true;
+            m_conn_selected = -1;
+        }
+        m_imgui->disabled_end();
+        return;
+    }
+
+    m_imgui->text(_L("Editing connectors:"));
+    m_imgui->text(" - " + _L("Click on the cut wall to add one; rotate the view to see every side"));
+    m_imgui->text(" - " + _L("Click one to select and edit it, drag it to move it"));
+    m_imgui->text(" - " + _L("Right-click one or press Delete to remove it"));
+    ImGui::AlignTextToFramePadding();
+    m_imgui->text(_L("Show") + ":");
+    ImGui::SameLine();
+    if (ImGui::RadioButton(_u8L("Part A").c_str(), !m_conn_show_b))
+        m_conn_show_b = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(_u8L("Part B").c_str(), m_conn_show_b))
+        m_conn_show_b = true;
+    ImGui::Separator();
+
+    // the settings of the selected connector, or the ones new connectors get
+    const bool       has_sel = m_conn_selected >= 0 && m_conn_selected < int(m_curve_conns.size());
+    CurveConnParams &c       = has_sel ? m_curve_conns[m_conn_selected].params : m_conn;
+    m_imgui->text(has_sel ? wxString::Format(_L("Connector %d"), m_conn_selected + 1) : _L("New connectors"));
+    bool       changed = false;
+    const auto before  = c;
+    const std::vector<std::string> types = {_u8L("Dovetail slide"), _u8L("Pin"), _u8L("Snap-fit barb"), _u8L("Dowel (separate piece)"),
+                                            _u8L("Bowtie key (separate piece)")};
+    size_t type_idx = size_t(c.type);
+    ImGuiWrapper::push_combo_style(m_parent.get_scale());
+    if (render_combo(_u8L("Type"), types, type_idx, m_label_width, m_imgui->scaled(12.f))) {
+        c.type  = ConnType(type_idx);
+        changed = true;
+    }
+    ImGuiWrapper::pop_combo_style();
+
+    // slider + exact value, like the planar connectors
+    auto edit = [&](const wxString &label, double &value, double min_value, double max_value, const char *fmt = "%.2f") {
+        ImGui::AlignTextToFramePadding();
+        m_imgui->text(label);
+        ImGui::SameLine(m_label_width);
+        ImGui::PushItemWidth(m_imgui->scaled(9.f));
+        float v = float(value);
+        if (m_imgui->bbl_slider_float_style(("##conn_" + label.ToStdString()).c_str(), &v, float(min_value), float(max_value), fmt) &&
+            std::abs(v - value) > EPSILON) {
+            value   = double(v);
+            changed = true;
+        }
+        ImGui::PopItemWidth();
+    };
+    switch (c.type) {
+    case ConnType::Dovetail:
+        edit(_L("Width") + " (mm)", c.width, 1.0, 50.0);
+        edit(_L("Depth") + " (mm)", c.depth, 0.5, 30.0);
+        edit(_L("Angle") + " (deg)", c.angle, 0.0, 45.0, "%.1f");
+        changed |= m_imgui->bbl_checkbox(_L("Closed end (stops sliding)"), c.closed_end);
+        if (c.closed_end)
+            edit(_L("Length") + " (%)", c.length, 5.0, 100.0, "%.0f");
+        break;
+    case ConnType::Pin:
+        edit(_L("Diameter") + " (mm)", c.pin_diameter, 0.5, 30.0);
+        edit(_L("Length") + " (mm)", c.pin_length, 0.5, 50.0);
+        break;
+    case ConnType::Snap:
+        edit(_L("Width") + " (mm)", c.width, 1.0, 50.0);
+        edit(_L("Depth") + " (mm)", c.depth, 0.2, 10.0);
+        edit(_L("Ramp length") + " (mm)", c.snap_height, 0.5, 50.0);
+        break;
+    case ConnType::Dowel:
+        edit(_L("Diameter") + " (mm)", c.pin_diameter, 0.5, 30.0);
+        edit(_L("Length") + " (mm)", c.pin_length, 1.0, 100.0);
+        break;
+    case ConnType::Bowtie:
+        edit(_L("Neck width") + " (mm)", c.width, 1.0, 50.0);
+        edit(_L("Depth per side") + " (mm)", c.depth, 0.5, 30.0);
+        edit(_L("Angle") + " (deg)", c.angle, 0.0, 45.0, "%.1f");
+        break;
+    }
+    edit(_L("Clearance") + " (mm)", c.tolerance, 0.0, 1.0, "%.2f");
+    if (!c.separate())
+        changed |= m_imgui->bbl_checkbox(_L("On part B"), c.on_part_b);
+    if (c.type == ConnType::Snap || (c.type == ConnType::Dovetail && c.closed_end)) {
+        if (!c.separate())
+            ImGui::SameLine();
+        changed |= m_imgui->bbl_checkbox(_L("Slide in from the other side"), c.reverse);
+    }
+
+    if (changed) {
+        // one undo step per change; new connectors take over the last used settings
+        const auto after = c;
+        if (has_sel)
+            m_curve_conns[m_conn_selected].params = before;
+        curve_push_undo();
+        if (has_sel)
+            m_curve_conns[m_conn_selected].params = after;
+        m_conn = after;
+        curve_changed();
+    }
+
+    m_imgui->disabled_begin(!has_sel);
+    if (m_imgui->button(_L("Remove")))
+        curve_delete_selected_connector();
+    m_imgui->disabled_end();
+    ImGui::SameLine();
+    m_imgui->disabled_begin(m_curve_conns.empty());
+    if (m_imgui->button(_L("Remove all"))) {
+        curve_push_undo();
+        m_curve_conns.clear();
+        m_conn_selected = -1;
+        curve_changed();
+    }
+    m_imgui->disabled_end();
+    ImGui::SameLine();
+    if (m_imgui->button(_L("Done"))) {
+        m_conn_editing  = false;
+        m_conn_selected = -1;
+    }
 }
 
 bool GLGizmoAdvancedCut::can_perform_curve_cut() const
@@ -1027,6 +1580,21 @@ void GLGizmoAdvancedCut::perform_curve_cut(const Selection &selection)
         build(collect(false), " (B)");
     if (results.empty())
         return;
+
+    // separate connector pieces (dowels, bowtie keys) become their own objects, where they belong
+    CurveCutters cutters;
+    if (curve_build_cutters(cutters))
+        for (size_t i = 0; i < cutters.keys.size(); ++i) {
+            TriangleMesh key    = std::move(cutters.keys[i]);
+            const Vec3d  center = key.bounding_box().center();
+            key.translate(-center.cast<float>());
+            ModelObject *obj = scratch.add_object();
+            obj->name        = mo->name + " - " + _u8L("connector") + " " + std::to_string(i + 1);
+            obj->add_volume(std::move(key));
+            obj->add_instance()->set_offset(center);
+            obj->invalidate_bounding_box();
+            results.push_back(obj);
+        }
 
     m_parent.reset_all_gizmos();
     Plater::TakeSnapshot snapshot(plater, m_shape_mode ? "Cut by shape" : "Cut by curve");

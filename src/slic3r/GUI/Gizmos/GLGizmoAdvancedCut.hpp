@@ -403,11 +403,37 @@ public: // used by helpers in GLGizmoAdvancedCutCurve.cpp
         double    rotation{0.0};         // degrees
         bool      valid() const { return size.x() > 0.1 && size.y() > 0.1; }
     };
+    // Connectors on the cut wall of a curved / shape cut. The wall is the outline pushed along the plane
+    // normal, so a dovetail running along that normal lets the parts slide together.
+    enum class ConnType : int { Dovetail = 0, Pin, Snap, Dowel, Bowtie };
+    struct CurveConnParams
+    {
+        ConnType type{ConnType::Dovetail};
+        double   width{8.0};        // dovetail / bowtie: neck width; snap: barb width along the wall
+        double   depth{3.0};        // dovetail / snap: how far it sticks into the other part; bowtie: per side
+        double   angle{15.0};       // dovetail / bowtie flank angle, degrees
+        bool     closed_end{false}; // dovetail: slot closed at one end, so the slide stops
+        double   length{70.0};      // dovetail with closed end: % of the wall height it runs
+        double   pin_diameter{5.0}; // pin / dowel
+        double   pin_length{6.0};   // pin: into the other part; dowel: total length
+        double   snap_height{6.0};  // barb length along the sliding direction
+        double   tolerance{0.15};   // clearance on the receiving side, mm
+        bool     on_part_b{false};  // the connector belongs to part B (default A)
+        bool     reverse{false};    // slide in from the other side
+        bool     separate() const { return type == ConnType::Dowel || type == ConnType::Bowtie; }
+    };
+    struct CurveConnector
+    {
+        double          t{0.5}; // position along the outline, 0..1 of its length
+        double          z{0.0}; // position across the wall (along the plane normal, plane frame), mm
+        CurveConnParams params;
+    };
     struct CurveState
     {
-        std::vector<CurveAnchor> anchors;
-        bool                     drawing{true};
-        CurveShape               shape;
+        std::vector<CurveAnchor>    anchors;
+        bool                        drawing{true};
+        CurveShape                  shape;
+        std::vector<CurveConnector> conns;
     };
 private:
     struct CurvePreview; // background boolean result
@@ -426,6 +452,12 @@ private:
     int                      m_shape_drag{0};       // 1 = drawing the shape, 2 = moving it
     Vec2d                    m_shape_drag_start{Vec2d::Zero()};
     std::vector<CurveState>  m_curve_undo, m_curve_redo; // drawing history, separate from the project undo
+    std::vector<CurveConnector> m_curve_conns;
+    CurveConnParams             m_conn;                // settings for new connectors
+    bool                        m_conn_editing{false}; // clicks on the cut wall place / select connectors
+    int                         m_conn_selected{-1};
+    bool                        m_conn_dragging{false};
+    bool                        m_conn_show_b{false};  // while editing, show part B instead of A
 
     GLModel                                  m_curve_model;
     std::shared_ptr<CurvePreview>            m_curve_preview;
@@ -438,7 +470,25 @@ private:
     bool                     curve_unproject(const Vec2d &mouse_pos, Vec2d &local);
     std::vector<CurveAnchor> curve_effective_anchors(const std::vector<CurveAnchor> &anchors) const; // fills automatic handles
     std::vector<Vec2d>       curve_outline(bool with_hover) const; // path or shape sampled into a polyline
-    TriangleMesh             curve_cutter_mesh() const;            // world coordinates, empty if not possible
+    // Cutters in world coordinates: part A = object inside 'a', part B = object outside 'b'. 'a' and 'b'
+    // differ only by the connectors (solid on one side, hole with clearance on the other). Connectors that
+    // are not straight extrusions are returned as separate solids for the caller to add (they need 3D booleans).
+    struct CurveCutters
+    {
+        struct Op
+        {
+            TriangleMesh mesh;
+            bool         on_a;  // applies to cutter a (else b)
+            bool         unite; // union (else subtract)
+        };
+        TriangleMesh              a, b;
+        std::vector<Op>           ops;  // 3D connectors, applied in order on a background thread
+        std::vector<TriangleMesh> keys; // separate connector pieces (dowels, bowtie keys)
+    };
+    bool                     curve_build_cutters(CurveCutters &out) const;
+    bool                     curve_pick_wall(const Vec2d &mouse_pos, double &t, double &z) const; // point on the cut wall
+    bool                     curve_delete_selected_connector();
+    void                     render_curve_connectors_panel();
     void                     curve_changed();                      // restart the background preview
     bool                     curve_preview_ready() const;   // preview matches the current outline
     bool                     curve_preview_visible() const; // some preview is shown (may be one step behind)

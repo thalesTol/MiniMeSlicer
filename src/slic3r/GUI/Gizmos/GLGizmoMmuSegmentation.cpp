@@ -955,6 +955,11 @@ void GLGizmoMmuSegmentation::on_render_input_window(float x, float y, float bott
         ImGui::SameLine();
     }
 
+    // SliceOfMe: pattern fill, image decal, texture brush
+    ImGui::Separator();
+    render_texture_tools();
+    ImGui::Separator();
+
     if (m_imgui->button(m_desc.at("remove_all"))) {
         Plater::TakeSnapshot snapshot(wxGetApp().plater(), "Reset selection", UndoRedo::SnapshotType::GizmoAction);
         ModelObject *        mo  = m_c->selection_info()->model_object();

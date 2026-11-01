@@ -239,6 +239,8 @@ bool GLGizmoAdvancedCut::on_key(const wxKeyEvent& evt)
     bool ctrl_down = evt.GetModifiers() & wxMOD_CONTROL;
 
     if (evt.GetKeyCode() == WXK_DELETE) {
+        if (m_curve_mode) // SliceOfMe: connectors of a curved / shape cut
+            return curve_delete_selected_connector();
         return delete_selected_connectors();
     }
     else if (ctrl_down

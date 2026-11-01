@@ -124,6 +124,35 @@ protected:
     // BBS
     static const constexpr float      CursorRadiusMin = 0.1f; // cannot be zero
 
+    // SliceOfMe: texture tools (GLGizmoMmuTextures.cpp)
+    //  - Pattern fill: click a colour area, it is filled with stripes / checkers / dots / a dithered gradient
+    //    of the selected filament and a second one.
+    //  - Image decal: an image projected from the current view onto the model, matched to the filaments.
+    //  - Texture brush: like the decal, but painted with the brush where you stroke.
+    enum class TextureTool { None, Pattern, Decal, Brush };
+    TextureTool              m_tex_tool{TextureTool::None};
+    int                      m_pat_type{0};      // 0 stripes, 1 checker, 2 dots, 3 gradient
+    float                    m_pat_scale{4.f};   // mm
+    float                    m_pat_angle{0.f};   // degrees
+    int                      m_pat_second{1};    // second filament, 0-based
+    std::string              m_img_name;
+    int                      m_img_w{0}, m_img_h{0};
+    std::vector<unsigned char> m_img_rgb;         // 3 bytes per pixel
+    std::vector<unsigned char> m_img_alpha;       // 1 byte per pixel
+    float                    m_decal_width{40.f}; // mm
+    float                    m_decal_angle{0.f};  // degrees
+    bool                     m_brush_stroke{false};
+    Vec3d                    m_tex_origin{Vec3d::Zero()}, m_tex_right{Vec3d::UnitX()}, m_tex_up{Vec3d::UnitY()}, m_tex_forward{-Vec3d::UnitZ()};
+
+    bool gizmo_event(SLAGizmoEventType action, const Vec2d &mouse_position, bool shift_down, bool alt_down, bool control_down) override;
+    void render_texture_tools();
+    bool texture_gizmo_event(SLAGizmoEventType action, const Vec2d &mouse_position);
+    void texture_load_image();
+    bool texture_hit(const Vec2d &mouse_position, int &mesh_idx, int &facet, Vec3f &hit_mesh, Vec3d &hit_world) const;
+    void texture_apply_pattern(int mesh_idx, int facet, const Vec3f &hit_mesh);
+    void texture_apply_image(const Vec3d &center, bool brush);
+    void texture_commit(const std::string &name);
+
 private:
     bool on_init() override;
 

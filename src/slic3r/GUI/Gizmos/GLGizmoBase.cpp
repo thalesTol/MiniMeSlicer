@@ -9,6 +9,7 @@
 #include "slic3r/GUI/Plater.hpp"
 #include "slic3r/GUI/GUI_Colors.hpp"
 #include "slic3r/GUI/OpenGLManager.hpp"
+#include <imgui/imgui.h>
 
 // TODO: Display tooltips quicker on Linux
 
@@ -484,7 +485,8 @@ bool GLGizmoBase::update_items_state()
 
 bool GLGizmoBase::GizmoImguiBegin(const std::string &name, int flags)
 {
-    return m_imgui->begin(name, flags);
+    // SliceOfMe: tool panels can be dragged out of the way (by any empty area of the panel)
+    return m_imgui->begin(name, flags & ~ImGuiWindowFlags_NoMove);
 }
 
 void GLGizmoBase::GizmoImguiEnd()
@@ -505,6 +507,9 @@ void GLGizmoBase::GizmoImguiSetNextWIndowPos(float &x, float y, int flag, float 
         }
     }
 
+    // SliceOfMe: place the panel when it opens only, so a panel the user dragged away stays there
+    if (flag == ImGuiCond_Always)
+        flag = ImGuiCond_Appearing;
     m_imgui->set_next_window_pos(x, y, flag, pivot_x, pivot_y);
 }
 
