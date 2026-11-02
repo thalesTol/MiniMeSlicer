@@ -11,6 +11,7 @@ class wxBitmapButton;
 class wxScrolledWindow;
 class wxSimplebook;
 class wxSlider;
+class wxSpinCtrl;
 class wxStaticBitmap;
 class wxStaticText;
 class wxBoxSizer;
@@ -98,7 +99,7 @@ private:
 
     // Translucent page
     wxSlider       *m_opacity_slider{nullptr};
-    wxStaticText   *m_opacity_label{nullptr};
+    wxSpinCtrl     *m_opacity_input{nullptr}; // the exact percentage
 
     Button *m_ok_btn{nullptr};
     Button *m_cancel_btn{nullptr};

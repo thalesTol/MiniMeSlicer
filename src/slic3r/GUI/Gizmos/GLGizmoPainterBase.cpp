@@ -180,7 +180,7 @@ void GLGizmoPainterBase::render_cursor() const
         return;
     }
 
-    if (m_tool_type == ToolType::BRUSH) {
+    if (m_tool_type == ToolType::BRUSH && !cursor_hidden()) {
         if (m_cursor_type == TriangleSelector::SPHERE)
             render_cursor_sphere(trafo_matrices[m_rr.mesh_id]);
         else if (m_cursor_type == TriangleSelector::CIRCLE)
@@ -1068,6 +1068,10 @@ bool GLGizmoPainterBase::gizmo_event(SLAGizmoEventType action, const Vec2d& mous
 
         assert(m_rr.mesh_id < int(m_triangle_selectors.size()));
         const TriangleSelector::ClippingPlane &clp = this->get_clipping_plane_in_volume_coordinates(trafo_matrix);
+        // Still inside the highlighted area: nothing changes, so do not rebuild the render data of the whole
+        // part (slow on big meshes). The fills below make the same check themselves.
+        if (m_rr.mesh_id == m_seed_fill_last_mesh_id && !clp.is_active() && m_triangle_selectors[m_rr.mesh_id]->seed_fill_covers(m_rr.hit, int(m_rr.facet)))
+            return true;
         if (m_tool_type == ToolType::SMART_FILL)
             m_triangle_selectors[m_rr.mesh_id]->seed_fill_select_triangles(m_rr.hit, int(m_rr.facet), trafo_matrix_not_translate, clp, m_smart_fill_angle,
                                                                            m_paint_on_overhangs_only ? m_highlight_by_angle_threshold_deg : 0.f);

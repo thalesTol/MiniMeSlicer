@@ -39,6 +39,12 @@ void GLGizmoMmuSegmentation::on_shutdown()
 {
     m_parent.use_slope(false);
     m_parent.toggle_model_objects_visibility(true);
+    texture_clear_pattern_hover();
+    m_relief_models.clear();
+    if (m_relief_added) { // SliceOfMe: show the relief parts added while painting
+        m_relief_added = false;
+        m_parent.reload_scene(true);
+    }
 }
 
 std::string GLGizmoMmuSegmentation::on_get_name() const
@@ -180,6 +186,8 @@ void GLGizmoMmuSegmentation::render_painter_gizmo() const
     m_c->object_clipper()->render_cut();
     m_c->instances_hider()->render_cut();
     render_cursor();
+    render_texture_preview(); // SliceOfMe: decal preview under the mouse
+    render_relief_volumes();  // SliceOfMe: engraved reliefs (negative parts) are not painted, draw them here
     render_non_manifold_edges();
     glsafe(::glDisable(GL_BLEND));
 }
@@ -650,6 +658,9 @@ void GLGizmoMmuSegmentation::on_render_input_window(float x, float y, float bott
     //ImGui::NewLine();
     ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * 0.1));
 
+    // SliceOfMe: the brush tools do not apply while placing a pattern, decal or relief
+    const bool brush_controls_off = texture_takes_mouse();
+    m_imgui->disabled_begin(brush_controls_off);
     m_imgui->text(m_desc.at("tool_type"));
 
     std::array<wchar_t, 6> tool_ids;
@@ -922,6 +933,7 @@ void GLGizmoMmuSegmentation::on_render_input_window(float x, float y, float bott
                                           _L("The white outline indicates the position of the build plate at Z = 0."),
                                       window_width + m_imgui->scaled(1));
     }
+    m_imgui->disabled_end(); // SliceOfMe: end of the brush controls
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 10.0f));
     float get_cur_y = ImGui::GetContentRegionMax().y + ImGui::GetFrameHeight() + y;
     show_tooltip_information(caption_max, x, get_cur_y);

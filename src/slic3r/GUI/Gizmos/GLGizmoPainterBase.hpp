@@ -76,6 +76,13 @@ public:
     void         set_wireframe_needed(bool need_wireframe) { m_need_wireframe = need_wireframe; }
     bool         get_wireframe_needed() { return m_need_wireframe; }
     bool         get_paint_contour_has_data() { return m_paint_contour.is_initialized(); }
+    const std::vector<Vec3f> &get_face_normals() const { return m_face_normals; }
+    // the triangle under 'hit' is already in the current seed / bucket fill selection
+    bool         seed_fill_covers(const Vec3f &hit, int facet) const
+    {
+        const int idx = select_unsplit_triangle(hit, facet);
+        return idx >= 0 && m_triangles[idx].is_selected_by_seed_fill();
+    }
     // BBS
     void request_update_render_data(bool paint_changed = false)
     {
@@ -246,6 +253,7 @@ protected:
     Transform3d  get_volume_world_matrix(const Selection &selection, const ModelObject *mo, const ModelVolume *mv, int volume_id) const;
     void         init_selected_glvolume(GLVolume &v, const TriangleMesh &mesh, const Geometry::Transformation &world_transformation) const;
     void render_cursor() const;
+    virtual bool cursor_hidden() const { return false; } // SliceOfMe: a tool that does not use the brush
     void render_cursor_circle() const;
     void render_cursor_sphere(const Transform3d& trafo) const;
     // BBS

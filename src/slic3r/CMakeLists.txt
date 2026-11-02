@@ -785,6 +785,12 @@ endif()
 target_include_directories(libslic3r_gui PRIVATE Utils)
 target_include_directories(libslic3r_gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../)
 
+if (WIN32 AND WIN10SDK_INCLUDE_PATH)
+    # Windows 3D repair service ("Fix model")
+    target_compile_definitions(libslic3r_gui PRIVATE HAS_WIN10SDK)
+    target_include_directories(libslic3r_gui PRIVATE "${WIN10SDK_INCLUDE_PATH}")
+endif ()
+
 if (WIN32)
     target_include_directories(libslic3r_gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../deps/WebView2/include)
 endif()

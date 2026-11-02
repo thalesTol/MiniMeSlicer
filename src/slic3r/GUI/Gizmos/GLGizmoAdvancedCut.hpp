@@ -420,7 +420,8 @@ public: // used by helpers in GLGizmoAdvancedCutCurve.cpp
         double   tolerance{0.15};   // clearance on the receiving side, mm
         bool     on_part_b{false};  // the connector belongs to part B (default A)
         bool     reverse{false};    // slide in from the other side
-        bool     separate() const { return type == ConnType::Dowel || type == ConnType::Bowtie; }
+        bool     loose{false};      // dovetail / pin / snap made as a separate piece, with holes in both parts
+        bool     separate() const { return type == ConnType::Dowel || type == ConnType::Bowtie || loose; }
     };
     struct CurveConnector
     {
@@ -435,9 +436,32 @@ public: // used by helpers in GLGizmoAdvancedCutCurve.cpp
         CurveShape                  shape;
         std::vector<CurveConnector> conns;
     };
-private:
     struct CurvePreview; // background boolean result
     struct CurvePiece;   // one connected piece of the preview, with its render model and raycaster
+    // Cutters in world coordinates: part A = object inside 'a', part B = object outside 'b'. 'a' and 'b'
+    // differ only by the connectors (solid on one side, hole with clearance on the other). Connectors that
+    // are not straight extrusions are returned as separate solids for the caller to add (they need 3D booleans).
+    struct CurveCutters
+    {
+        struct Op
+        {
+            TriangleMesh mesh;
+            bool         on_a;     // applies to cutter a (else b)
+            bool         unite;    // union (else subtract)
+            int          conn{-1}; // connector it belongs to
+        };
+        struct Key
+        {
+            int          conn{-1};
+            TriangleMesh mesh;
+        };
+        TriangleMesh     a, b;
+        std::vector<Op>  ops;       // 3D connectors, applied in order on a background thread
+        std::vector<Key> keys;      // separate connector pieces (dowels, bowtie keys, loose connectors)
+        std::vector<int> bad_conns; // connectors whose shape could not be built
+        std::string      error;     // why the cutters could not be built
+    };
+private:
 
     bool                     m_curve_mode{false};  // Curved or Shape mode is active
     bool                     m_shape_mode{false};  // Shape mode (subset of m_curve_mode)
@@ -458,6 +482,10 @@ private:
     int                         m_conn_selected{-1};
     bool                        m_conn_dragging{false};
     bool                        m_conn_show_b{false};  // while editing, show part B instead of A
+    std::optional<std::pair<double, double>> m_conn_hover; // (t, z) on the cut wall under the mouse: ghost connector
+    bool                        m_curve_preview_failed{false}; // the last preview failed; older pieces may still be shown
+    bool                        m_curve_repair_requested{false};
+    std::string                 m_curve_repair_msg;    // result of the last "Repair model"
 
     GLModel                                  m_curve_model;
     std::shared_ptr<CurvePreview>            m_curve_preview;
@@ -470,21 +498,6 @@ private:
     bool                     curve_unproject(const Vec2d &mouse_pos, Vec2d &local);
     std::vector<CurveAnchor> curve_effective_anchors(const std::vector<CurveAnchor> &anchors) const; // fills automatic handles
     std::vector<Vec2d>       curve_outline(bool with_hover) const; // path or shape sampled into a polyline
-    // Cutters in world coordinates: part A = object inside 'a', part B = object outside 'b'. 'a' and 'b'
-    // differ only by the connectors (solid on one side, hole with clearance on the other). Connectors that
-    // are not straight extrusions are returned as separate solids for the caller to add (they need 3D booleans).
-    struct CurveCutters
-    {
-        struct Op
-        {
-            TriangleMesh mesh;
-            bool         on_a;  // applies to cutter a (else b)
-            bool         unite; // union (else subtract)
-        };
-        TriangleMesh              a, b;
-        std::vector<Op>           ops;  // 3D connectors, applied in order on a background thread
-        std::vector<TriangleMesh> keys; // separate connector pieces (dowels, bowtie keys)
-    };
     bool                     curve_build_cutters(CurveCutters &out) const;
     bool                     curve_pick_wall(const Vec2d &mouse_pos, double &t, double &z) const; // point on the cut wall
     bool                     curve_delete_selected_connector();
@@ -503,6 +516,7 @@ private:
     bool                     can_perform_curve_cut() const;
     void                     perform_curve_cut(const Selection &selection);
     void                     curve_push_undo(); // call before every change of the path or shape
+    void                     curve_repair_model();  // in-app mesh repair of the object being cut
 
 public:
     // Ctrl+Z / Ctrl+Y while drawing a curved or shape cut. Returns false when there is nothing to undo,

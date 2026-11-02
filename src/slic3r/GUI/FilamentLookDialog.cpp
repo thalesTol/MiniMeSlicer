@@ -9,6 +9,7 @@
 #include <wx/simplebook.h>
 #include <wx/sizer.h>
 #include <wx/slider.h>
+#include <wx/spinctrl.h>
 #include <wx/statbmp.h>
 #include <wx/stattext.h>
 #include <wx/wrapsizer.h>
@@ -284,16 +285,21 @@ wxScrolledWindow *FilamentLookDialog::create_page(Page page)
         add_section(win, sizer, _L("Opacity"), _L("How see-through the filament looks. Below 10% it is shown as frosted white."));
         wxBoxSizer *row = new wxBoxSizer(wxHORIZONTAL);
         m_opacity_slider = new wxSlider(win, wxID_ANY, 100, 0, 100, wxDefaultPosition, wxSize(FromDIP(260), -1));
-        m_opacity_label = new wxStaticText(win, wxID_ANY, "100%", wxDefaultPosition, wxSize(FromDIP(48), -1));
-        m_opacity_slider->Bind(wxEVT_SLIDER, [this](wxCommandEvent &) {
-            const unsigned char alpha = (unsigned char) std::lround(m_opacity_slider->GetValue() * 255.0 / 100.0);
+        m_opacity_input  = new wxSpinCtrl(win, wxID_ANY, "100", wxDefaultPosition, wxSize(FromDIP(64), -1), wxSP_ARROW_KEYS | wxTE_PROCESS_ENTER, 0, 100, 100);
+        auto apply_opacity = [this](int percent) {
+            const unsigned char alpha = (unsigned char) std::lround(std::clamp(percent, 0, 100) * 255.0 / 100.0);
             std::vector<wxColour> colors;
             for (const wxColour &c : m_color.GetColors())
                 colors.push_back(with_alpha(c, alpha));
             set_color(make_color(colors, m_color.m_color_type));
-        });
+        };
+        m_opacity_slider->Bind(wxEVT_SLIDER, [this, apply_opacity](wxCommandEvent &) { apply_opacity(m_opacity_slider->GetValue()); });
+        // type the exact value
+        m_opacity_input->Bind(wxEVT_SPINCTRL, [this, apply_opacity](wxSpinEvent &) { apply_opacity(m_opacity_input->GetValue()); });
+        m_opacity_input->Bind(wxEVT_TEXT_ENTER, [this, apply_opacity](wxCommandEvent &) { apply_opacity(m_opacity_input->GetValue()); });
         row->Add(m_opacity_slider, 0, wxALIGN_CENTER_VERTICAL);
-        row->Add(m_opacity_label, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+        row->Add(m_opacity_input, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+        row->Add(new wxStaticText(win, wxID_ANY, "%"), 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(4));
         sizer->Add(row, 0, wxLEFT, FromDIP(4));
         add_official_swatches(win, sizer, page);
         wxBoxSizer *grid = add_section(win, sizer, _L("Translucent tints"));
@@ -583,7 +589,8 @@ void FilamentLookDialog::update_opacity_controls()
         return;
     const int percent = int(std::lround(m_color.GetColors().front().Alpha() * 100.0 / 255.0));
     m_opacity_slider->SetValue(percent);
-    m_opacity_label->SetLabel(wxString::Format("%d%%", percent));
+    if (m_opacity_input->GetValue() != percent)
+        m_opacity_input->SetValue(percent);
 }
 
 void FilamentLookDialog::update_preview()

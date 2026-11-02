@@ -10,7 +10,10 @@
 
 #include "GLGizmoAdvancedCut.hpp"
 
+#include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -19,6 +22,7 @@
 #include <tuple>
 
 #include <GL/glew.h>
+#include <boost/format.hpp>
 #include <boost/log/trivial.hpp>
 
 #include "GLGizmosCommon.hpp"
@@ -29,9 +33,14 @@
 #include "slic3r/GUI/Plater.hpp"
 #include "slic3r/GUI/I18N.hpp"
 #include "slic3r/GUI/MsgDialog.hpp"
+#include "slic3r/GUI/MainFrame.hpp"
+#include "slic3r/GUI/GUI_ObjectList.hpp"
+#include "slic3r/GUI/Widgets/ProgressDialog.hpp"
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/MeshBoolean.hpp"
+#include "libslic3r/QuadricEdgeCollapse.hpp"
 #include "libslic3r/Tesselate.hpp"
+#include "libslic3r/Win10ModelRepair.hpp"
 
 namespace Slic3r {
 namespace GUI {
@@ -48,13 +57,32 @@ struct GLGizmoAdvancedCut::CurvePreview
     size_t             wanted{0};         // generation the gizmo is waiting for
     size_t             ready{size_t(-1)}; // generation of 'pieces'
     bool               failed{false};
+    bool               simplified{false}; // made on a simplified copy of the model
+    std::string        error;             // why it failed, for the user
+    std::vector<int>   skipped;           // connectors that could not be added
     std::vector<Piece> pieces;
+    // what the worker is doing now, for the panel
+    bool                                  running{false};
+    std::string                           stage;
+    std::chrono::steady_clock::time_point started;
+
+    // Cleaned up (and for big models simplified) copies of the model meshes, in volume coordinates.
+    // The entry keeps the source mesh alive, so its address identifies it.
+    struct CacheEntry
+    {
+        std::shared_ptr<const TriangleMesh>         src;
+        std::shared_ptr<const indexed_triangle_set> prepared;
+        bool                                        simplified{false};
+    };
+    std::mutex              cache_mutex;
+    std::vector<CacheEntry> cache;
 };
 
 struct GLGizmoAdvancedCut::CurvePiece
 {
     size_t                         volume{0};
     bool                           in_a{true};
+    bool                           orig_a{true}; // side it was computed on, before the user moved it
     std::shared_ptr<TriangleMesh>  mesh;      // world coordinates
     std::shared_ptr<MeshRaycaster> raycaster; // references 'mesh'
     std::shared_ptr<GLModel>       model;
@@ -68,11 +96,155 @@ constexpr int CURVE_PLATE_MOVE_ID = 5;
 const ColorRGBA CURVE_PART_A_COLOR = ColorRGBA::CYAN();
 const ColorRGBA CURVE_PART_B_COLOR = ColorRGBA::MAGENTA();
 
+// Model meshes bigger than this are simplified for the preview; the cut itself uses the full mesh.
+constexpr size_t PREVIEW_SIMPLIFY_ABOVE = 300000;
+constexpr size_t PREVIEW_TRIANGLES      = 200000;
+
+struct CurveCancelled {}; // thrown from the simplification when the run became obsolete
+
+// Every boolean runs alone: two calculations at once only compete for the CPU, and the backend is not
+// known to be safe to run twice in parallel.
+std::mutex &curve_boolean_mutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+// Closed, consistently oriented 2-manifold: every directed edge exactly once, together with its reverse.
+// The boolean backend can corrupt memory on anything else, so cutters are checked before use.
+bool its_is_closed_manifold(const indexed_triangle_set &its)
+{
+    if (its.indices.empty())
+        return false;
+    std::vector<uint64_t> edges;
+    edges.reserve(its.indices.size() * 3);
+    for (const stl_triangle_vertex_indices &f : its.indices)
+        for (int i = 0; i < 3; ++i) {
+            const int a = f[i], b = f[(i + 1) % 3];
+            if (a == b || a < 0 || b < 0 || a >= int(its.vertices.size()) || b >= int(its.vertices.size()))
+                return false;
+            edges.push_back((uint64_t(uint32_t(a)) << 32) | uint64_t(uint32_t(b)));
+        }
+    std::sort(edges.begin(), edges.end());
+    if (std::adjacent_find(edges.begin(), edges.end()) != edges.end())
+        return false; // an edge used twice in the same direction: flipped face or non-manifold edge
+    for (const uint64_t e : edges) {
+        const uint64_t rev = (e << 32) | (e >> 32);
+        if (!std::binary_search(edges.begin(), edges.end(), rev))
+            return false; // open edge
+    }
+    return true;
+}
+
+struct RepairCounts
+{
+    int removed{0}; // degenerate and duplicate faces
+    int flipped{0}; // faces turned to match their neighbours or the outside
+};
+
+// Turns the faces of every connected part to agree with their neighbours, then the whole part outwards.
+int its_orient_consistently(indexed_triangle_set &its)
+{
+    const size_t n = its.indices.size();
+    if (n == 0)
+        return 0;
+    const std::vector<Vec3i> neighbors = its_face_neighbors(its);
+    std::vector<char>        visited(n, 0);
+    std::vector<size_t>      stack, faces;
+    int                      flipped = 0;
+    auto flip = [&its](size_t f) { std::swap(its.indices[f][1], its.indices[f][2]); };
+    for (size_t seed = 0; seed < n; ++seed) {
+        if (visited[seed])
+            continue;
+        faces.clear();
+        visited[seed] = 1;
+        stack.push_back(seed);
+        while (!stack.empty()) {
+            const size_t f = stack.back();
+            stack.pop_back();
+            faces.push_back(f);
+            for (int k = 0; k < 3; ++k) {
+                const int g = neighbors[f][k];
+                if (g < 0 || size_t(g) >= n || visited[g])
+                    continue;
+                // find the shared edge and compare its direction in both faces
+                const stl_triangle_vertex_indices &ff = its.indices[f];
+                const stl_triangle_vertex_indices &gg = its.indices[g];
+                bool same_dir = false, shared = false;
+                for (int i = 0; i < 3 && !shared; ++i)
+                    for (int j = 0; j < 3 && !shared; ++j) {
+                        const int a = ff[i], b = ff[(i + 1) % 3];
+                        if (gg[j] == a && gg[(j + 1) % 3] == b) {
+                            shared   = true;
+                            same_dir = true;
+                        } else if (gg[j] == b && gg[(j + 1) % 3] == a)
+                            shared = true;
+                    }
+                if (!shared)
+                    continue;
+                if (same_dir) {
+                    flip(size_t(g));
+                    ++flipped;
+                }
+                visited[g] = 1;
+                stack.push_back(size_t(g));
+            }
+        }
+        // the part as a whole faces outwards
+        double volume = 0.0;
+        for (size_t f : faces) {
+            const Vec3d a = its.vertices[its.indices[f][0]].cast<double>(), b = its.vertices[its.indices[f][1]].cast<double>(),
+                        c = its.vertices[its.indices[f][2]].cast<double>();
+            volume += a.dot(b.cross(c));
+        }
+        if (volume < 0.0) {
+            for (size_t f : faces)
+                flip(f);
+            flipped += int(faces.size());
+        }
+    }
+    return flipped;
+}
+
+// Cheap clean-up: merge coincident vertices, drop degenerate and duplicate faces, fix face orientation.
+RepairCounts repair_its(indexed_triangle_set &its)
+{
+    RepairCounts counts;
+    its_merge_vertices(its);
+    counts.removed += its_remove_degenerate_faces(its);
+    {
+        // duplicate faces (same three vertices, either orientation)
+        std::vector<std::pair<std::array<int, 3>, size_t>> keys;
+        keys.reserve(its.indices.size());
+        for (size_t f = 0; f < its.indices.size(); ++f) {
+            std::array<int, 3> k = {its.indices[f][0], its.indices[f][1], its.indices[f][2]};
+            std::sort(k.begin(), k.end());
+            keys.emplace_back(k, f);
+        }
+        std::sort(keys.begin(), keys.end());
+        std::vector<char> drop(its.indices.size(), 0);
+        for (size_t i = 1; i < keys.size(); ++i)
+            if (keys[i].first == keys[i - 1].first)
+                drop[keys[i].second] = 1;
+        size_t out = 0;
+        for (size_t f = 0; f < its.indices.size(); ++f)
+            if (!drop[f])
+                its.indices[out++] = its.indices[f];
+        counts.removed += int(its.indices.size() - out);
+        its.indices.resize(out);
+    }
+    its_compactify_vertices(its);
+    counts.flipped = its_orient_consistently(its);
+    return counts;
+}
+
 // Closed solid from 2D shapes (plane frame, mm): caps at z = z0 / z1 plus side walls.
+// Every shape is built on its own, so shapes touching in a point do not share (non-manifold) edges.
 indexed_triangle_set extrude_shapes(const ExPolygons &shapes, double z0, double z1)
 {
-    std::vector<Vec3d> soup;
+    indexed_triangle_set result;
     for (const ExPolygon &shape : shapes) {
+        std::vector<Vec3d> soup;
         // already unscaled to mm by the tesselator
         std::vector<Vec3d> top    = triangulate_expolygon_3d(shape, z1, false);
         std::vector<Vec3d> bottom = triangulate_expolygon_3d(shape, z0, true);
@@ -91,20 +263,43 @@ indexed_triangle_set extrude_shapes(const ExPolygons &shapes, double z0, double 
         add_walls(shape.contour);
         for (const Polygon &hole : shape.holes)
             add_walls(hole);
+        indexed_triangle_set its;
+        its.vertices.reserve(soup.size());
+        for (size_t i = 0; i + 2 < soup.size(); i += 3) {
+            const int base = int(its.vertices.size());
+            its.vertices.emplace_back(soup[i].cast<float>());
+            its.vertices.emplace_back(soup[i + 1].cast<float>());
+            its.vertices.emplace_back(soup[i + 2].cast<float>());
+            its.indices.emplace_back(base, base + 1, base + 2);
+        }
+        its_merge_vertices(its);
+        its_remove_degenerate_faces(its);
+        its_compactify_vertices(its);
+        its_merge(result, its);
     }
-    indexed_triangle_set its;
-    its.vertices.reserve(soup.size());
-    for (size_t i = 0; i + 2 < soup.size(); i += 3) {
-        const int base = int(its.vertices.size());
-        its.vertices.emplace_back(soup[i].cast<float>());
-        its.vertices.emplace_back(soup[i + 1].cast<float>());
-        its.vertices.emplace_back(soup[i + 2].cast<float>());
-        its.indices.emplace_back(base, base + 1, base + 2);
+    return result;
+}
+
+// 2D shapes cleaned for extrusion: tiny segments removed and a hair shrunk, so contours touching in a
+// point (a path crossing itself, a connector touching the outline) come apart.
+ExPolygons clean_shapes(const ExPolygons &shapes, double tolerance)
+{
+    return offset_ex(expolygons_simplify(shapes, scale_(tolerance)), -float(scale_(tolerance)));
+}
+
+// Closed solid from 2D shapes that the boolean backend can take, or an empty mesh. Tries a little more
+// simplification when the first extrusion is not a clean closed surface.
+indexed_triangle_set extrude_valid(const ExPolygons &shapes, double z0, double z1)
+{
+    for (double tolerance : {0.001, 0.01, 0.05}) {
+        const ExPolygons clean = clean_shapes(shapes, tolerance);
+        if (clean.empty())
+            break;
+        indexed_triangle_set its = extrude_shapes(clean, z0, z1);
+        if (its_is_closed_manifold(its))
+            return its;
     }
-    its_merge_vertices(its);
-    its_remove_degenerate_faces(its);
-    its_compactify_vertices(its);
-    return its;
+    return {};
 }
 
 // A op B ("INTERSECTION", "A_NOT_B" or "UNION") with the default backend, CGAL as fallback.
@@ -115,7 +310,17 @@ indexed_triangle_set mesh_boolean_op(const TriangleMesh &a, const TriangleMesh &
 {
     std::vector<TriangleMesh> results;
     bool failed = false;
-    MeshBoolean::mcut::make_boolean(a, b, results, op, cancel, nullptr, [&failed]() { failed = true; });
+    if (a.its.indices.empty() || b.its.indices.empty()) {
+        ok = false;
+        return {};
+    }
+    try {
+        MeshBoolean::mcut::make_boolean(a, b, results, op, cancel, nullptr, [&failed]() { failed = true; });
+    } catch (const std::exception &e) {
+        BOOST_LOG_TRIVIAL(error) << "Curve cut: mesh boolean threw: " << e.what();
+        results.clear();
+        failed = true;
+    }
     if (cancel && cancel())
         return {};
     indexed_triangle_set its;
@@ -123,6 +328,11 @@ indexed_triangle_set mesh_boolean_op(const TriangleMesh &a, const TriangleMesh &
         for (const TriangleMesh &r : results)
             its_merge(its, r.its);
     } else if (failed) {
+        // CGAL cannot be cancelled and takes minutes on huge meshes: report the failure instead
+        if (a.its.indices.size() + b.its.indices.size() > 600000) {
+            ok = false;
+            return {};
+        }
         try {
             TriangleMesh tmp = a;
             if (op == "INTERSECTION")
@@ -134,6 +344,9 @@ indexed_triangle_set mesh_boolean_op(const TriangleMesh &a, const TriangleMesh &
             its = tmp.its;
         } catch (const std::exception &e) {
             BOOST_LOG_TRIVIAL(error) << "Curve cut: mesh boolean failed: " << e.what();
+            ok = false;
+            return {};
+        } catch (...) {
             ok = false;
             return {};
         }
@@ -364,6 +577,201 @@ indexed_triangle_set dowel_solid(const ConnFrame &f, double z, const GLGizmoAdva
     return its;
 }
 
+// A loose pin is a dowel reaching 'pin_length' into each part.
+GLGizmoAdvancedCut::CurveConnParams loose_pin(const GLGizmoAdvancedCut::CurveConnParams &c)
+{
+    GLGizmoAdvancedCut::CurveConnParams out = c;
+    out.pin_length                          = 2.0 * c.pin_length;
+    return out;
+}
+
+// Loose snap-fit clip: a barb on each side of the wall, both catching at the same height, joined by a
+// core across the wall. Profile in (v into B, w along the plane normal), extruded along the tangent.
+indexed_triangle_set double_snap_solid(const ConnFrame &f, double z, const GLGizmoAdvancedCut::CurveConnParams &c, double extra)
+{
+    const double hu = 0.5 * c.width + extra, h0 = z - 0.5 * c.snap_height - extra, h1 = z + 0.5 * c.snap_height + extra;
+    const double tip = c.depth + extra, core = 0.4 * c.depth + extra;
+    const double cw = c.reverse ? h1 : h0, rw = c.reverse ? h0 : h1;
+    const double w1 = cw + (rw - cw) * (tip - core) / (tip + core); // where the ramps meet the core
+    const std::array<Vec2d, 6> q = {Vec2d(-tip, cw), Vec2d(tip, cw), Vec2d(core, w1), Vec2d(core, rw), Vec2d(-core, rw), Vec2d(-core, w1)};
+    Polygon poly;
+    for (const Vec2d &v : q)
+        poly.points.emplace_back(scale_(v.x()), scale_(v.y()));
+    if (!poly.is_counter_clockwise())
+        poly.reverse();
+    indexed_triangle_set its = extrude_shapes(union_ex(Polygons{poly}), -hu, hu);
+    // extrusion (x, y, z) = (v, w, u) -> plane frame
+    Transform3d m = Transform3d::Identity();
+    m.linear().col(0) = Vec3d(f.dir.x(), f.dir.y(), 0.0);
+    m.linear().col(1) = Vec3d::UnitZ();
+    m.linear().col(2) = Vec3d(f.tangent.x(), f.tangent.y(), 0.0);
+    m.translation()   = Vec3d(f.p.x(), f.p.y(), 0.0);
+    its_transform(its, m, true);
+    orient_outwards(its);
+    return its;
+}
+
+// The connector as it looks on the finished parts, for the 3D view.
+indexed_triangle_set conn_display_solid(const ConnFrame &f, double z, const GLGizmoAdvancedCut::CurveConnParams &c, double z_lo, double z_hi)
+{
+    using ConnType = GLGizmoAdvancedCut::ConnType;
+    switch (c.type) {
+    case ConnType::Dovetail: {
+        const double run = c.closed_end ? (z_hi - z_lo) * std::clamp(c.length, 5.0, 100.0) / 100.0 : (z_hi - z_lo);
+        const double z0  = c.closed_end && c.reverse ? z_lo : z_hi - run;
+        // a loose dovetail is a double dovetail key, like the bowtie
+        return c.loose ? extrude_shapes(union_ex(Polygons{bowtie_profile(f, c, 0.0)}), z0, z0 + run) : dovetail_solid(f, z0, z0 + run, c, 0.0);
+    }
+    case ConnType::Pin: return c.loose ? dowel_solid(f, z, loose_pin(c), 0.0) : pin_solid(f, z, c, 0.0);
+    case ConnType::Snap: return c.loose ? double_snap_solid(f, z, c, 0.0) : snap_solid(f, z, c, 0.0);
+    case ConnType::Dowel: return dowel_solid(f, z, c, 0.0);
+    case ConnType::Bowtie: return extrude_shapes(union_ex(Polygons{bowtie_profile(f, c, 0.0)}), z_lo, z_hi);
+    }
+    return {};
+}
+
+// One model part to split: its mesh (shared, never modified) and where it sits in the world.
+struct CurvePart
+{
+    size_t                              volume{0};
+    std::shared_ptr<const TriangleMesh> mesh;
+    Transform3d                         trafo{Transform3d::Identity()};
+    bool                                has_issues{false}; // open / non-manifold edges or reversed faces
+};
+
+struct CurveJobResult
+{
+    bool                                                ok{true};
+    bool                                                simplified{false};
+    std::string                                         error;
+    std::vector<int>                                    skipped; // connectors that could not be added
+    std::vector<GLGizmoAdvancedCut::CurvePreview::Piece> pieces;
+};
+
+// Splits every part with the cutters. Runs on a worker thread and only touches its own copies and the
+// shared preview cache. 'cache' is null for the real cut, which uses the full-resolution meshes.
+// Returns false when cancelled.
+bool run_curve_job(GLGizmoAdvancedCut::CurveCutters &cutters, const std::vector<CurvePart> &parts, GLGizmoAdvancedCut::CurvePreview *cache,
+                   const std::function<bool()> &cancelled, const std::function<void(const std::string &)> &stage, CurveJobResult &out)
+{
+    out.skipped = cutters.bad_conns;
+    stage(_u8L("Waiting for the previous calculation to stop..."));
+    std::unique_lock<std::mutex> lock(curve_boolean_mutex(), std::defer_lock);
+    while (!lock.try_lock()) {
+        if (cancelled())
+            return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+
+    // the model, cleaned up (and simplified for the preview of big models)
+    std::vector<std::pair<size_t, TriangleMesh>> meshes;
+    bool any_issues = false;
+    for (const CurvePart &part : parts) {
+        if (cancelled())
+            return false;
+        any_issues |= part.has_issues;
+        std::shared_ptr<const indexed_triangle_set> prepared;
+        bool                                        simplified = false;
+        if (cache) {
+            std::lock_guard<std::mutex> cache_lock(cache->cache_mutex);
+            for (const auto &entry : cache->cache)
+                if (entry.src == part.mesh) {
+                    prepared   = entry.prepared;
+                    simplified = entry.simplified;
+                }
+        }
+        if (!prepared) {
+            const size_t count    = part.mesh->its.indices.size();
+            const bool   simplify = cache != nullptr && count > PREVIEW_SIMPLIFY_ABOVE;
+            stage(simplify ? (boost::format(_u8L("Simplifying the model for the preview (%1% triangles)...")) % count).str() :
+                             _u8L("Checking the model..."));
+            indexed_triangle_set its = part.mesh->its;
+            repair_its(its);
+            if (simplify) {
+                try {
+                    its_quadric_edge_collapse(
+                        its, uint32_t(PREVIEW_TRIANGLES), nullptr,
+                        [&cancelled]() {
+                            if (cancelled())
+                                throw CurveCancelled();
+                        },
+                        [&stage](int percent) { stage((boost::format(_u8L("Simplifying the model for the preview: %1%%%")) % percent).str()); });
+                } catch (const CurveCancelled &) {
+                    return false;
+                }
+                repair_its(its);
+            }
+            prepared   = std::make_shared<const indexed_triangle_set>(std::move(its));
+            simplified = simplify;
+            if (cache) {
+                std::lock_guard<std::mutex> cache_lock(cache->cache_mutex);
+                cache->cache.push_back({part.mesh, prepared, simplified});
+                if (cache->cache.size() > 8)
+                    cache->cache.erase(cache->cache.begin());
+            }
+        }
+        out.simplified |= simplified;
+        indexed_triangle_set world = *prepared;
+        its_transform(world, part.trafo, true);
+        meshes.emplace_back(part.volume, TriangleMesh(std::move(world)));
+    }
+
+    // 3D connectors on the cutters, all operations of one connector or none of them
+    for (size_t i = 0; i < cutters.ops.size();) {
+        if (cancelled())
+            return false;
+        const int conn = cutters.ops[i].conn;
+        size_t    end  = i;
+        while (end < cutters.ops.size() && cutters.ops[end].conn == conn)
+            ++end;
+        stage((boost::format(_u8L("Adding connector %1%...")) % (conn + 1)).str());
+        TriangleMesh a = cutters.a, b = cutters.b;
+        bool         good = true;
+        for (size_t k = i; k < end && good; ++k) {
+            const GLGizmoAdvancedCut::CurveCutters::Op &op = cutters.ops[k];
+            TriangleMesh &target = op.on_a ? a : b;
+            bool ok = true;
+            indexed_triangle_set r = mesh_boolean_op(target, op.mesh, op.unite ? "UNION" : "A_NOT_B", ok, cancelled);
+            if (cancelled())
+                return false;
+            if (ok && !its_is_closed_manifold(r))
+                repair_its(r); // usually only a few faces turned the wrong way
+            good = ok && its_is_closed_manifold(r);
+            if (good)
+                target = TriangleMesh(std::move(r));
+        }
+        if (good) {
+            cutters.a = std::move(a);
+            cutters.b = std::move(b);
+        } else if (std::find(out.skipped.begin(), out.skipped.end(), conn) == out.skipped.end())
+            out.skipped.push_back(conn);
+        i = end;
+    }
+
+    // split every part
+    for (size_t i = 0; i < meshes.size(); ++i) {
+        for (bool inside : {true, false}) {
+            if (cancelled())
+                return false;
+            stage(meshes.size() > 1 ? (boost::format(_u8L("Cutting part %1% of %2%...")) % (i + 1) % meshes.size()).str() : _u8L("Cutting the model..."));
+            bool ok = true;
+            const indexed_triangle_set result = mesh_boolean(meshes[i].second, inside ? cutters.a : cutters.b, inside, ok, cancelled);
+            if (cancelled())
+                return false;
+            if (!ok) {
+                out.ok = false;
+                continue;
+            }
+            for (indexed_triangle_set &piece : its_split(result))
+                out.pieces.push_back({meshes[i].first, inside, std::move(piece)});
+        }
+    }
+    if (!out.ok)
+        out.error = any_issues ? _u8L("The model has open or non-manifold edges or reversed faces. Click \"Repair model\" and try again.") :
+                                 _u8L("The cut could not be calculated here. Move the line or the connectors a little and try again.");
+    return true;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -431,11 +839,19 @@ std::vector<Vec2d> GLGizmoAdvancedCut::curve_outline(bool with_hover) const
             out.push_back(bezier(a.p, a.p + a.h_out, b.p + b.h_in, b.p, double(s) / n));
     }
     out.push_back(anchors.back().p);
-    return out;
+    // Points on top of each other (two clicks in one spot, a handle pulled back) give zero-length
+    // segments whose direction is undefined: drop them.
+    std::vector<Vec2d> clean;
+    clean.reserve(out.size());
+    for (const Vec2d &p : out)
+        if (std::isfinite(p.x()) && std::isfinite(p.y()) && (clean.empty() || (p - clean.back()).norm() > 1e-4))
+            clean.push_back(p);
+    return clean;
 }
 
 bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
 {
+    out = CurveCutters();
     const std::vector<Vec2d> pts = curve_outline(false);
     if (pts.size() < (m_shape_mode ? 3u : 2u))
         return false;
@@ -459,12 +875,17 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
         outline.push_back(start + left * 2.0 * big);
     }
     Polygon poly;
-    for (const Vec2d &p : outline)
+    for (const Vec2d &p : outline) {
+        if (!std::isfinite(p.x()) || !std::isfinite(p.y()))
+            return false;
         poly.points.emplace_back(scale_(p.x()), scale_(p.y()));
+    }
     // union_ex fixes orientation and self intersections of a hand drawn path
     const ExPolygons base = union_ex(Polygons{poly});
-    if (base.empty())
+    if (base.empty()) {
+        out.error = _u8L("The outline does not enclose anything. Draw it across the model.");
         return false;
+    }
 
     // Connectors, each with its own settings. Part A lies left of an open path and inside a shape, so
     // "into B" is the right-hand normal of the outline.
@@ -472,16 +893,21 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
     //   owned by B:  cutter a -= hole,   cutter b -= solid
     //   separate:    cutter a -= hole,   cutter b += hole, plus the key as its own piece
     Polygons add_a, sub_a, add_b, sub_b; // full-height shapes, done in 2D with the outline
-    out.ops.clear();
-    out.keys.clear();
-    std::vector<std::pair<indexed_triangle_set, bool>> keys_plane; // key, already in plane frame
+    struct PlaneOp
+    {
+        indexed_triangle_set its;
+        bool                 on_a, unite;
+        int                  conn;
+    };
+    std::vector<PlaneOp>                            ops_plane;
+    std::vector<std::pair<int, indexed_triangle_set>> keys_plane; // connector, key in the plane frame
     const BoundingBoxf3  tbb  = transformed_bounding_box(m_plane_center, m_rotate_matrix); // plane frame
     const double         z_lo = tbb.defined ? tbb.min.z() : -m_radius, z_hi = tbb.defined ? tbb.max.z() : m_radius;
     const OutlineSampler sampler(pts, m_shape_mode);
-    std::vector<std::tuple<indexed_triangle_set, bool, bool>> ops_plane; // mesh, on_a, unite
     if (sampler.valid())
-        for (const CurveConnector &conn : m_curve_conns) {
-            const CurveConnParams &c = conn.params;
+        for (int ci = 0; ci < int(m_curve_conns.size()); ++ci) {
+            const CurveConnector  &conn = m_curve_conns[ci];
+            const CurveConnParams &c    = conn.params;
             ConnFrame f;
             sampler.at(conn.t, f.p, f.tangent);
             f.dir = Vec2d(f.tangent.y(), -f.tangent.x());
@@ -491,21 +917,47 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
             const double tol = c.tolerance;
             const double z   = std::clamp(conn.z, z_lo, z_hi);
             auto add_3d = [&](indexed_triangle_set solid, indexed_triangle_set hole) {
-                if (c.separate()) {
-                    ops_plane.emplace_back(hole, true, false);
-                    ops_plane.emplace_back(std::move(hole), false, true);
-                    keys_plane.emplace_back(std::move(solid), true);
-                } else if (!owner_b) {
-                    ops_plane.emplace_back(std::move(solid), true, true);
-                    ops_plane.emplace_back(std::move(hole), false, true);
-                } else {
-                    ops_plane.emplace_back(std::move(hole), true, false);
-                    ops_plane.emplace_back(std::move(solid), false, false);
+                // a broken connector shape is left out instead of breaking the whole cut
+                if (!its_is_closed_manifold(solid) || !its_is_closed_manifold(hole)) {
+                    out.bad_conns.push_back(ci);
+                    return;
                 }
+                if (c.separate()) {
+                    ops_plane.push_back({hole, true, false, ci});
+                    ops_plane.push_back({std::move(hole), false, true, ci});
+                    keys_plane.emplace_back(ci, std::move(solid));
+                } else if (!owner_b) {
+                    ops_plane.push_back({std::move(solid), true, true, ci});
+                    ops_plane.push_back({std::move(hole), false, true, ci});
+                } else {
+                    ops_plane.push_back({std::move(hole), true, false, ci});
+                    ops_plane.push_back({std::move(solid), false, false, ci});
+                }
+            };
+            // a key as tall as the object that slides in along the wall, with a slot in both parts
+            auto add_full_key = [&](const Polygon &key, const Polygon &slot) {
+                indexed_triangle_set solid = extrude_valid(union_ex(Polygons{key}), z_lo, z_hi);
+                if (solid.indices.empty()) {
+                    out.bad_conns.push_back(ci);
+                    return;
+                }
+                sub_a.push_back(slot);
+                add_b.push_back(slot);
+                keys_plane.emplace_back(ci, std::move(solid));
             };
             switch (c.type) {
             case ConnType::Dovetail:
-                if (!c.closed_end) {
+                if (c.loose) {
+                    // double dovetail key across the wall
+                    if (!c.closed_end) {
+                        add_full_key(bowtie_profile(f, c, 0.0), bowtie_profile(f, c, tol));
+                    } else {
+                        const double run = (z_hi - z_lo) * std::clamp(c.length, 5.0, 100.0) / 100.0;
+                        const double z0 = c.reverse ? z_lo : z_hi - run, z1 = z0 + run;
+                        add_3d(extrude_valid(union_ex(Polygons{bowtie_profile(f, c, 0.0)}), z0, z1),
+                               extrude_valid(union_ex(Polygons{bowtie_profile(f, c, tol)}), c.reverse ? -big : z0 - tol, c.reverse ? z1 + tol : big));
+                    }
+                } else if (!c.closed_end) {
                     (owner_b ? sub_b : add_a).push_back(dovetail_profile(f, c, 0.0));
                     (owner_b ? sub_a : add_b).push_back(dovetail_profile(f, c, tol));
                 } else {
@@ -515,16 +967,20 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
                     add_3d(dovetail_solid(f, z0, z1, c, 0.0), dovetail_solid(f, c.reverse ? z0 : z0 - tol, c.reverse ? z1 + tol : z1, c, tol));
                 }
                 break;
-            case ConnType::Pin: add_3d(pin_solid(f, z, c, 0.0), pin_solid(f, z, c, tol)); break;
-            case ConnType::Snap: add_3d(snap_solid(f, z, c, 0.0), snap_solid(f, z, c, tol)); break;
-            case ConnType::Dowel: add_3d(dowel_solid(f, z, c, 0.0), dowel_solid(f, z, c, tol)); break;
-            case ConnType::Bowtie: {
-                // slides in along the wall; the key is as tall as the object
-                sub_a.push_back(bowtie_profile(f, c, tol));
-                add_b.push_back(bowtie_profile(f, c, tol));
-                keys_plane.emplace_back(extrude_shapes(union_ex(Polygons{bowtie_profile(f, c, 0.0)}), z_lo, z_hi), true);
+            case ConnType::Pin:
+                if (c.loose)
+                    add_3d(dowel_solid(f, z, loose_pin(c), 0.0), dowel_solid(f, z, loose_pin(c), tol));
+                else
+                    add_3d(pin_solid(f, z, c, 0.0), pin_solid(f, z, c, tol));
                 break;
-            }
+            case ConnType::Snap:
+                if (c.loose)
+                    add_3d(double_snap_solid(f, z, c, 0.0), double_snap_solid(f, z, c, tol));
+                else
+                    add_3d(snap_solid(f, z, c, 0.0), snap_solid(f, z, c, tol));
+                break;
+            case ConnType::Dowel: add_3d(dowel_solid(f, z, c, 0.0), dowel_solid(f, z, c, tol)); break;
+            case ConnType::Bowtie: add_full_key(bowtie_profile(f, c, 0.0), bowtie_profile(f, c, tol)); break;
             }
         }
 
@@ -538,19 +994,24 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
         cut_b = union_ex(cut_b, add_b);
     if (!sub_b.empty())
         cut_b = diff_ex(cut_b, sub_b);
-    const Transform3d plane = curve_plane_matrix();
-    indexed_triangle_set its_a = extrude_shapes(cut_a, -big, big), its_b = extrude_shapes(cut_b, -big, big);
+    const Transform3d    plane = curve_plane_matrix();
+    indexed_triangle_set its_a = extrude_valid(cut_a, -big, big), its_b = extrude_valid(cut_b, -big, big);
+    if (its_a.indices.empty() || its_b.indices.empty()) {
+        // never hand a broken cutter to the boolean backend: it can crash on it
+        out.error = _u8L("This outline cannot be used: it crosses itself too tightly. Smooth it or remove a point.");
+        return false;
+    }
     its_transform(its_a, plane);
     its_transform(its_b, plane);
-    out.a = TriangleMesh(its_a);
-    out.b = TriangleMesh(its_b);
-    for (auto &[its, on_a, unite] : ops_plane) {
-        its_transform(its, plane, true);
-        out.ops.push_back({TriangleMesh(std::move(its)), on_a, unite});
+    out.a = TriangleMesh(std::move(its_a));
+    out.b = TriangleMesh(std::move(its_b));
+    for (PlaneOp &op : ops_plane) {
+        its_transform(op.its, plane, true);
+        out.ops.push_back({TriangleMesh(std::move(op.its)), op.on_a, op.unite, op.conn});
     }
-    for (auto &[its, unused] : keys_plane) {
+    for (auto &[conn, its] : keys_plane) {
         its_transform(its, plane, true);
-        out.keys.emplace_back(std::move(its));
+        out.keys.push_back({conn, TriangleMesh(std::move(its))});
     }
     return true;
 }
@@ -575,6 +1036,14 @@ void GLGizmoAdvancedCut::curve_reset()
     m_curve_drawing   = true;
     m_curve_undo.clear();
     m_curve_redo.clear();
+    m_conn_hover.reset();
+    m_curve_preview_failed = false;
+    m_curve_repair_msg.clear();
+    if (m_curve_preview) {
+        // drop the simplified model copies; a running worker keeps what it already uses
+        std::lock_guard<std::mutex> lock(m_curve_preview->cache_mutex);
+        m_curve_preview->cache.clear();
+    }
     curve_changed();
 }
 
@@ -607,13 +1076,45 @@ bool GLGizmoAdvancedCut::curve_undo(bool redo)
 
 bool GLGizmoAdvancedCut::curve_preview_ready() const
 {
-    return m_curve_mode && !m_curve_pieces.empty() && m_curve_preview_shown == m_curve_generation;
+    return m_curve_mode && !m_curve_pieces.empty() && m_curve_preview_shown == m_curve_generation && !m_curve_preview_failed;
 }
 
 bool GLGizmoAdvancedCut::curve_preview_visible() const
 {
     return m_curve_mode && !m_curve_pieces.empty();
 }
+
+namespace {
+// The model parts of the selected instance, shared (not copied) with the worker.
+std::vector<CurvePart> curve_collect_parts(const ModelObject *mo, int instance_idx)
+{
+    std::vector<CurvePart> parts;
+    const Transform3d inst_trafo = mo->instances[instance_idx]->get_matrix();
+    for (size_t v = 0; v < mo->volumes.size(); ++v)
+        if (mo->volumes[v]->is_model_part()) {
+            CurvePart part;
+            part.volume     = v;
+            part.mesh       = mo->volumes[v]->get_mesh_shared_ptr();
+            part.trafo      = inst_trafo * mo->volumes[v]->get_matrix();
+            part.has_issues = part.mesh && part.mesh->stats().has_any_issue();
+            if (part.mesh && !part.mesh->its.indices.empty())
+                parts.push_back(std::move(part));
+        }
+    return parts;
+}
+
+void curve_request_redraw()
+{
+    if (wxTheApp)
+        wxTheApp->CallAfter([]() {
+            if (Plater *plater = wxGetApp().plater())
+                if (GLCanvas3D *canvas = plater->get_current_canvas3D()) {
+                    canvas->set_as_dirty();
+                    canvas->request_extra_frame();
+                }
+        });
+}
+} // namespace
 
 void GLGizmoAdvancedCut::curve_changed()
 {
@@ -626,11 +1127,14 @@ void GLGizmoAdvancedCut::curve_changed()
     const size_t gen = m_curve_generation;
     {
         std::lock_guard<std::mutex> lock(m_curve_preview->mutex);
-        m_curve_preview->wanted = gen;
+        m_curve_preview->wanted  = gen; // any older run stops at its next check
+        m_curve_preview->running = false;
+        m_curve_preview->error.clear();
     }
     const bool has_geometry = m_shape_mode ? m_curve_shape.valid() : m_curve_anchors.size() >= 2;
     if (!m_curve_mode || !has_geometry || m_state != On) {
         m_curve_pieces.clear();
+        m_curve_preview_failed = false;
         return;
     }
 
@@ -644,60 +1148,58 @@ void GLGizmoAdvancedCut::curve_changed()
     if (instance_idx >= int(mo->instances.size()))
         return;
     CurveCutters cutters;
-    if (!curve_build_cutters(cutters))
+    if (!curve_build_cutters(cutters)) {
+        std::lock_guard<std::mutex> lock(m_curve_preview->mutex);
+        m_curve_preview->error = cutters.error;
         return;
-    std::vector<std::pair<size_t, TriangleMesh>> parts; // volume index, mesh in world coordinates
-    const Transform3d inst_trafo = mo->instances[instance_idx]->get_matrix();
-    for (size_t v = 0; v < mo->volumes.size(); ++v)
-        if (mo->volumes[v]->is_model_part()) {
-            parts.emplace_back(v, mo->volumes[v]->mesh());
-            parts.back().second.transform(inst_trafo * mo->volumes[v]->get_matrix(), true);
-        }
+    }
+    std::vector<CurvePart> parts = curve_collect_parts(mo, instance_idx);
+    if (parts.empty())
+        return;
+    {
+        std::lock_guard<std::mutex> lock(m_curve_preview->mutex);
+        m_curve_preview->running = true;
+        m_curve_preview->started = std::chrono::steady_clock::now();
+        m_curve_preview->stage   = _u8L("Starting...");
+    }
 
+    // The worker owns copies of everything it uses (the cutters, shared read-only meshes, the shared
+    // state), so the gizmo can close or the object change while it runs.
     std::thread([state = m_curve_preview, gen, cutters = std::move(cutters), parts = std::move(parts)]() mutable {
-        // A newer outline makes this run obsolete: stop the boolean as soon as possible.
         const std::function<bool()> cancelled = [&state, gen]() {
             std::lock_guard<std::mutex> lock(state->mutex);
             return state->wanted != gen;
         };
-        bool ok = true;
-        // 3D connectors on the cutters
-        for (const CurveCutters::Op &op : cutters.ops) {
-            if (cancelled() || !ok)
-                break;
-            TriangleMesh &target = op.on_a ? cutters.a : cutters.b;
-            target = TriangleMesh(mesh_boolean_op(target, op.mesh, op.unite ? "UNION" : "A_NOT_B", ok, cancelled));
+        const std::function<void(const std::string &)> stage = [&state, gen](const std::string &text) {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            if (state->wanted == gen)
+                state->stage = text;
+        };
+        CurveJobResult result;
+        bool           finished = false;
+        try {
+            finished = run_curve_job(cutters, parts, state.get(), cancelled, stage, result);
+        } catch (const std::exception &e) {
+            BOOST_LOG_TRIVIAL(error) << "Curve cut preview failed: " << e.what();
+            finished     = true;
+            result.ok    = false;
+            result.error = _u8L("The preview could not be calculated. Click \"Repair model\" or simplify the model and try again.");
         }
-        if (cancelled())
-            return;
-        std::vector<CurvePreview::Piece> pieces;
-        for (const auto &[volume, mesh] : parts) {
-            if (cancelled())
-                return;
-            for (bool inside : {true, false}) {
-                const indexed_triangle_set result = mesh_boolean(mesh, inside ? cutters.a : cutters.b, inside, ok, cancelled);
-                if (result.indices.empty())
-                    continue;
-                for (indexed_triangle_set &piece : its_split(result))
-                    pieces.push_back({volume, inside, std::move(piece)});
-            }
-        }
+        if (!finished)
+            return; // a newer outline took over
         {
             std::lock_guard<std::mutex> lock(state->mutex);
             if (state->wanted != gen)
                 return;
-            state->pieces = std::move(pieces);
-            state->failed = !ok;
-            state->ready  = gen;
+            state->pieces     = std::move(result.pieces);
+            state->failed     = !result.ok;
+            state->simplified = result.simplified;
+            state->error      = std::move(result.error);
+            state->skipped    = std::move(result.skipped);
+            state->running    = false;
+            state->ready      = gen;
         }
-        if (wxTheApp)
-            wxTheApp->CallAfter([]() {
-                if (Plater *plater = wxGetApp().plater())
-                    if (GLCanvas3D *canvas = plater->get_current_canvas3D()) {
-                        canvas->set_as_dirty();
-                        canvas->request_extra_frame();
-                    }
-            });
+        curve_request_redraw();
     }).detach();
 }
 
@@ -710,11 +1212,10 @@ void GLGizmoAdvancedCut::curve_update_pieces()
         std::lock_guard<std::mutex> lock(m_curve_preview->mutex);
         if (m_curve_preview->ready != m_curve_generation)
             return;
-        if (m_curve_preview->failed) {
-            m_curve_preview_shown = m_curve_generation;
-            m_curve_pieces.clear(); // nothing to show or cut
-            return;
-        }
+        m_curve_preview_shown  = m_curve_generation;
+        m_curve_preview_failed = m_curve_preview->failed;
+        if (m_curve_preview->failed)
+            return; // keep showing the last good preview; the panel says what went wrong
         pieces = m_curve_preview->pieces; // copy: the shared state stays valid for later reads
     }
     m_curve_pieces.clear();
@@ -722,13 +1223,13 @@ void GLGizmoAdvancedCut::curve_update_pieces()
         auto piece    = std::make_shared<CurvePiece>();
         piece->volume = p.volume;
         piece->in_a   = p.in_a;
+        piece->orig_a = p.in_a;
         piece->model  = std::make_shared<GLModel>();
         piece->model->init_from(p.its);
         piece->mesh      = std::make_shared<TriangleMesh>(std::move(p.its));
         piece->raycaster = std::make_shared<MeshRaycaster>(*piece->mesh);
         m_curve_pieces.push_back(std::move(piece));
     }
-    m_curve_preview_shown = m_curve_generation;
 }
 
 int GLGizmoAdvancedCut::curve_pick_piece(const Vec2d &mouse_pos) const
@@ -1117,7 +1618,20 @@ bool GLGizmoAdvancedCut::shape_gizmo_event(SLAGizmoEventType action, const Vec2d
 
 void GLGizmoAdvancedCut::curve_on_mouse(const wxMouseEvent &mouse_event)
 {
-    if (!m_curve_mode || m_shape_mode || m_connectors_editing || m_state != On)
+    if (!m_curve_mode || m_connectors_editing || m_state != On)
+        return;
+    if (m_conn_editing) {
+        // ghost connector where a click would place one
+        double t = 0.0, z = 0.0;
+        if (mouse_event.Moving() && !m_conn_dragging && curve_pick_wall(Vec2d(mouse_event.GetX(), mouse_event.GetY()), t, z))
+            m_conn_hover = std::make_pair(t, z);
+        else if (mouse_event.Moving() || mouse_event.Leaving())
+            m_conn_hover.reset();
+        if (mouse_event.Moving() || mouse_event.Leaving())
+            m_parent.request_extra_frame();
+        return;
+    }
+    if (m_shape_mode)
         return;
     if (mouse_event.Moving()) {
         Vec2d local;
@@ -1204,40 +1718,61 @@ void GLGizmoAdvancedCut::render_curve()
                     }
         }
     }
-    // connectors as 3D shapes (selected one highlighted); separate pieces in their own colour
-    if (!m_curve_conns.empty()) {
-        CurveCutters shapes;
+    // connectors as 3D shapes: selected green, separate pieces yellow, ones that could not be added red,
+    // plus a see-through ghost where a click would place a new one
+    const bool ghost = m_conn_editing && m_conn_hover && !m_conn_dragging;
+    if (!m_curve_conns.empty() || ghost) {
+        std::vector<int> skipped;
+        if (m_curve_preview) {
+            std::lock_guard<std::mutex> lock(m_curve_preview->mutex);
+            skipped = m_curve_preview->skipped;
+        }
         const OutlineSampler sampler(curve_outline(false), m_shape_mode);
         if (sampler.valid()) {
             const BoundingBoxf3 tbb  = transformed_bounding_box(m_plane_center, m_rotate_matrix);
             const double        z_lo = tbb.defined ? tbb.min.z() : -m_radius, z_hi = tbb.defined ? tbb.max.z() : m_radius;
-            for (size_t i = 0; i < m_curve_conns.size(); ++i) {
-                const CurveConnector  &conn = m_curve_conns[i];
-                const CurveConnParams &c    = conn.params;
+            auto draw = [&](double t, double z_in, const CurveConnParams &c, const ColorRGBA &color) {
                 ConnFrame f;
-                sampler.at(conn.t, f.p, f.tangent);
+                sampler.at(t, f.p, f.tangent);
                 f.dir = Vec2d(f.tangent.y(), -f.tangent.x());
                 if (c.on_part_b && !c.separate())
                     f.dir = -f.dir;
-                const double z = std::clamp(conn.z, z_lo, z_hi);
-                indexed_triangle_set its;
-                switch (c.type) {
-                case ConnType::Dovetail: {
-                    const double run = c.closed_end ? (z_hi - z_lo) * std::clamp(c.length, 5.0, 100.0) / 100.0 : (z_hi - z_lo);
-                    its = c.closed_end && c.reverse ? dovetail_solid(f, z_lo, z_lo + run, c, 0.0) : dovetail_solid(f, z_hi - run, z_hi, c, 0.0);
-                    break;
-                }
-                case ConnType::Pin: its = pin_solid(f, z, c, 0.0); break;
-                case ConnType::Snap: its = snap_solid(f, z, c, 0.0); break;
-                case ConnType::Dowel: its = dowel_solid(f, z, c, 0.0); break;
-                case ConnType::Bowtie: its = extrude_shapes(union_ex(Polygons{bowtie_profile(f, c, 0.0)}), z_lo, z_hi); break;
-                }
+                indexed_triangle_set its = conn_display_solid(f, std::clamp(z_in, z_lo, z_hi), c, z_lo, z_hi);
+                if (its.indices.empty())
+                    return;
                 its_transform(its, plane, true);
                 GLModel model;
                 model.init_from(its);
-                const ColorRGBA color = int(i) == m_conn_selected ? ColorRGBA::GREEN() : c.separate() ? ColorRGBA::YELLOW() : ColorRGBA::ORANGE();
-                glsafe(::glEnable(GL_DEPTH_TEST));
                 render_glmodel(model, color.get_data(), camera.get_view_matrix(), camera.get_projection_matrix());
+            };
+            glsafe(::glEnable(GL_DEPTH_TEST));
+            const double pick_tol = std::max(1.5, m_radius * 0.06);
+            bool         near_one = false;
+            for (size_t i = 0; i < m_curve_conns.size(); ++i) {
+                const CurveConnector &conn = m_curve_conns[i];
+                const bool failed = std::find(skipped.begin(), skipped.end(), int(i)) != skipped.end();
+                const ColorRGBA color = int(i) == m_conn_selected ? ColorRGBA::GREEN() :
+                                        failed                    ? ColorRGBA::RED() :
+                                        conn.params.separate()    ? ColorRGBA::YELLOW() :
+                                                                    ColorRGBA::ORANGE();
+                draw(conn.t, conn.z, conn.params, color);
+                if (ghost) {
+                    Vec2d p, q, tg;
+                    sampler.at(conn.t, p, tg);
+                    sampler.at(m_conn_hover->first, q, tg);
+                    near_one |= Vec3d(p.x() - q.x(), p.y() - q.y(), conn.z - m_conn_hover->second).norm() < pick_tol;
+                }
+            }
+            if (ghost && !near_one) {
+                // the settings a click would use
+                ColorRGBA color = m_conn.separate() ? ColorRGBA::YELLOW() : ColorRGBA::ORANGE();
+                color.a(0.45f);
+                glsafe(::glEnable(GL_BLEND));
+                glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+                glsafe(::glDepthMask(GL_FALSE));
+                draw(m_conn_hover->first, m_conn_hover->second, m_conn, color);
+                glsafe(::glDepthMask(GL_TRUE));
+                glsafe(::glDisable(GL_BLEND));
             }
         }
     }
@@ -1349,16 +1884,92 @@ void GLGizmoAdvancedCut::render_curve_panel()
     render_curve_connectors_panel();
 
     const bool has_geometry = m_shape_mode ? m_curve_shape.valid() : m_curve_anchors.size() >= 2;
+    bool       show_repair  = false;
     if (has_geometry && m_curve_drag_idx < 0 && m_curve_bend_span < 0 && m_shape_drag == 0) {
-        bool failed = false, ready = false;
+        bool             failed = false, ready = false, running = false, simplified = false;
+        std::string      stage, error;
+        std::vector<int> skipped;
+        double           seconds = 0.0;
         if (m_curve_preview) {
             std::lock_guard<std::mutex> lock(m_curve_preview->mutex);
-            ready  = m_curve_preview->ready == m_curve_generation;
-            failed = ready && m_curve_preview->failed;
+            ready      = m_curve_preview->ready == m_curve_generation;
+            failed     = ready && m_curve_preview->failed;
+            simplified = ready && m_curve_preview->simplified;
+            running    = m_curve_preview->running;
+            stage      = m_curve_preview->stage;
+            error      = m_curve_preview->error;
+            skipped    = ready ? m_curve_preview->skipped : std::vector<int>();
+            seconds    = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_curve_preview->started).count();
         }
-        m_imgui->text(failed ? _L("Preview failed: the model may need repairing.") :
-                      ready  ? (m_curve_pieces.empty() ? _L("The outline does not cross the model.") : _L("Preview: part A cyan, part B magenta.")) :
-                      m_curve_pieces.empty() ? _L("Calculating preview...") : _L("Updating preview..."));
+        if (running) {
+            // what is being calculated and for how long, so a big model does not look stuck
+            m_imgui->text(from_u8(stage) + wxString::Format(" (%d s)", int(seconds)));
+            if (!m_curve_pieces.empty())
+                m_imgui->text(_L("The last preview stays visible meanwhile."));
+            m_parent.schedule_extra_frame(500);
+        } else if (!error.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.35f, 1.0f));
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + m_imgui->scaled(22.f));
+            m_imgui->text(from_u8(error));
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
+            if (failed) {
+                m_imgui->text(_L("\"Perform cut\" still tries the cut on the full model."));
+                show_repair = true;
+            }
+        } else if (ready) {
+            m_imgui->text(m_curve_pieces.empty() ? _L("The outline does not cross the model.") : _L("Preview: part A cyan, part B magenta."));
+            if (simplified)
+                m_imgui->text(_L("Preview on a simplified copy; the cut uses the full model."));
+        }
+        if (!skipped.empty()) {
+            wxString list;
+            for (int i : skipped)
+                list += (list.empty() ? "" : ", ") + wxString::Format("%d", i + 1);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.35f, 1.0f));
+            m_imgui->text(wxString::Format(_L("Connector %s could not be added here (shown red): move it or make it smaller."), list));
+            ImGui::PopStyleColor();
+        }
+    }
+
+    // model problems the cut may trip over, with an in-place repair
+    {
+        const Selection &selection  = m_parent.get_selection();
+        const int        object_idx = selection.get_object_idx();
+        const Model     *model      = selection.get_model();
+        if (model != nullptr && object_idx >= 0 && object_idx < int(model->objects.size())) {
+            const TriangleMeshStats stats = model->objects[object_idx]->get_object_stl_stats();
+            if (stats.has_any_issue()) {
+                wxString issues;
+                if (stats.open_edges > 0)
+                    issues += wxString::Format(_L("%d open edges"), stats.open_edges);
+                if (stats.non_manifold_edges > 0)
+                    issues += (issues.empty() ? "" : ", ") + wxString::Format(_L("%d non-manifold edges"), stats.non_manifold_edges);
+                if (stats.has_reversed_faces)
+                    issues += (issues.empty() ? "" : ", ") + _L("reversed faces");
+                m_imgui->text(_L("Model problems") + ": " + issues);
+                show_repair = true;
+            }
+        }
+        if (!m_curve_repair_msg.empty())
+            m_imgui->text(from_u8(m_curve_repair_msg));
+        if (show_repair) {
+            if (m_imgui->button(_L("Repair model")) && !m_curve_repair_requested) {
+                // runs from the event loop: it shows a progress dialog, which cannot be done while rendering
+                m_curve_repair_requested = true;
+                wxGetApp().plater()->CallAfter([this]() {
+                    m_curve_repair_requested = false;
+                    if (m_state == On && m_curve_mode)
+                        curve_repair_model();
+                });
+            }
+            if (ImGui::IsItemHovered())
+                m_imgui->tooltip(is_win10_model_repair_available() ?
+                                     _L("Merges loose vertices, removes broken and duplicate faces and turns reversed faces around. Open and non-manifold "
+                                        "edges are closed by the Windows repair service (like \"Fix model\"). Undo with Ctrl+Z.") :
+                                     _L("Merges loose vertices, removes broken and duplicate faces and turns reversed faces around. Undo with Ctrl+Z."),
+                                 m_imgui->scaled(20.f));
+        }
     }
     ImGui::Separator();
     m_imgui->text(_L("After cut") + ": ");
@@ -1395,6 +2006,24 @@ void GLGizmoAdvancedCut::render_curve_connectors_panel()
         m_conn_show_b = true;
     ImGui::Separator();
 
+    // every connector, with whether it is part of A, part of B or a separate piece; click to select
+    if (!m_curve_conns.empty()) {
+        const char *type_names[] = {"Dovetail", "Pin", "Snap-fit", "Dowel", "Bowtie key"};
+        for (int i = 0; i < int(m_curve_conns.size()); ++i) {
+            const CurveConnParams &p     = m_curve_conns[i].params;
+            const int              t     = std::clamp(int(p.type), 0, 4);
+            const std::string      owner = p.separate() ? _u8L("separate piece") : p.on_part_b ? _u8L("on part B") : _u8L("on part A");
+            const std::string      label = std::to_string(i + 1) + ". " + _u8L(type_names[t]) + " - " + owner + "##curve_conn" + std::to_string(i);
+            ImGui::PushStyleColor(ImGuiCol_Text, p.separate() ? ImVec4(1.0f, 0.85f, 0.2f, 1.0f) : ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+            if (ImGui::Selectable(label.c_str(), i == m_conn_selected)) {
+                m_conn_selected = i;
+                m_conn          = p;
+            }
+            ImGui::PopStyleColor();
+        }
+        ImGui::Separator();
+    }
+
     // the settings of the selected connector, or the ones new connectors get
     const bool       has_sel = m_conn_selected >= 0 && m_conn_selected < int(m_curve_conns.size());
     CurveConnParams &c       = has_sel ? m_curve_conns[m_conn_selected].params : m_conn;
@@ -1422,6 +2051,18 @@ void GLGizmoAdvancedCut::render_curve_connectors_panel()
             std::abs(v - value) > EPSILON) {
             value   = double(v);
             changed = true;
+        }
+        ImGui::PopItemWidth();
+        // the exact value can be typed in too
+        ImGui::SameLine();
+        ImGui::PushItemWidth(m_imgui->scaled(3.5f));
+        float typed = float(value);
+        if (ImGui::BBLDragFloat(("##conn_in_" + label.ToStdString()).c_str(), &typed, 0.05f, 0.0f, 0.0f, fmt)) {
+            typed = std::clamp(typed, float(min_value), float(max_value));
+            if (std::abs(typed - value) > EPSILON) {
+                value   = double(typed);
+                changed = true;
+            }
         }
         ImGui::PopItemWidth();
     };
@@ -1454,6 +2095,13 @@ void GLGizmoAdvancedCut::render_curve_connectors_panel()
         break;
     }
     edit(_L("Clearance") + " (mm)", c.tolerance, 0.0, 1.0, "%.2f");
+    if (c.type == ConnType::Dovetail || c.type == ConnType::Pin || c.type == ConnType::Snap) {
+        // a loose piece printed on its own, with a matching hole in both parts
+        changed |= m_imgui->bbl_checkbox(_L("Separate piece (holes in both parts)"), c.loose);
+        if (ImGui::IsItemHovered())
+            m_imgui->tooltip(_L("Dovetail: a double dovetail key. Pin: a loose pin. Snap-fit: a clip with a barb on each side. Shown in yellow."),
+                             m_imgui->scaled(20.f));
+    }
     if (!c.separate())
         changed |= m_imgui->bbl_checkbox(_L("On part B"), c.on_part_b);
     if (c.type == ConnType::Snap || (c.type == ConnType::Dovetail && c.closed_end)) {
@@ -1496,19 +2144,69 @@ void GLGizmoAdvancedCut::render_curve_connectors_panel()
 
 bool GLGizmoAdvancedCut::can_perform_curve_cut() const
 {
-    if (!(m_keep_upper || m_keep_lower) || m_curve_drag_idx >= 0 || m_curve_bend_span >= 0 || m_shape_drag != 0)
+    if (!(m_keep_upper || m_keep_lower) || m_curve_drag_idx >= 0 || m_curve_bend_span >= 0 || m_shape_drag != 0 || m_conn_dragging)
         return false;
-    // the cut uses exactly the previewed pieces, so both sides must exist
-    if (!curve_preview_ready())
+    const bool has_geometry = m_shape_mode ? m_curve_shape.valid() : m_curve_anchors.size() >= 2;
+    if (!has_geometry)
         return false;
-    bool any_a = false, any_b = false;
-    for (const auto &piece : m_curve_pieces)
-        (piece->in_a ? any_a : any_b) = true;
-    return any_a && any_b;
+    // A finished preview tells whether the outline splits the model. While it is still running, or when
+    // it failed, the cut is calculated on the full model and reports its own problems.
+    if (curve_preview_ready()) {
+        bool any_a = false, any_b = false;
+        for (const auto &piece : m_curve_pieces)
+            (piece->in_a ? any_a : any_b) = true;
+        return any_a && any_b;
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Cut
+
+namespace {
+// State shared between a modal job on a worker thread and the progress dialog waiting for it.
+struct CurveModalJob
+{
+    std::atomic<bool> done{false};
+    std::atomic<bool> cancel{false};
+    std::mutex        mutex;
+    std::string       stage;
+};
+
+// Shows a progress dialog until the job is done. Returns false when the user cancelled.
+bool curve_wait_modal(const std::shared_ptr<CurveModalJob> &job, const wxString &title)
+{
+    ProgressDialog dlg(title, _L("Starting..."), 100, wxGetApp().mainframe, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE);
+    const auto     started = std::chrono::steady_clock::now();
+    while (!job->done) {
+        wxString msg;
+        {
+            std::lock_guard<std::mutex> lock(job->mutex);
+            msg = from_u8(job->stage);
+        }
+        msg += wxString::Format(" (%d s)", int(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count()));
+        if (!dlg.Pulse(msg)) {
+            job->cancel = true; // the worker stops at its next check and cleans up on its own
+            return false;
+        }
+        wxMilliSleep(100);
+    }
+    dlg.Update(100);
+    return true;
+}
+
+double bbox_overlap(const BoundingBoxf3 &a, const BoundingBoxf3 &b)
+{
+    if (!a.defined || !b.defined)
+        return 0.0;
+    const Vec3d lo = a.min.cwiseMax(b.min), hi = a.max.cwiseMin(b.max);
+    if ((hi - lo).minCoeff() <= 0.0)
+        return 0.0;
+    const double inter = (hi - lo).prod();
+    const double va = a.size().prod(), vb = b.size().prod();
+    return inter / std::max(va + vb - inter, EPSILON);
+}
+} // namespace
 
 void GLGizmoAdvancedCut::perform_curve_cut(const Selection &selection)
 {
@@ -1527,16 +2225,107 @@ void GLGizmoAdvancedCut::perform_curve_cut(const Selection &selection)
         !wxGetApp().confirm_mesh_paint_warning())
         return;
 
-    // Results per side and volume, from the previewed pieces (world -> volume coordinates)
+    CurveCutters cutters;
+    if (!curve_build_cutters(cutters)) {
+        MessageDialog(wxGetApp().mainframe, cutters.error.empty() ? _L("The outline cannot be used for a cut.") : from_u8(cutters.error),
+                      _L("Cut"), wxOK | wxICON_WARNING)
+            .ShowModal();
+        return;
+    }
+
+    // The pieces to cut with: the preview when it was made on the full model, else a full-resolution run.
+    // Either way the pieces keep the side the user gave them in the preview.
+    std::vector<CurvePreview::Piece> pieces;
+    std::vector<int>                 skipped;
+    bool                             use_preview = false;
+    if (m_curve_preview && curve_preview_ready()) {
+        std::lock_guard<std::mutex> lock(m_curve_preview->mutex);
+        use_preview = !m_curve_preview->failed && !m_curve_preview->simplified;
+        skipped     = m_curve_preview->skipped;
+    }
+    if (use_preview) {
+        for (const auto &piece : m_curve_pieces)
+            pieces.push_back({piece->volume, piece->in_a, piece->mesh->its});
+    } else {
+        std::vector<CurvePart> parts = curve_collect_parts(mo, instance_idx);
+        auto                   job   = std::make_shared<CurveModalJob>();
+        auto                   res   = std::make_shared<CurveJobResult>();
+        auto                   own   = std::make_shared<CurveCutters>(cutters); // the keys below still need 'cutters'
+        std::thread([job, res, own, parts = std::move(parts)]() {
+            try {
+                run_curve_job(
+                    *own, parts, nullptr, [&job]() { return job->cancel.load(); },
+                    [&job](const std::string &text) {
+                        std::lock_guard<std::mutex> lock(job->mutex);
+                        job->stage = text;
+                    },
+                    *res);
+            } catch (const std::exception &e) {
+                BOOST_LOG_TRIVIAL(error) << "Curve cut failed: " << e.what();
+                res->ok = false;
+            }
+            job->done = true;
+        }).detach();
+        if (!curve_wait_modal(job, _L("Cutting")) || job->cancel)
+            return;
+        // the dialog pumped events: make sure nothing changed under us
+        if (m_state != On || object_idx >= int(plater->model().objects.size()) || plater->model().objects[object_idx] != mo)
+            return;
+
+        bool any_a = false, any_b = false;
+        for (const CurvePreview::Piece &p : res->pieces)
+            (p.in_a ? any_a : any_b) = true;
+        if (!res->ok || !any_a || !any_b) {
+            const wxString reason = !res->ok ? (res->error.empty() ? _L("The cut could not be calculated.") : from_u8(res->error)) :
+                                               _L("The outline does not split the model into two parts.");
+            if (curve_preview_visible() && !m_curve_preview_failed) {
+                // the (simplified) preview worked: offer it rather than nothing
+                MessageDialog dlg(wxGetApp().mainframe,
+                                  reason + "\n\n" + _L("Cut using the preview instead? It was calculated on a simplified copy, so fine detail is lost."),
+                                  _L("Cut"), wxYES_NO | wxICON_WARNING);
+                if (dlg.ShowModal() != wxID_YES)
+                    return;
+                for (const auto &piece : m_curve_pieces)
+                    pieces.push_back({piece->volume, piece->in_a, piece->mesh->its});
+            } else {
+                MessageDialog(wxGetApp().mainframe, reason, _L("Cut"), wxOK | wxICON_WARNING).ShowModal();
+                return;
+            }
+        } else {
+            pieces  = std::move(res->pieces);
+            skipped = res->skipped;
+            // keep the sides chosen on the preview: match every piece to the preview piece it overlaps most
+            std::vector<BoundingBoxf3> preview_boxes;
+            for (const auto &piece : m_curve_pieces)
+                preview_boxes.push_back(piece->mesh->bounding_box());
+            for (CurvePreview::Piece &p : pieces) {
+                BoundingBoxf3 box;
+                for (const Vec3f &v : p.its.vertices)
+                    box.merge(v.cast<double>());
+                const bool computed_a = p.in_a;
+                double     best       = 0.3; // too little overlap: keep the computed side
+                for (size_t i = 0; i < m_curve_pieces.size(); ++i)
+                    if (m_curve_pieces[i]->volume == p.volume && m_curve_pieces[i]->orig_a == computed_a) {
+                        const double o = bbox_overlap(box, preview_boxes[i]);
+                        if (o > best) {
+                            best   = o;
+                            p.in_a = m_curve_pieces[i]->in_a;
+                        }
+                    }
+            }
+        }
+    }
+
+    // Results per side and volume (world -> volume coordinates)
     const Transform3d inst_trafo = mo->instances[instance_idx]->get_matrix();
     auto collect = [&](bool side_a) {
         std::vector<std::optional<indexed_triangle_set>> meshes(mo->volumes.size());
         for (size_t v = 0; v < mo->volumes.size(); ++v)
             if (mo->volumes[v]->is_model_part())
                 meshes[v] = indexed_triangle_set();
-        for (const auto &piece : m_curve_pieces)
-            if (piece->in_a == side_a && piece->volume < meshes.size() && meshes[piece->volume])
-                its_merge(*meshes[piece->volume], piece->mesh->its);
+        for (const CurvePreview::Piece &piece : pieces)
+            if (piece.in_a == side_a && piece.volume < meshes.size() && meshes[piece.volume])
+                its_merge(*meshes[piece.volume], piece.its);
         for (size_t v = 0; v < meshes.size(); ++v)
             if (meshes[v] && !meshes[v]->indices.empty())
                 its_transform(*meshes[v], (inst_trafo * mo->volumes[v]->get_matrix()).inverse(), true);
@@ -1581,25 +2370,140 @@ void GLGizmoAdvancedCut::perform_curve_cut(const Selection &selection)
     if (results.empty())
         return;
 
-    // separate connector pieces (dowels, bowtie keys) become their own objects, where they belong
-    CurveCutters cutters;
-    if (curve_build_cutters(cutters))
-        for (size_t i = 0; i < cutters.keys.size(); ++i) {
-            TriangleMesh key    = std::move(cutters.keys[i]);
-            const Vec3d  center = key.bounding_box().center();
-            key.translate(-center.cast<float>());
-            ModelObject *obj = scratch.add_object();
-            obj->name        = mo->name + " - " + _u8L("connector") + " " + std::to_string(i + 1);
-            obj->add_volume(std::move(key));
-            obj->add_instance()->set_offset(center);
-            obj->invalidate_bounding_box();
-            results.push_back(obj);
-        }
+    // separate connector pieces become their own objects, where they belong; ones whose holes could not
+    // be made are left out
+    for (CurveCutters::Key &k : cutters.keys) {
+        if (std::find(skipped.begin(), skipped.end(), k.conn) != skipped.end())
+            continue;
+        TriangleMesh key    = std::move(k.mesh);
+        const Vec3d  center = key.bounding_box().center();
+        key.translate(-center.cast<float>());
+        ModelObject *obj = scratch.add_object();
+        obj->name        = mo->name + " - " + _u8L("connector") + " " + std::to_string(k.conn + 1);
+        obj->add_volume(std::move(key));
+        obj->add_instance()->set_offset(center);
+        obj->invalidate_bounding_box();
+        results.push_back(obj);
+    }
 
     m_parent.reset_all_gizmos();
     Plater::TakeSnapshot snapshot(plater, m_shape_mode ? "Cut by shape" : "Cut by curve");
     plater->apply_cut_object_to_model(size_t(object_idx), results);
     curve_reset();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Repair
+
+void GLGizmoAdvancedCut::curve_repair_model()
+{
+    const Selection &selection  = m_parent.get_selection();
+    const int        object_idx = selection.get_object_idx();
+    Plater          *plater     = wxGetApp().plater();
+    if (object_idx < 0 || object_idx >= int(plater->model().objects.size()))
+        return;
+    ModelObject *mo = plater->model().objects[object_idx];
+
+    // repaired copies are made on a worker thread; the meshes are shared read-only
+    struct Repaired
+    {
+        size_t                              volume{0};
+        std::shared_ptr<const TriangleMesh> src;
+        indexed_triangle_set                its;
+        RepairCounts                        counts;
+        bool                                win10{false}; // also went through the Windows repair service
+    };
+    std::vector<std::pair<size_t, std::shared_ptr<const TriangleMesh>>> sources;
+    for (size_t v = 0; v < mo->volumes.size(); ++v)
+        if (mo->volumes[v]->is_model_part())
+            sources.emplace_back(v, mo->volumes[v]->get_mesh_shared_ptr());
+    // Open and non-manifold edges need the Windows repair service (the same one as "Fix model"); the quick
+    // repair below only turns faces and removes broken ones.
+    const TriangleMeshStats before    = mo->get_object_stl_stats();
+    const bool              use_win10 = (before.open_edges > 0 || !before.manifold()) && is_win10_model_repair_available();
+    auto job = std::make_shared<CurveModalJob>();
+    auto out = std::make_shared<std::vector<Repaired>>();
+    std::thread([job, out, sources, use_win10]() {
+        try {
+            for (size_t i = 0; i < sources.size() && !job->cancel; ++i) {
+                {
+                    std::lock_guard<std::mutex> lock(job->mutex);
+                    job->stage = sources.size() > 1 ? (boost::format(_u8L("Repairing part %1% of %2%...")) % (i + 1) % sources.size()).str() :
+                                                      _u8L("Repairing the model...");
+                }
+                Repaired r;
+                r.volume = sources[i].first;
+                r.src    = sources[i].second;
+                r.its    = sources[i].second->its;
+                r.counts = repair_its(r.its);
+                if (use_win10 && !job->cancel) {
+                    const std::string part = sources.size() > 1 ? (boost::format(_u8L("Part %1% of %2%: ")) % (i + 1) % sources.size()).str() : std::string();
+                    indexed_triangle_set fixed;
+                    std::string          error;
+                    const bool ok = fix_mesh_by_win10_sdk(
+                        r.its, fixed,
+                        [job, part](const char *message, unsigned progress) {
+                            std::lock_guard<std::mutex> lock(job->mutex);
+                            job->stage = part + _u8L("Windows repair service") + ": " + (message ? message : "") + " (" + std::to_string(progress) + "%)";
+                        },
+                        [job]() { return job->cancel.load(); }, &error);
+                    if (ok && !fixed.indices.empty()) {
+                        r.its   = std::move(fixed);
+                        r.win10 = true;
+                    } else
+                        BOOST_LOG_TRIVIAL(warning) << "Curve cut: Windows repair service failed: " << error;
+                }
+                out->push_back(std::move(r));
+            }
+        } catch (const std::exception &e) {
+            BOOST_LOG_TRIVIAL(error) << "Curve cut: repair failed: " << e.what();
+            out->clear();
+        }
+        job->done = true;
+    }).detach();
+    if (!curve_wait_modal(job, _L("Repair model")) || job->cancel)
+        return;
+    if (m_state != On || object_idx >= int(plater->model().objects.size()) || plater->model().objects[object_idx] != mo || out->empty())
+        return;
+
+    RepairCounts total;
+    bool         win10 = false;
+    {
+        Plater::TakeSnapshot snapshot(plater, "Repair model");
+        for (Repaired &r : *out) {
+            if (r.volume >= mo->volumes.size() || mo->volumes[r.volume]->get_mesh_shared_ptr() != r.src || r.its.indices.empty())
+                continue; // changed meanwhile
+            total.removed += r.counts.removed;
+            total.flipped += r.counts.flipped;
+            win10 |= r.win10;
+            ModelVolume *vol = mo->volumes[r.volume];
+            vol->set_mesh_keep_paint(TriangleMesh(std::move(r.its))); // painting is carried over approximately
+            vol->calculate_convex_hull();
+        }
+        mo->invalidate_bounding_box();
+    }
+    plater->changed_mesh(object_idx);
+    if (ObjectList *list = wxGetApp().obj_list()) {
+        list->update_item_error_icon(object_idx, -1);
+        list->update_info_items(size_t(object_idx));
+    }
+    update_bb();
+
+    const TriangleMeshStats stats = mo->get_object_stl_stats();
+    std::string             msg   = (boost::format(_u8L("Repaired: %1% faces removed, %2% faces turned.")) % total.removed % total.flipped).str();
+    if (win10)
+        msg += " " + _u8L("Open and non-manifold edges were fixed by the Windows repair service.");
+    else if (use_win10)
+        msg += " " + _u8L("The Windows repair service failed; try \"Fix model\" from the object's right-click menu after closing the Cut tool.");
+    if (stats.has_any_issue())
+        msg += " " + (boost::format(_u8L("Still %1% open and %2% non-manifold edges: the cut may still fail there.")) % stats.open_edges %
+                      stats.non_manifold_edges)
+                         .str();
+    else
+        msg += " " + _u8L("No problems left.");
+    m_curve_repair_msg = msg;
+    curve_changed();
+    m_parent.set_as_dirty();
 }
 
 } // namespace GUI
