@@ -429,7 +429,7 @@ void GLCanvas3D::LayersEditing::render_variable_layer_height_dialog(const GLCanv
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(238 / 255.0f, 238 / 255.0f, 238 / 255.0f, 0.00f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(238 / 255.0f, 238 / 255.0f, 238 / 255.0f, 0.00f));
     ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.81f, 0.81f, 0.81f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
     if(ImGui::BBLSliderScalar("##radius_slider", ImGuiDataType_S32, &radius, &v_min, &v_max)){
         radius = std::clamp(radius, 1, 10);
         m_smooth_params.radius = (unsigned int)radius;
@@ -440,9 +440,9 @@ void GLCanvas3D::LayersEditing::render_variable_layer_height_dialog(const GLCanv
     input_align = std::max(input_align, ImGui::GetCursorPosX());
     ImGui::SetCursorPosX(input_align);
     ImGui::PushItemWidth(input_box_width);
-    ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.00f, 0.68f, 0.26f, 0.00f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.00f, 0.68f, 0.26f, 0.00f));
+    ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.118f, 0.431f, 0.941f, 0.00f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.118f, 0.431f, 0.941f, 0.00f));
     if (ImGui::BBLDragScalar("##radius_input", ImGuiDataType_S32, &radius, 1, &v_min, &v_max)) {
         radius = std::clamp(radius, 1, 10);
         m_smooth_params.radius = (unsigned int)radius;
@@ -9759,12 +9759,12 @@ void GLCanvas3D::_render_imgui_select_plate_toolbar()
         ImTextureID btn_texture_id;
         if (all_plates_stats_item->slice_state == IMToolbarItem::SliceState::UNSLICED || all_plates_stats_item->slice_state == IMToolbarItem::SliceState::SLICING || all_plates_stats_item->slice_state == IMToolbarItem::SliceState::SLICE_FAILED)
         {
-            text_clr = ImVec4(0, 174.0f / 255.0f, 66.0f / 255.0f, 0.2f);
+            text_clr = ImVec4(30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 0.2f);
             btn_texture_id = (ImTextureID)(intptr_t)(all_plates_stats_item->image_texture_transparent.get_id());
         }
         else
         {
-            text_clr = ImVec4(0, 174.0f / 255.0f, 66.0f / 255.0f, 1);
+            text_clr = ImVec4(30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1);
             btn_texture_id = (ImTextureID)(intptr_t)(all_plates_stats_item->image_texture.get_id());
         }
         imgui.disabled_begin(wxGetApp().plater()->get_helio_process_status() == Slic3r::HelioBackgroundProcess::State::STATE_RUNNING);

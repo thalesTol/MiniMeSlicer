@@ -201,7 +201,7 @@ export function XYControl() {
 //         <text x={P(midInnerSW, (R_INNER_IN + R_INNER_OUT) / 2).x + 7} y={P(midInnerSW, (R_INNER_IN + R_INNER_OUT) / 2).y + 7} textAnchor="middle" fontSize={12.5} fill={textGrey} transform={`rotate(45 ${P(midInnerSW, (R_INNER_IN + R_INNER_OUT) / 2).x + 7} ${P(midInnerSW, (R_INNER_IN + R_INNER_OUT) / 2).y + 7})`}>−1</text>
 //         <text x={P(midOuterSW, (R_OUTER_IN + R_OUTER_OUT) / 2).x + 7} y={P(midOuterSW, (R_OUTER_IN + R_OUTER_OUT) / 2).y + 7} textAnchor="middle" fontSize={12.5} fill={textGrey} transform={`rotate(45 ${P(midOuterSW, (R_OUTER_IN + R_OUTER_OUT) / 2).x + 7} ${P(midOuterSW, (R_OUTER_IN + R_OUTER_OUT) / 2).y + 7})`}>−10</text>
 //         <g transform={`translate(${C}, ${C})`}>
-//           <path d="M -7 2 L 0 -5 L 7 2 V 9 H 2.2 V 5.2 h-4.4 V 9 H -7 Z" fill="#00AE42" />
+//           <path d="M -7 2 L 0 -5 L 7 2 V 9 H 2.2 V 5.2 h-4.4 V 9 H -7 Z" fill="#1E6EF0" />
 //         </g>
 //       </svg>
 //       <button

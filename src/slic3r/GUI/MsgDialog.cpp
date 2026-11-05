@@ -152,13 +152,13 @@ Button* MsgDialog::add_button(wxWindowID btn_id, bool set_focus /*= false*/, con
 
     btn->SetCornerRadius(FromDIP(12));
     StateColor btn_bg_green(
-        std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal)
+        std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal)
     );
 
     StateColor btn_bd_green(
-        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal)
+        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal)
     );
 
     StateColor btn_text_green(
@@ -355,7 +355,7 @@ static void add_msg_content(wxWindow   *parent,
         msg_escaped = std::string("<pre><code>") + msg_escaped + "</code></pre>";
 
     if (!link_text.IsEmpty() && link_callback) {
-        msg_escaped += "<span><a href=\"#\" style=\"color:rgb(8, 153, 46); text-decoration:underline;\">" + std::string(link_text.ToUTF8().data()) + "</a></span>";
+        msg_escaped += "<span><a href=\"#\" style=\"color:rgb(30, 110, 240); text-decoration:underline;\">" + std::string(link_text.ToUTF8().data()) + "</a></span>";
     }
 
     html->SetPage("<html><body bgcolor=\"" + bgr_clr_str + "\"><font color=\"" + text_clr_str + "\">" + wxString::FromUTF8(msg_escaped.data()) + "</font></body></html>");
@@ -727,8 +727,8 @@ wxBoxSizer *Newer3mfVersionDialog::get_btn_sizer()
 {
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
     horizontal_sizer->Add(0, 0, 1, wxEXPAND, 0);
-    StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed), std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-                            std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+    StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed), std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+                            std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
     StateColor btn_bg_white(std::pair<wxColour, int>(wxColour(206, 206, 206), StateColor::Pressed), std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Hovered),
                             std::pair<wxColour, int>(*wxWHITE, StateColor::Normal));
     bool       file_version_newer = (*m_file_version) > (*m_cloud_version);
@@ -845,8 +845,8 @@ NetworkErrorDialog::NetworkErrorDialog(wxWindow* parent)
         e.Skip();
     });
 
-    auto bt_enable = StateColor(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed), std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+    auto bt_enable = StateColor(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed), std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
 
     m_button_confirm = new Button(this, _L("Confirm"));
     m_button_confirm->SetBackgroundColor(bt_enable);
@@ -908,7 +908,7 @@ void FilamentWarningDialog::BuildContent()
             messages_sizer->Add(text, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(5));
         } else {
             Label *link = new Label(this, message + " " + _L("Please refer to Wiki before use->"));
-            link->SetForegroundColour(wxColour(8, 153, 46));
+            link->SetForegroundColour(wxColour(30, 110, 240));
             link->SetFont(::Label::Body_12);
             link->Wrap(FromDIP(400));
             link->Bind(wxEVT_ENTER_WINDOW, [this](auto &e) { SetCursor(wxCURSOR_HAND); });

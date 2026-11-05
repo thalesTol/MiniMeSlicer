@@ -21,7 +21,7 @@ namespace GUI {
 
 namespace {
 
-const wxColour COLOR_BRAND("#00AE42");
+const wxColour COLOR_BRAND("#1E6EF0");
 const wxColour COLOR_BG_CARD("#F8F8F8");
 const wxColour COLOR_BORDER("#EEEEEE");
 const wxColour COLOR_TEXT_DARK("#262E30");
@@ -228,11 +228,11 @@ void MixingKitsHelpDialog::build_ui()
     main->AddSpacer(FromDIP(16));
 
     StateColor btn_bg(
-        std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+        std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
     StateColor btn_bd(
-        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
     StateColor btn_text(
         std::pair<wxColour, int>(wxColour("#FFFFFE"), StateColor::Normal));
 

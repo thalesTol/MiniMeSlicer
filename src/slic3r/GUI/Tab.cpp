@@ -610,7 +610,7 @@ void Tab::create_preset_tab()
         m_wiki_bmp->Hide();
         wiki_sizer->Add(m_wiki_label, 0, wxALIGN_CENTER_VERTICAL);
         auto set_hover = [this, wiki_icon, wiki_icon_hover](bool hover) {
-            wxColour color = hover ? wxColour("#00AE42") : wxColour("#6B6B6B");
+            wxColour color = hover ? wxColour("#1E6EF0") : wxColour("#6B6B6B");
             m_wiki_bmp->SetBitmap(hover ? wiki_icon_hover->bmp() : wiki_icon->bmp());
             m_wiki_label->SetForegroundColour(color);
             m_wiki_label->SetFont(hover ? Label::Body_13.Underlined() : Label::Body_13);
@@ -8540,7 +8540,7 @@ void Tab::update_nozzle_status_display()
 
     wxStaticText *reminder_text = new wxStaticText(this, wxID_ANY, _L("Available nozzles for current preset: "));
     reminder_text->SetFont(Label::Body_13);
-    reminder_text->SetForegroundColour(wxColour("#00AE42"));
+    reminder_text->SetForegroundColour(wxColour("#1E6EF0"));
     m_nozzle_status_sizer->Add(reminder_text, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 10);
 
     auto create_nozzle_button = [this](const wxString &name) {
@@ -8548,9 +8548,9 @@ void Tab::update_nozzle_status_display()
         btn->Create(this, name, "", wxBORDER_NONE);
         btn->SetMinSize(wxSize(24, 24));
         btn->SetFont(wxGetApp().bold_font());
-        StateColor bg_color(wxColour("#E6F7ED"));
+        StateColor bg_color(wxColour("#EAF1FE"));
         btn->SetBackgroundColor(bg_color);
-        StateColor fg_color(wxColour("#00AE42"));
+        StateColor fg_color(wxColour("#1E6EF0"));
         btn->SetTextColor(fg_color);
         btn->SetCornerRadius(6);
         btn->Enable(false);

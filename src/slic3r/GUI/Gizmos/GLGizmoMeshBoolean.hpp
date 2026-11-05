@@ -86,7 +86,7 @@ struct MeshBooleanConfig {
     static constexpr unsigned int COLOR_LIST_B = 0xFF00ECBD;        // List B title (green-yellow)
     static constexpr unsigned int COLOR_SELECTED_BG = 0xFFF1FBEA;   // Selected item background light
     static constexpr unsigned int COLOR_SELECTED_BG_DARK = 0xFF354124; // Selected item background dark
-    static constexpr unsigned int COLOR_HOVER_BORDER = 0xFF42AE00;  // Hover border
+    static constexpr unsigned int COLOR_HOVER_BORDER = 0xFFF06E1E;  // Hover border
     static constexpr unsigned int COLOR_NON_MODEL = 0x80808080;     // Non-model volumes (semi-transparent gray)
     static constexpr unsigned int COLOR_SEPARATOR = 0xFFCCCCCC;
     static constexpr unsigned int COLOR_SEPARATOR_DARK = 0xFF4A4A4A;

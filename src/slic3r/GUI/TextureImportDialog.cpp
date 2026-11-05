@@ -316,7 +316,7 @@ static wxColour texture_import_window_border_colour()
 
 static wxColour texture_import_brand_green()
 {
-    return dark_or(wxColour(0, 174, 66), wxColour(61, 203, 115));
+    return dark_or(wxColour(30, 110, 240), wxColour(74, 141, 246));
 }
 
 static wxColour texture_import_muted_text_colour()
@@ -717,7 +717,7 @@ void GreenSliderT<T>::OnPaint(wxPaintEvent&)
         int ts = FromDIP(8);
         int pen_w = FromDIP(2);
 
-        wxColour greenClr = IsEnabled() ? wxColour(0, 174, 66)
+        wxColour greenClr = IsEnabled() ? wxColour(30, 110, 240)
                                         : dark_or(wxColour(180, 180, 180), wxColour(90, 90, 96));
         wxColour grayClr  = IsEnabled() ? dark_or(wxColour(200, 200, 200), wxColour(90, 90, 96))
                                         : dark_or(wxColour(220, 220, 220), wxColour(70, 70, 76));
@@ -1823,10 +1823,10 @@ public:
         ok_btn->SetMinSize(wxSize(FromDIP(55), FromDIP(24)));
         ok_btn->SetCornerRadius(FromDIP(12));
         StateColor ok_bg(
-            std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-            std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-            std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
-        StateColor ok_bd(std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+            std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+            std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+            std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
+        StateColor ok_bd(std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
         StateColor ok_fg(std::pair<wxColour, int>(wxColour(255, 255, 254), StateColor::Normal));
         ok_btn->SetBackgroundColor(ok_bg);
         ok_btn->SetBorderColor(ok_bd);
@@ -2155,7 +2155,7 @@ private:
             const int y = (m_selected_btn_size.GetHeight() - m_selected_bmp_size.GetHeight()) / 2;
             dc.DrawBitmap(bmp, x, y, true);
         }
-        dc.SetPen(wxPen(wxColour("#00AE42"), 2));
+        dc.SetPen(wxPen(wxColour("#1E6EF0"), 2));
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
         dc.DrawRectangle(1, 1, m_selected_btn_size.GetWidth() - 1, m_selected_btn_size.GetHeight() - 1);
     }
@@ -3859,7 +3859,7 @@ private:
 
         wxGraphicsContext* gc = dc.GetGraphicsContext();
 
-        const wxColour active_fill(0, 174, 66);
+        const wxColour active_fill(30, 110, 240);
         const wxColour inactive_fill = dark_or(wxColour(206, 206, 206), wxColour(0x54, 0x54, 0x5B));
         const wxColour active_text = texture_import_text_colour();
         const wxColour inactive_text = dark_or(wxColour(107, 107, 107), wxColour(0xB3, 0xB3, 0xB5));
@@ -5294,7 +5294,7 @@ void TextureImportDialog::build_mapping_panel(wxWindow* parent, wxSizer* sizer)
     header_sizer->AddStretchSpacer();
 
     m_lbl_mix_help = new wxStaticText(m_mapping_panel, wxID_ANY, _L("Use official mixing kits →"));
-    m_lbl_mix_help->SetForegroundColour(wxColour(0, 174, 66));
+    m_lbl_mix_help->SetForegroundColour(wxColour(30, 110, 240));
     m_lbl_mix_help->SetFont(Label::Body_12);
     m_lbl_mix_help->SetCursor(wxCursor(wxCURSOR_HAND));
     m_lbl_mix_help->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
@@ -5338,7 +5338,7 @@ void TextureImportDialog::build_bottom_buttons(wxSizer* sizer)
     m_unmatched_warning_label->SetForegroundColour(wxColour(225, 71, 71));
     m_unmatched_add_link = new wxStaticText(m_unmatched_warning, wxID_ANY,
         _L("Auto-Add All Filaments"));
-    m_unmatched_add_link->SetForegroundColour(wxColour(0, 174, 66));
+    m_unmatched_add_link->SetForegroundColour(wxColour(30, 110, 240));
     m_unmatched_add_link->SetFont(texture_import_action_link_font(this));
     m_unmatched_add_link->SetCursor(wxCursor(wxCURSOR_HAND));
     m_unmatched_add_link->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
@@ -5365,7 +5365,7 @@ void TextureImportDialog::build_bottom_buttons(wxSizer* sizer)
         texture_import_warning_body_font(this), wxEmptyString);
     m_overlimit_warning_label->SetForegroundColour(wxColour(225, 71, 71));
     m_overlimit_fix_link = new wxStaticText(m_overlimit_warning, wxID_ANY, _L("Fix now"));
-    m_overlimit_fix_link->SetForegroundColour(wxColour(0, 174, 66));
+    m_overlimit_fix_link->SetForegroundColour(wxColour(30, 110, 240));
     m_overlimit_fix_link->SetFont(texture_import_action_link_font(this));
     m_overlimit_fix_link->SetCursor(wxCursor(wxCURSOR_HAND));
     m_overlimit_fix_link->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
@@ -5675,7 +5675,7 @@ void TextureImportDialog::apply_theme()
         m_unmatched_warning_label->SetBackgroundColour(dialog_bg);
     }
     if (m_unmatched_add_link) {
-        m_unmatched_add_link->SetForegroundColour(wxColour(0, 174, 66));
+        m_unmatched_add_link->SetForegroundColour(wxColour(30, 110, 240));
         m_unmatched_add_link->SetBackgroundColour(dialog_bg);
     }
     if (m_overlimit_warning)
@@ -5687,7 +5687,7 @@ void TextureImportDialog::apply_theme()
         m_overlimit_warning_label->SetBackgroundColour(dialog_bg);
     }
     if (m_overlimit_fix_link) {
-        m_overlimit_fix_link->SetForegroundColour(wxColour(0, 174, 66));
+        m_overlimit_fix_link->SetForegroundColour(wxColour(30, 110, 240));
         m_overlimit_fix_link->SetBackgroundColour(dialog_bg);
     }
 
@@ -9507,7 +9507,7 @@ void TextureImportDialog::on_dpi_changed(const wxRect&)
         m_unmatched_warning_label->SetForegroundColour(wxColour(225, 71, 71));
     }
     if (m_unmatched_add_link) {
-        m_unmatched_add_link->SetForegroundColour(wxColour(0, 174, 66));
+        m_unmatched_add_link->SetForegroundColour(wxColour(30, 110, 240));
         m_unmatched_add_link->SetFont(texture_import_action_link_font(this));
     }
     wrap_unmatched_warning_label();
@@ -9521,7 +9521,7 @@ void TextureImportDialog::on_dpi_changed(const wxRect&)
         m_overlimit_warning_label->SetForegroundColour(wxColour(225, 71, 71));
     }
     if (m_overlimit_fix_link) {
-        m_overlimit_fix_link->SetForegroundColour(wxColour(0, 174, 66));
+        m_overlimit_fix_link->SetForegroundColour(wxColour(30, 110, 240));
         m_overlimit_fix_link->SetFont(texture_import_action_link_font(this));
     }
     wrap_overlimit_warning_label();

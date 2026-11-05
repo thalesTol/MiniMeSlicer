@@ -937,7 +937,7 @@ void Sidebar::priv::flush_printer_sync(bool restart)
         *counter_sync_printer = 6;
         timer_sync_printer->Start(500);
     }
-    btn_sync_printer->SetBackgroundColorNormal((*counter_sync_printer & 1) ? "#F8F8F8" :"#00AE42");
+    btn_sync_printer->SetBackgroundColorNormal((*counter_sync_printer & 1) ? "#F8F8F8" :"#1E6EF0");
     if (--*counter_sync_printer <= 0)
         timer_sync_printer->Stop();
 }
@@ -2204,7 +2204,7 @@ bool Sidebar::priv::sync_extruder_list(bool &only_external_material, bool is_man
 
 void Sidebar::priv::update_sync_status(const MachineObject *obj)
 {
-    StateColor not_synced_colour(std::pair<wxColour, int>(wxColour("#00AE42"), StateColor::Normal));
+    StateColor not_synced_colour(std::pair<wxColour, int>(wxColour("#1E6EF0"), StateColor::Normal));
     auto clear_all_sync_status = [this, &not_synced_colour]() {
         panel_printer_preset->ShowBadge(false);
         panel_printer_bed->ShowBadge(false);
@@ -2605,8 +2605,8 @@ Sidebar::Sidebar(Plater *parent)
         /*************************** 2. add printer content ************************/
         p->m_panel_printer_content = new wxPanel(p->scrolled, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
         p->m_panel_printer_content->SetBackgroundColour(wxColour(255, 255, 255));
-        StateColor panel_bd_col(std::pair<wxColour, int>(wxColour("#00AE42"), StateColor::Pressed),
-                                std::pair<wxColour, int>(wxColour("#00AE42"), StateColor::Hovered),
+        StateColor panel_bd_col(std::pair<wxColour, int>(wxColour("#1E6EF0"), StateColor::Pressed),
+                                std::pair<wxColour, int>(wxColour("#1E6EF0"), StateColor::Hovered),
                                 std::pair<wxColour, int>(wxColour("#EEEEEE"), StateColor::Normal));
 
         p->panel_printer_preset = new StaticBox(p->m_panel_printer_content);
@@ -2753,8 +2753,8 @@ Sidebar::Sidebar(Plater *parent)
                 std::pair<wxColour, int>(wxColour("#F8F8F8"), StateColor::Hovered),
                 std::pair<wxColour, int>(wxColour("#F8F8F8"), StateColor::Normal));
         StateColor btn_sync_bd_col(
-                std::pair<wxColour, int>(wxColour("#00AE42"), StateColor::Pressed),
-                std::pair<wxColour, int>(wxColour("#00AE42"), StateColor::Hovered),
+                std::pair<wxColour, int>(wxColour("#1E6EF0"), StateColor::Pressed),
+                std::pair<wxColour, int>(wxColour("#1E6EF0"), StateColor::Hovered),
                 std::pair<wxColour, int>(wxColour("#EEEEEE"), StateColor::Normal));
         btn_sync->SetBackgroundColor(btn_sync_bg_col);
         btn_sync->SetBorderColor(btn_sync_bd_col);
@@ -2876,13 +2876,13 @@ Sidebar::Sidebar(Plater *parent)
     p->m_purge_mode_btn->SetPaddingSize(wxSize(FromDIP(6), FromDIP(3)));
     p->m_purge_mode_btn->SetCornerRadius(FromDIP(8));
 
-    StateColor purge_bg_col(std::pair<wxColour, int>(wxColour(219, 253, 231), StateColor::Pressed), std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Hovered),
+    StateColor purge_bg_col(std::pair<wxColour, int>(wxColour(221, 234, 255), StateColor::Pressed), std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Hovered),
                             std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Normal));
 
     StateColor purge_fg_col(std::pair<wxColour, int>(wxColour(107, 107, 106), StateColor::Pressed), std::pair<wxColour, int>(wxColour(107, 107, 106), StateColor::Hovered),
                             std::pair<wxColour, int>(wxColour(107, 107, 106), StateColor::Normal));
 
-    StateColor purge_bd_col(std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Pressed), std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Hovered),
+    StateColor purge_bd_col(std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Pressed), std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Hovered),
                             std::pair<wxColour, int>(wxColour(172, 172, 172), StateColor::Normal));
 
     p->m_purge_mode_btn->SetBackgroundColor(purge_bg_col);
@@ -2915,7 +2915,7 @@ Sidebar::Sidebar(Plater *parent)
     p->m_flushing_volume_btn->SetPaddingSize(wxSize(FromDIP(6),FromDIP(3)));
     p->m_flushing_volume_btn->SetCornerRadius(FromDIP(8));
 
-    StateColor flush_bg_col(std::pair<wxColour, int>(wxColour(219, 253, 231), StateColor::Pressed),
+    StateColor flush_bg_col(std::pair<wxColour, int>(wxColour(221, 234, 255), StateColor::Pressed),
                             std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Hovered),
                             std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Normal));
 
@@ -2923,8 +2923,8 @@ Sidebar::Sidebar(Plater *parent)
                             std::pair<wxColour, int>(wxColour(107, 107, 106), StateColor::Hovered),
                             std::pair<wxColour, int>(wxColour(107, 107, 106), StateColor::Normal));
 
-    StateColor flush_bd_col(std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Pressed),
-                            std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Hovered),
+    StateColor flush_bd_col(std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Pressed),
+                            std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Hovered),
                             std::pair<wxColour, int>(wxColour(172, 172, 172), StateColor::Normal));
 
     p->m_flushing_volume_btn->SetBackgroundColor(flush_bg_col);
@@ -5032,8 +5032,8 @@ void Sidebar::set_flushing_volume_warning(const bool flushing_volume_modify)
                                 std::pair<wxColour, int>(wxColour(107, 107, 106), StateColor::Hovered),
                                 std::pair<wxColour, int>(wxColour(107, 107, 106), StateColor::Normal));
 
-        StateColor flush_bd_col(std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Pressed),
-                                std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Hovered),
+        StateColor flush_bd_col(std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Pressed),
+                                std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Hovered),
                                 std::pair<wxColour, int>(wxColour(172, 172, 172), StateColor::Normal));
         p->m_flushing_volume_btn->SetBorderColor(flush_bd_col);
         p->m_flushing_volume_btn->SetTextColor(flush_fg_col);
@@ -13965,7 +13965,7 @@ public:
 
         // Option 2: Go back (recommended)
         // Use colors that work in both light and dark mode
-        wxColour option2_bg = is_dark_mode ? wxColour(30, 60, 40) : wxColour("#E8F5E9");
+        wxColour option2_bg = is_dark_mode ? wxColour(30, 46, 74) : wxColour("#EAF1FE");
         wxColour option2_border = is_dark_mode ? wxColour(76, 175, 80) : wxColour("#4CAF50");
         wxColour recommended_color = is_dark_mode ? wxColour(129, 199, 132) : wxColour("#2E7D32");
 
@@ -14010,8 +14010,8 @@ public:
         wxBoxSizer* option2_button_sizer = new wxBoxSizer(wxHORIZONTAL);
         option2_button_sizer->AddStretchSpacer();
 
-        StateColor btn_bg_green2(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-                                 std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
+        StateColor btn_bg_green2(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+                                 std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
                                  std::pair<wxColour, int>(AMS_CONTROL_BRAND_COLOUR, StateColor::Normal));
 
         Button* goback_button = new Button(option2_box, _L("Go Back"));
@@ -14244,7 +14244,7 @@ public:
         main_sizer->Add(option1_box, 0, wxLEFT | wxRIGHT | wxBOTTOM, wxWindowBase::FromDIP(15, this));
 
         // Option 2: Go back (recommended)
-        wxColour option2_bg = is_dark_mode ? wxColour(30, 60, 40) : wxColour("#E8F5E9");
+        wxColour option2_bg = is_dark_mode ? wxColour(30, 46, 74) : wxColour("#EAF1FE");
         wxColour option2_border = is_dark_mode ? wxColour(76, 175, 80) : wxColour("#4CAF50");
         wxColour recommended_color = is_dark_mode ? wxColour(129, 199, 132) : wxColour("#2E7D32");
 
@@ -14289,8 +14289,8 @@ public:
         wxBoxSizer* option2_button_sizer = new wxBoxSizer(wxHORIZONTAL);
         option2_button_sizer->AddStretchSpacer();
 
-        StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-                                std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
+        StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+                                std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
                                 std::pair<wxColour, int>(AMS_CONTROL_BRAND_COLOUR, StateColor::Normal));
 
         Button* goback_button = new Button(option2_box, _L("Go Back"));
@@ -15200,7 +15200,7 @@ int Plater::priv::update_helio_background_process_once(std::string& printer_id,
                     main_sizer->Add(option1_box, 0, wxLEFT | wxRIGHT | wxBOTTOM, wxWindowBase::FromDIP(15, this));
 
                     // Option 2: Go back (recommended)
-                    wxColour option2_bg = is_dark_mode ? wxColour(30, 60, 40) : wxColour("#E8F5E9");
+                    wxColour option2_bg = is_dark_mode ? wxColour(30, 46, 74) : wxColour("#EAF1FE");
                     wxColour option2_border = is_dark_mode ? wxColour(76, 175, 80) : wxColour("#4CAF50");
                     wxColour recommended_color = is_dark_mode ? wxColour(129, 199, 132) : wxColour("#2E7D32");
 
@@ -15245,8 +15245,8 @@ int Plater::priv::update_helio_background_process_once(std::string& printer_id,
                     wxBoxSizer* option2_button_sizer = new wxBoxSizer(wxHORIZONTAL);
                     option2_button_sizer->AddStretchSpacer();
 
-                    StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-                                           std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
+                    StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+                                           std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
                                            std::pair<wxColour, int>(AMS_CONTROL_BRAND_COLOUR, StateColor::Normal));
 
                     Button* goback_button = new Button(option2_box, _L("Go Back"));
@@ -22011,11 +22011,11 @@ ProjectDropDialog::ProjectDropDialog(const std::string &filename)
     wxBoxSizer *m_sizer_right  = new wxBoxSizer(wxHORIZONTAL);
 
     m_confirm = new Button(this, _L("OK"));
-    StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed), std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-                            std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+    StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed), std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+                            std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
 
     m_confirm->SetBackgroundColor(btn_bg_green);
-    m_confirm->SetBorderColor(wxColour(0, 174, 66));
+    m_confirm->SetBorderColor(wxColour(30, 110, 240));
     m_confirm->SetTextColor(wxColour("#FFFFFE"));
     m_confirm->SetSize(PROJECT_DROP_DIALOG_BUTTON_SIZE);
     m_confirm->SetMinSize(PROJECT_DROP_DIALOG_BUTTON_SIZE);

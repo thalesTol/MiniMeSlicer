@@ -28,17 +28,17 @@ html,body
 	padding: 1.5mm 6mm;
 	font-size: 14px;
 	text-align: center;
-	background-color: #00AE42;
+	background-color: #1E6EF0;
 	border-radius: 6px;
 	color: #fff;
 	cursor: pointer;
 	display: inline-block;	
-	border: 1px solid #009A3A;
+	border: 1px solid #1656C8;
 }
 
 .Btn_Green:hover
 {
-	background-color: #009A3A;
+	background-color: #1656C8;
 }
 
 
@@ -93,7 +93,7 @@ html,body
 	float: left;
 	height:20px;
 	width: 0%;
-	background-color:#00AE42;
+	background-color:#1E6EF0;
 	border-radius: 20px;		
 }
 

@@ -619,10 +619,10 @@ void GLGizmoMmuSegmentation::on_render_input_window(float x, float y, float bott
         std::wstring add_btn_name = (m_is_dark_mode ? ImGui::AddFilamentDarkIcon : ImGui::AddFilamentIcon) + boost::nowide::widen("");
 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0);
-        ImGui::PushStyleColor(ImGuiCol_Button, m_is_dark_mode ? ImVec4(43 / 255.0f, 64 / 255.0f, 54 / 255.0f, 0.00f) : ImVec4(0.86f, 0.99f, 0.91f, 0.00f)); // r, g, b, a
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, m_is_dark_mode ? ImVec4(150 / 255.0f, 150 / 255.0f, 150 / 255.0f, 1.00f) : ImVec4(0.86f, 0.99f, 0.91f, 1.00f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, m_is_dark_mode ? ImVec4(43 / 255.0f, 64 / 255.0f, 54 / 255.0f, 1.00f) : ImVec4(0.86f, 0.99f, 0.91f, 1.00f));
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Button, m_is_dark_mode ? ImVec4(30 / 255.0f, 46 / 255.0f, 74 / 255.0f, 0.00f) : ImVec4(0.867f, 0.918f, 1.0f, 0.00f)); // r, g, b, a
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, m_is_dark_mode ? ImVec4(150 / 255.0f, 150 / 255.0f, 150 / 255.0f, 1.00f) : ImVec4(0.867f, 0.918f, 1.0f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, m_is_dark_mode ? ImVec4(30 / 255.0f, 46 / 255.0f, 74 / 255.0f, 1.00f) : ImVec4(0.867f, 0.918f, 1.0f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
 
         if (ImGui::Button(into_u8(add_btn_name).c_str())) {
             wxQueueEvent(wxGetApp().plater(), new SimpleEvent(EVT_ADD_FILAMENT));
@@ -678,10 +678,10 @@ void GLGizmoMmuSegmentation::on_render_input_window(float x, float y, float bott
         if (i != 0) ImGui::SameLine((empty_button_width + m_imgui->scaled(1.75f)) * i + m_imgui->scaled(1.5f));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0);
         if (m_current_tool == tool_ids[i]) {
-            ImGui::PushStyleColor(ImGuiCol_Button, m_is_dark_mode ? ImVec4(43 / 255.0f, 64 / 255.0f, 54 / 255.0f, 1.00f) : ImVec4(0.86f, 0.99f, 0.91f, 1.00f)); // r, g, b, a
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, m_is_dark_mode ? ImVec4(43 / 255.0f, 64 / 255.0f, 54 / 255.0f, 1.00f) : ImVec4(0.86f, 0.99f, 0.91f, 1.00f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, m_is_dark_mode ? ImVec4(43 / 255.0f, 64 / 255.0f, 54 / 255.0f, 1.00f) : ImVec4(0.86f, 0.99f, 0.91f, 1.00f));
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_Button, m_is_dark_mode ? ImVec4(30 / 255.0f, 46 / 255.0f, 74 / 255.0f, 1.00f) : ImVec4(0.867f, 0.918f, 1.0f, 1.00f)); // r, g, b, a
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, m_is_dark_mode ? ImVec4(30 / 255.0f, 46 / 255.0f, 74 / 255.0f, 1.00f) : ImVec4(0.867f, 0.918f, 1.0f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, m_is_dark_mode ? ImVec4(30 / 255.0f, 46 / 255.0f, 74 / 255.0f, 1.00f) : ImVec4(0.867f, 0.918f, 1.0f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 1.0);
         }
@@ -945,7 +945,7 @@ void GLGizmoMmuSegmentation::on_render_input_window(float x, float y, float bott
 
     if (m_current_tool == ImGui::GapFillIcon) {
         m_imgui->disabled_begin(!(TriangleSelectorPatch::exist_gap_area));
-        ImGui::PushStyleColor(ImGuiCol_Button, m_is_dark_mode ? ImVec4(0 / 255.0, 174 / 255.0, 66 / 255.0, 1.0) : ImVec4(0 / 255.0, 174 / 255.0, 66 / 255.0, 1.0));
+        ImGui::PushStyleColor(ImGuiCol_Button, m_is_dark_mode ? ImVec4(30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1.0) : ImVec4(30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1.0));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
                               m_is_dark_mode ? ImVec4(50 / 255.0f, 238 / 255.0f, 61 / 255.0f, 1.00f) : ImVec4(50 / 255.0f, 238 / 255.0f, 61 / 255.0f, 1.00f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,

@@ -152,7 +152,7 @@ html, body {
 }
 
 /* Native <input type="checkbox"> in dark mode */
-input[type="checkbox"] { accent-color: #00AE42; }
+input[type="checkbox"] { accent-color: #1E6EF0; }
 
 /* Empty state (0 matches or no custom filaments) */
 #emptyState,

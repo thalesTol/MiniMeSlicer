@@ -15,11 +15,16 @@ public:
     static constexpr int DEFAULT_PORT = 13700;
     static constexpr const char *CONFIG_KEY = "minime_claude_bridge";
 
-    // starts or stops it after the app preference
+    // starts or stops it after the app preference (it also stays on while MiniMe's own Claude chat needs it)
     static void apply_preference();
-    static void start(int port = DEFAULT_PORT);
+    // listens on 'port', or with tries > 1 on the first free one of port .. port + tries - 1
+    static void start(int port = DEFAULT_PORT, int tries = 1);
     static void stop();
     static bool running();
+    // the port it listens on, 0 while it does not (yet)
+    static int  port();
+    // MiniMe's Claude chat panel: keeps the bridge on while the chat runs, whatever the preference says
+    static void set_needed_by_chat(bool needed);
     // what to tell the user: the address, or why it does not run
     static std::string status();
 };

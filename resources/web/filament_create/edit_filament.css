@@ -57,8 +57,8 @@ body {
 }
 
 .ef-btn-add:hover {
-    border-color: #00AE42;
-    color: #00AE42;
+    border-color: #1E6EF0;
+    color: #1E6EF0;
 }
 
 /* List container — matches #CFilament_List style */
@@ -147,8 +147,8 @@ body {
 }
 
 .ef-btn-action:hover {
-    border-color: #00AE42;
-    color: #00AE42;
+    border-color: #1E6EF0;
+    color: #1E6EF0;
 }
 
 .ef-btn-action.remove:hover {
@@ -174,7 +174,7 @@ body {
     padding: 0 16px;
     height: 32px;
     border-radius: 16px;
-    background: #00AE42;
+    background: #1E6EF0;
     color: #fff;
     font-size: 13px;
     font-weight: 500;
@@ -182,7 +182,7 @@ body {
     cursor: pointer;
 }
 
-.ef-btn-primary:hover { background: #3DCB73; }
+.ef-btn-primary:hover { background: #4A8DF6; }
 
 .ef-btn-secondary {
     padding: 0 16px;

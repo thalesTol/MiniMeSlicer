@@ -1,5 +1,5 @@
 .ams-control-web-page {
-  --ams-web-brand: #00ae42;
+  --ams-web-brand: #1e6ef0;
   --ams-web-gray700: #6b6b6b;
   --ams-web-gray800: #323a3d;
   --ams-web-gray500: #acacac;
@@ -27,8 +27,8 @@
   --ams-web-humidity-track: #e5e5e5;
   --ams-web-road-nub: #c2c2c2;
   --ams-web-outline: #262e30;
-  --ams-web-btn-green-hover: #3dcb73;
-  --ams-web-btn-green-press: #1b8844;
+  --ams-web-btn-green-hover: #4a8df6;
+  --ams-web-btn-green-press: #1656c8;
   --ams-web-nozzle-shell: #9a9a9a;
   --ams-web-nozzle-body: #b0b0b0;
   --ams-web-nozzle-tip: #8e8e8e;

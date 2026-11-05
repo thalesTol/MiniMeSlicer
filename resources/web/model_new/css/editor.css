@@ -45,7 +45,7 @@ body {
   cursor: pointer;
 }
 .saveBtn {
-  background-color: #00AE42;
+  background-color: #1E6EF0;
   padding: 9px 8px;
   box-sizing: border-box;
   height: 40px;
@@ -83,7 +83,7 @@ body {
   padding-left: 16px;
 }
 .editorInput:focus {
-  border-color: #50A90B;
+  border-color: #1E6EF0;
   outline: none;
 }
 .comment {
@@ -181,11 +181,11 @@ body {
 }
 /*ckeditor custom styles*/
 :root {
-  --ck-color-focus-border: #50A90B !important;
+  --ck-color-focus-border: #1E6EF0 !important;
   --ck-color-button-on-hover-background: hsl(122, 33%, 83%) !important;
-  --ck-color-button-on-color: #50A90B !important;
+  --ck-color-button-on-color: #1E6EF0 !important;
   --ck-color-button-on-background: #8bf13c41 !important;
-  --ck-color-focus-outer-shadow: #cafcd5 !important;
+  --ck-color-focus-outer-shadow: #ddeaff !important;
 }
 .ck-powered-by {
   display: none !important;
@@ -211,10 +211,10 @@ body {
 }
 .accessoriesButton {
   border-radius: 2px;
-  border: 1px solid var(--Green-600, #50A90B);
+  border: 1px solid var(--Green-600, #1E6EF0);
   height: 24px;
   padding: 4px 8px;
-  color: #50A90B;
+  color: #1E6EF0;
   font-weight: 600;
   display: inline-flex;
   position: relative;

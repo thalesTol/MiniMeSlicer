@@ -140,10 +140,10 @@ void AMSMaterialsSetting::create()
     m_sizer_button->Add(0, 0, 1, wxEXPAND, 0);
 
     m_button_confirm = new Button(this, _L("Confirm"));
-    m_btn_bg_green   = StateColor(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed), std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-                            std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+    m_btn_bg_green   = StateColor(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed), std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+                            std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
     m_button_confirm->SetBackgroundColor(m_btn_bg_green);
-    m_button_confirm->SetBorderColor(wxColour(0, 174, 66));
+    m_button_confirm->SetBorderColor(wxColour(30, 110, 240));
     m_button_confirm->SetTextColor(wxColour("#FFFFFE"));
     m_button_confirm->SetMinSize(AMS_MATERIALS_SETTING_BUTTON_SIZE);
     m_button_confirm->SetCornerRadius(FromDIP(12));
@@ -333,16 +333,16 @@ void AMSMaterialsSetting::create_panel_kn(wxWindow* parent)
     wxString link_url = wxString::Format("https://wiki.bambulab.com/%s/software/bambu-studio/calibration_pa", region);
     m_wiki_ctrl = new Label(parent, _L("View Wiki for details"));
     m_wiki_ctrl->SetFont(Label::Body_13);
-    m_wiki_ctrl->SetForegroundColour(wxColour(0, 174, 66));
+    m_wiki_ctrl->SetForegroundColour(wxColour(30, 110, 240));
     m_wiki_ctrl->Bind(wxEVT_ENTER_WINDOW, [this](wxMouseEvent &e) {
         e.Skip();
-        m_wiki_ctrl->SetForegroundColour(wxColour(0, 150, 57));
+        m_wiki_ctrl->SetForegroundColour(wxColour(22, 86, 200));
         m_wiki_ctrl->SetCursor(wxCURSOR_HAND);
         m_wiki_ctrl->Refresh();
     });
     m_wiki_ctrl->Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) {
         e.Skip();
-        m_wiki_ctrl->SetForegroundColour(wxColour(0, 174, 66));
+        m_wiki_ctrl->SetForegroundColour(wxColour(30, 110, 240));
         m_wiki_ctrl->SetCursor(wxCURSOR_ARROW);
         m_wiki_ctrl->Refresh();
     });
@@ -675,9 +675,9 @@ public:
         SetBackgroundColour(StateColor::darkModeColorFor(*wxWHITE));
 
         StateColor btn_bg_green(
-            std::pair<wxColour, int>(wxColour(27, 136, 68),  StateColor::Pressed),
-            std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-            std::pair<wxColour, int>(wxColour(0, 174, 66),   StateColor::Normal));
+            std::pair<wxColour, int>(wxColour(22, 86, 200),  StateColor::Pressed),
+            std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+            std::pair<wxColour, int>(wxColour(30, 110, 240),   StateColor::Normal));
         StateColor btn_bg_white(
             std::pair<wxColour, int>(wxColour(206, 206, 206), StateColor::Pressed),
             std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Hovered),
@@ -2499,7 +2499,7 @@ void AMSMaterialsSetting::apply_filament_selection()
     }
     else {
         m_button_confirm->SetBackgroundColor(m_btn_bg_green);
-        m_button_confirm->SetBorderColor(wxColour(0, 174, 66));
+        m_button_confirm->SetBorderColor(wxColour(30, 110, 240));
         m_button_confirm->SetTextColor(wxColour("#FFFFFE"));
         m_button_confirm->Enable(true);
     }
@@ -3243,11 +3243,11 @@ void AMSNewOfficialFilamentDlg::create()
     m_btn_confirm->SetMinSize(AMS_MATERIALS_SETTING_BUTTON_SIZE);
     m_btn_confirm->SetCornerRadius(FromDIP(12));
     m_btn_confirm->SetBackgroundColor(StateColor(
-        std::pair<wxColour, int>(wxColour(27, 136, 68),  StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0, 174, 66),   StateColor::Normal)
+        std::pair<wxColour, int>(wxColour(22, 86, 200),  StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30, 110, 240),   StateColor::Normal)
     ));
-    m_btn_confirm->SetBorderColor(wxColour(0, 174, 66));
+    m_btn_confirm->SetBorderColor(wxColour(30, 110, 240));
     m_btn_confirm->SetTextColor(wxColour("#FFFFFE"));
     m_btn_confirm->Bind(wxEVT_BUTTON, &AMSNewOfficialFilamentDlg::on_confirm, this);
     btn_sizer->Add(m_btn_confirm, 0);
@@ -3507,11 +3507,11 @@ void AMSNewFilamentRecordedDlg::create(const FilamentSpool& sp)
     btn_ok->SetMinSize(AMS_MATERIALS_SETTING_BUTTON_SIZE);
     btn_ok->SetCornerRadius(FromDIP(12));
     btn_ok->SetBackgroundColor(StateColor(
-        std::pair<wxColour, int>(wxColour(27, 136, 68),  StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0, 174, 66),   StateColor::Normal)
+        std::pair<wxColour, int>(wxColour(22, 86, 200),  StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30, 110, 240),   StateColor::Normal)
     ));
-    btn_ok->SetBorderColor(wxColour(0, 174, 66));
+    btn_ok->SetBorderColor(wxColour(30, 110, 240));
     btn_ok->SetTextColor(wxColour("#FFFFFE"));
     btn_ok->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { EndModal(wxID_OK); });
     btn_sizer->Add(btn_ok, 0);

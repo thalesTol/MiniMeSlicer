@@ -134,7 +134,7 @@ function AxisDisc({ sizeRem = 13.75, onHome, onJog }: { sizeRem?: number; onHome
           <circle cx={C} cy={C} r={18} fill="#FFFFFF" stroke="#D9DDE1" strokeWidth={1} />
         </g>
         <g transform={`translate(${C}, ${C})`}>
-          <path d="M -7 2 L 0 -5 L 7 2 V 9 H 2.2 V 5.2 h-4.4 V 9 H -7 Z" fill="#00AE42" />
+          <path d="M -7 2 L 0 -5 L 7 2 V 9 H 2.2 V 5.2 h-4.4 V 9 H -7 Z" fill="#1E6EF0" />
         </g>
       </svg>
       <button

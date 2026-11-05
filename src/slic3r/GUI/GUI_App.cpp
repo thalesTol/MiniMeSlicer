@@ -336,7 +336,7 @@ public:
             wxMemoryDC memDC;
             memDC.SelectObject(bitmap);
             memDC.SetFont(m_action_font);
-            memDC.SetTextForeground(StateColor::darkModeColorFor(wxColour(144, 144, 144)));
+            memDC.SetTextForeground(m_action_colour.IsOk() ? m_action_colour : StateColor::darkModeColorFor(wxColour(144, 144, 144)));
             int width = bitmap.GetWidth();
             int text_height = memDC.GetTextExtent(text).GetHeight();
             int text_width = memDC.GetTextExtent(text).GetWidth();
@@ -359,6 +359,20 @@ public:
 
         // use a memory DC to draw directly onto the bitmap
         wxMemoryDC memDc(bmp);
+
+        // SliceOfMe: the MiniMe poster already shows the logo and the name; only the version goes below it
+        if (s_poster) {
+            const int width  = bmp.GetWidth();
+            const int height = bmp.GetHeight();
+            memDc.SetFont(m_constant_text.version_font);
+            memDc.SetTextForeground(wxColour(150, 162, 186));
+            const int version_y = int(height * 0.875);
+            memDc.DrawLabel(m_constant_text.version, wxRect(0, version_y, width, memDc.GetTextExtent(m_constant_text.version).GetHeight()),
+                            wxALIGN_CENTER);
+            m_action_line_y_position = int(height * 0.925);
+            m_action_colour          = wxColour(110, 122, 146);
+            return;
+        }
 
         int top_margin = FromDIP(75 * m_scale);
         int width = bmp.GetWidth();
@@ -408,6 +422,15 @@ public:
 
     static wxBitmap MakeBitmap()
     {
+        // SliceOfMe: the MiniMe poster (tools/branding/install_artwork.ps1)
+        wxImage poster;
+        if (poster.LoadFile(from_u8(var("minime_splash.png")), wxBITMAP_TYPE_PNG) && poster.IsOk() && poster.GetHeight() > 0) {
+            const int height = FromDIP(560, nullptr);
+            const int width  = std::max(1, poster.GetWidth() * height / poster.GetHeight());
+            poster.Rescale(width, height, wxIMAGE_QUALITY_HIGH);
+            s_poster = true;
+            return wxBitmap(poster);
+        }
         int width = FromDIP(480, nullptr);
         int height = FromDIP(480, nullptr);
 
@@ -473,6 +496,9 @@ private:
     wxFont      m_action_font;
     int         m_action_line_y_position;
     float       m_scale {1.0};
+    wxColour    m_action_colour;
+    // the splash shows the MiniMe poster (MakeBitmap found it)
+    static inline bool s_poster{false};
 
     struct ConstantText
     {
@@ -1190,6 +1216,9 @@ void GUI_App::post_init()
 
     // SliceOfMe: the Claude tool bridge, when switched on in Preferences
     ClaudeBridge::apply_preference();
+    // SliceOfMe: the Claude chat comes back open if it was open last time
+    if (mainframe != nullptr && app_config->get("minime_chat_open") == "1")
+        mainframe->show_chat(true);
 
     /*request helio config*/
     if (app_config->get("helio_enable") == "true") {

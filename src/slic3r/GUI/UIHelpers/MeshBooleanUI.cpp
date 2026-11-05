@@ -388,7 +388,7 @@ void MeshBooleanUI::draw_action_buttons()
     enable_button = is_ok_button_enabled();
 
     // OK button (green)
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.00f, 0.75f, 0.30f, 1.00f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.00f, 0.60f, 0.22f, 1.00f));
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
@@ -682,7 +682,7 @@ bool MeshBooleanUI::draw_tab_button(const char* icon_name, const char* text, boo
     ImVec2 button_max = ImGui::GetItemRectMax();
 
     ImU32 bg_color = selected
-        ? ImGui::GetColorU32(ImVec4(0, 174.0f/255.0f, 66.0f/255.0f, 1.0f))
+        ? ImGui::GetColorU32(ImVec4(30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1.0f))
         : (ImGui::IsItemHovered()
             ? ImGui::GetColorU32(m_is_dark_mode ? ImVec4(0.3f,0.3f,0.3f,1.0f) : ImVec4(0.9f,0.9f,0.9f,1.0f))
             : ImGui::GetColorU32(m_is_dark_mode ? ImVec4(0.2f,0.2f,0.2f,1.0f) : ImVec4(1.0f,1.0f,1.0f,1.0f)));
@@ -1271,7 +1271,7 @@ void MeshBooleanUI::draw_progress_bar()
 
     // Draw progress bar
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
     ImVec2 progress_size(progress_bar_width, 0.0f);
     ImGui::BBLProgressBar2(progress / 100.0f, progress_size);
     ImGui::PopStyleColor(1);

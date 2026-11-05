@@ -78,6 +78,10 @@
 #include <dwmapi.h>
 #endif // _WIN32
 #include <slic3r/GUI/CreatePresetsDialog.hpp>
+#include "MiniMeChat.hpp"
+
+#include <algorithm>
+#include <cstdlib>
 
 
 namespace Slic3r {
@@ -261,7 +265,7 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
     m_topbar         = new BBLTopbar(this);
 #else
     auto panel_topbar = new wxPanel(this, wxID_ANY);
-    panel_topbar->SetBackgroundColour(wxColour(38, 46, 48));
+    panel_topbar->SetBackgroundColour(wxColour(15, 27, 51));
     auto sizer_tobar = new wxBoxSizer(wxVERTICAL);
     panel_topbar->SetSizer(sizer_tobar);
     panel_topbar->Layout();
@@ -453,7 +457,16 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
 #endif // __WINDOWS__
 
 
-    sizer->Add(m_main_sizer, 1, wxEXPAND);
+    // SliceOfMe: the Claude chat docks at the right of everything below the top bar
+    auto *content_sizer = new wxBoxSizer(wxHORIZONTAL);
+    content_sizer->Add(m_main_sizer, 1, wxEXPAND);
+    m_chat_sash = new ChatSash(this, [this](int x) { resize_chat_to(x); });
+    m_chat      = new ChatPanel(this);
+    m_chat_sash->Hide();
+    m_chat->Hide();
+    content_sizer->Add(m_chat_sash, 0, wxEXPAND);
+    content_sizer->Add(m_chat, 0, wxEXPAND);
+    sizer->Add(content_sizer, 1, wxEXPAND);
     SetSizerAndFit(sizer);
     // initialize layout from config
     update_layout();
@@ -733,6 +746,8 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
             return;
         }
         else if (evt.CmdDown() && evt.GetKeyCode() == 'G') { if (can_export_gcode()) { wxPostEvent(m_plater, SimpleEvent(EVT_GLTOOLBAR_EXPORT_SLICED_FILE)); } evt.Skip(); return; }
+        // SliceOfMe: the Claude chat
+        if (evt.CmdDown() && evt.ShiftDown() && evt.GetKeyCode() == 'J') { toggle_chat(); return; }
         if (evt.CmdDown() && evt.GetKeyCode() == 'J') { m_printhost_queue_dlg->Show(); return; }
         if (evt.CmdDown() && evt.GetKeyCode() == 'N') { m_plater->new_project(); return;}
         if (evt.CmdDown() && evt.GetKeyCode() == 'O') { m_plater->load_project(); return;}
@@ -1205,6 +1220,50 @@ void MainFrame::update_filament_tab_ui()
     wxGetApp().get_tab(Preset::Type::TYPE_FILAMENT)->reload_config();
     wxGetApp().get_tab(Preset::Type::TYPE_FILAMENT)->update_dirty();
     wxGetApp().get_tab(Preset::Type::TYPE_FILAMENT)->update_tab_ui();
+}
+
+// SliceOfMe: the Claude chat
+bool MainFrame::is_chat_shown() const { return m_chat != nullptr && m_chat->IsShown(); }
+
+void MainFrame::show_chat(bool show)
+{
+    if (m_chat == nullptr || m_chat_sash == nullptr)
+        return;
+    if (show == m_chat->IsShown()) {
+        if (show)
+            m_chat->focus_input();
+        return;
+    }
+    if (show) {
+        int width = FromDIP(400);
+        const std::string saved = wxGetApp().app_config->get("minime_chat_width");
+        if (!saved.empty())
+            width = std::max(FromDIP(300), std::atoi(saved.c_str()));
+        width = std::min(width, std::max(FromDIP(300), GetClientSize().x - FromDIP(640)));
+        m_chat->SetMinSize(wxSize(width, -1));
+    }
+    m_chat_sash->Show(show);
+    m_chat->Show(show);
+    Layout();
+    if (show)
+        m_chat->on_show();
+    wxGetApp().app_config->set("minime_chat_open", show ? "1" : "0");
+    if (m_topbar)
+        m_topbar->update_chat_button(show);
+}
+
+void MainFrame::resize_chat_to(int sash_x)
+{
+    if (!is_chat_shown())
+        return;
+    const int total = GetClientSize().x;
+    int       width = total - sash_x - m_chat_sash->GetSize().x / 2;
+    width           = std::clamp(width, FromDIP(300), std::max(FromDIP(300), total - FromDIP(640)));
+    if (width == m_chat->GetSize().x)
+        return;
+    m_chat->SetMinSize(wxSize(width, -1));
+    Layout();
+    wxGetApp().app_config->set("minime_chat_width", std::to_string(width));
 }
 
 void MainFrame::update_title()
@@ -2627,9 +2686,9 @@ void MainFrame::update_side_button_style()
     int em = em_unit();
 
     StateColor m_btn_bg_enable = StateColor(
-        std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour(48, 221, 112), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal)
+        std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour(91, 157, 255), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal)
     );
 
     m_slice_btn->SetTextLayout(SideButton::EHorizontalOrientation::HO_Left, FromDIP(15));
@@ -2789,6 +2848,10 @@ void MainFrame::on_sys_color_changed()
 
     // update label colors in respect to the system mode
     wxGetApp().init_label_colours();
+    if (m_chat)
+        m_chat->sys_color_changed();
+    if (m_chat_sash)
+        m_chat_sash->Refresh();
 
 #ifndef __WINDOWS__
     wxGetApp().force_colors_update();
@@ -3448,6 +3511,9 @@ void MainFrame::init_menubar_as_editor()
             },
             this, [this]() { return m_plater->is_view3D_shown(); }, [this]() { return m_plater->is_view3D_overhang_shown(); }, this);
         viewMenu->AppendSeparator();
+        // SliceOfMe
+        append_menu_check_item(viewMenu, wxID_ANY, _L("Claude chat") + "	" + ctrl + "Shift+J", _L("Talk with Claude about this plate"),
+            [this](wxCommandEvent &) { toggle_chat(); }, this, []() { return true; }, [this]() { return is_chat_shown(); }, this);
         append_menu_item(
             viewMenu, wxID_ANY, _L("Set 3DConnexion"), _L("Set 3DConnexion mouse"),
             [this](wxCommandEvent &) {

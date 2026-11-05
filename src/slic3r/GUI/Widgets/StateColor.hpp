@@ -13,10 +13,10 @@
 namespace ThemeColor {
 
 // Brand
-inline const wxColour BrandGreen{"#00AE42"};        // primary accent — buttons, selected borders, focus rings
-inline const wxColour BrandGreenHovered{"#3DCB73"}; // BrandGreen button hover state (== rgb 61,203,115)
-inline const wxColour BrandGreenPressed{"#1B8844"}; // BrandGreen button pressed state (== rgb 27,136,68)
-inline const wxColour LightGreen{"#EDFAF2"};        // Light green success/tint background
+inline const wxColour BrandGreen{"#1E6EF0"};        // MiniMe blue (was Bambu green 00AE42); primary accent — buttons, selected borders, focus rings
+inline const wxColour BrandGreenHovered{"#4A8DF6"}; // BrandGreen button hover state (== rgb 74,141,246)
+inline const wxColour BrandGreenPressed{"#1656C8"}; // BrandGreen button pressed state (== rgb 22,86,200)
+inline const wxColour LightGreen{"#EDF3FE"};        // Light blue tint background (was green EDFAF2)
 
 // Feedback / status — pre-declared because their meaning is obvious.
 inline const wxColour Warning{"#FF6F00"}; // attention / needs-action — orange. 14+ raw-hex consumers.

@@ -281,9 +281,9 @@ void FilamentSelectDialog::create()
     SetBackgroundColour(dlg_bg());
 
     m_btn_bg_green = StateColor(
-        std::pair<wxColour, int>(wxColour(27,  136, 68),  StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour(61,  203, 115), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0,   174, 66),  StateColor::Normal));
+        std::pair<wxColour, int>(wxColour(22,  86, 200),  StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour(74,  141, 246), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30,   110, 240),  StateColor::Normal));
 
     m_btn_bg_gray = StateColor(
         std::pair<wxColour, int>(wxColour(206, 206, 206), StateColor::Pressed),
@@ -341,7 +341,7 @@ void FilamentSelectDialog::create()
 
     auto* ok = new Button(this, _L("Confirm"));
     ok->SetBackgroundColor(m_btn_bg_green);
-    ok->SetBorderColor(sc(wxColour(0, 174, 66)));
+    ok->SetBorderColor(sc(wxColour(30, 110, 240)));
     ok->SetTextColor(sc(wxColour("#FFFFFE")));
     ok->SetMinSize(AMS_MATERIALS_SETTING_BUTTON_SIZE);
     ok->SetCornerRadius(FromDIP(12));
@@ -370,7 +370,7 @@ void FilamentSelectDialog::set_tab(int n)
 {
     if (m_book) m_book->SetSelection(n);
 
-    const wxColour green(0, 174, 66);
+    const wxColour green(30, 110, 240);
     const wxColour active_text   = AMS_MATERIALS_SETTING_GREY900;
     const wxColour inactive_text = AMS_MATERIALS_SETTING_GREY700;
 
@@ -802,9 +802,9 @@ void FilamentSelectDialog::fill_brand_chips(const std::vector<wxString>& brands)
     auto chips = std::make_shared<std::vector<Button*>>();
 
     auto apply_style = [](Button* b, bool sel) {
-        const wxColour green(0, 174, 66);
+        const wxColour green(30, 110, 240);
         if (sel) {
-            b->SetBackgroundColor(sc(dlg_chip_sel_bg()));            // #DBFDE7 / dark #1F3529
+            b->SetBackgroundColor(sc(dlg_chip_sel_bg()));            // #DDEAFF / dark #1E2E4A
             b->SetTextColor(sc(green));
             b->SetBorderColor(sc(green));
         } else {
@@ -885,7 +885,7 @@ wxWindow* FilamentSelectDialog::make_spool_row(wxWindow* parent, const FilamentS
         slot_lbl->SetMinSize(wxSize(badge_col_w, -1));
         h->Add(slot_lbl, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, badge_margin);
     } else if (is_recent && !dimmed) {
-        const wxColour green(0, 174, 66);
+        const wxColour green(30, 110, 240);
         auto* badge = new Button(row, _L("Recently used"));
         badge->SetFont(Label::Body_12);
         badge->SetCornerRadius(FromDIP(6));

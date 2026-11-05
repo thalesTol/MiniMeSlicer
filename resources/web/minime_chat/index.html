@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude chat</title>
+<link rel="stylesheet" href="chat.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <img class="logo" src="../../images/BambuStudio_128px.png" alt="">
+    <div class="title">
+      <div class="name">Claude</div>
+      <div class="status" id="status" role="status" aria-live="polite">Starting…</div>
+    </div>
+    <div class="actions">
+      <button class="icon" id="btn-new" title="New chat" aria-label="New chat"></button>
+      <button class="icon" id="btn-history" title="Earlier chats" aria-label="Earlier chats"></button>
+      <button class="icon" id="btn-menu" title="Options" aria-label="Options" aria-haspopup="true" aria-expanded="false"></button>
+      <button class="icon" id="btn-close" title="Close the chat (Ctrl+Shift+J)" aria-label="Close the chat"></button>
+    </div>
+  </header>
+
+  <div class="menu hidden" id="menu" role="menu">
+    <div class="menu-label">Model</div>
+    <div id="models"></div>
+    <div class="menu-sep"></div>
+    <div class="menu-account" id="account"></div>
+    <button class="menu-item" id="menu-signin" role="menuitem">Sign in again</button>
+  </div>
+
+  <main class="scroll" id="scroll">
+    <div class="empty" id="empty">
+      <img class="empty-figure" src="minime.png" alt="">
+      <h1>What should we do with this plate?</h1>
+      <p>Claude can see MiniMe: it can look at the plate, slice, read the supports and change settings. Every change it makes can be undone with Ctrl+Z.</p>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+    <div class="messages" id="messages"></div>
+  </main>
+
+  <section class="sheet hidden" id="history" aria-label="Earlier chats">
+    <div class="sheet-head">
+      <button class="icon" id="history-back" aria-label="Back" title="Back"></button>
+      <div class="sheet-title">Earlier chats</div>
+    </div>
+    <div class="sheet-body" id="history-body"></div>
+  </section>
+
+  <section class="sheet hidden" id="gate" aria-live="polite">
+    <button class="icon gate-close" id="gate-close" title="Close the chat (Ctrl+Shift+J)" aria-label="Close the chat"></button>
+    <div class="gate" id="gate-body"></div>
+  </section>
+
+  <footer class="composer" id="composer">
+    <div class="attachments" id="attachments"></div>
+    <div class="box" id="box">
+      <label for="input" class="sr-only">Message to Claude</label>
+      <textarea id="input" rows="1" placeholder="Ask about this plate…" spellcheck="true"></textarea>
+      <div class="box-row">
+        <button class="icon small" id="btn-attach" title="Attach a picture (or paste one)" aria-label="Attach a picture"></button>
+        <button class="chip" id="model-chip" title="Model" aria-label="Choose the model"></button>
+        <div class="spacer"></div>
+        <button class="send" id="btn-send" title="Send (Enter)" aria-label="Send"></button>
+      </div>
+    </div>
+    <div class="hint">Enter sends · Shift+Enter adds a line · Ctrl+Z in MiniMe undoes Claude's changes</div>
+  </footer>
+</div>
+
+<div class="lightbox hidden" id="lightbox" role="dialog" aria-label="Picture"><img id="lightbox-img" alt=""></div>
+<script src="chat.js"></script>
+</body>
+</html>

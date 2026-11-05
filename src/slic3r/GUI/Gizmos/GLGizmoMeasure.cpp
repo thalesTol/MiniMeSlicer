@@ -2420,7 +2420,7 @@ void GLGizmoMeasure::show_face_face_assembly_common() {
         m_imgui->disabled_begin(!(action.can_set_to_center_coincidence));
         {
             ImGui::PushItemWidth(set_to_center_coincidence_size);
-            ImGui::PushStyleColor(ImGuiCol_Button, m_is_dark_mode ? ImVec4(0 / 255.0, 174 / 255.0, 66 / 255.0, 1.0) : ImVec4(0 / 255.0, 174 / 255.0, 66 / 255.0, 1.0));
+            ImGui::PushStyleColor(ImGuiCol_Button, m_is_dark_mode ? ImVec4(30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1.0) : ImVec4(30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1.0));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
                                   m_is_dark_mode ? ImVec4(50 / 255.0f, 238 / 255.0f, 61 / 255.0f, 1.00f) : ImVec4(50 / 255.0f, 238 / 255.0f, 61 / 255.0f, 1.00f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,

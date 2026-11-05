@@ -39,10 +39,10 @@
 }
 
 .accessory-rule-card:hover {
-  border: 1px solid #50A90B;
+  border: 1px solid #1E6EF0;
 }
 .accessory-rule-card:hover .accessory-rule-title {
-  color: #50A90B;
+  color: #1E6EF0;
 }
 
 .accessory-rule-title {

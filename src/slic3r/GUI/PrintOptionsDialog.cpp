@@ -19,9 +19,9 @@ static const wxColour STATIC_TEXT_EXPLAIN_COL = wxColour(100, 100, 100);
 namespace Slic3r { namespace GUI {
 
 static StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(194, 194, 194), StateColor::Disabled),
-                               std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-                               std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-                               std::pair<wxColour, int>(wxColour(0, 177, 66), StateColor::Normal));
+                               std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+                               std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+                               std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
 
 PrintOptionsDialog::PrintOptionsDialog(wxWindow* parent)
     : DPIDialog(parent, wxID_ANY, _L("Print Options"), wxDefaultPosition, wxDefaultSize, wxCAPTION | wxCLOSE_BOX)
@@ -1741,7 +1741,7 @@ PrinterPartsDialog::PrinterPartsDialog(wxWindow* parent)
 
     m_wiki_link = new Label(single_panel, _L("View wiki"));
     m_wiki_link->SetFont(Label::Body_13);
-    m_wiki_link->SetForegroundColour(wxColour("#00AE42"));
+    m_wiki_link->SetForegroundColour(wxColour("#1E6EF0"));
     m_wiki_link->Bind(wxEVT_ENTER_WINDOW, [this](auto& e) { SetCursor(wxCURSOR_HAND); });
     m_wiki_link->Bind(wxEVT_LEAVE_WINDOW, [this](auto& e) { SetCursor(wxCURSOR_ARROW); });
     m_wiki_link->Bind(wxEVT_LEFT_DOWN, &PrinterPartsDialog::OnWikiClicked, this);
@@ -1857,7 +1857,7 @@ PrinterPartsDialog::PrinterPartsDialog(wxWindow* parent)
 
     multiple_wiki_link = new Label(multiple_panel, _L("View wiki"));
     multiple_wiki_link->SetFont(Label::Body_13);
-    multiple_wiki_link->SetForegroundColour(wxColour("#00AE42"));
+    multiple_wiki_link->SetForegroundColour(wxColour("#1E6EF0"));
     multiple_wiki_link->Bind(wxEVT_ENTER_WINDOW, [this](auto& e) { SetCursor(wxCURSOR_HAND); });
     multiple_wiki_link->Bind(wxEVT_LEAVE_WINDOW, [this](auto& e) { SetCursor(wxCURSOR_ARROW); });
     multiple_wiki_link->Bind(wxEVT_LEFT_DOWN, &PrinterPartsDialog::OnWikiClicked, this);

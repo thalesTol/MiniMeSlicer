@@ -41,7 +41,7 @@ public:
     double   m_radius                     = {7};
     double   m_proportion                 = {0};
     wxColour m_progress_background_colour = {233, 233, 233};
-    wxColour m_progress_colour            = {0, 174, 66};
+    wxColour m_progress_colour            = {30, 110, 240};
     wxColour m_progress_colour_disable    = {255, 111, 0};
     wxString m_disable_text;
     

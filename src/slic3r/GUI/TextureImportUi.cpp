@@ -34,12 +34,12 @@ void texture_import_style_primary_button(Button* btn)
         return;
     StateColor ok_bg(
         std::pair<wxColour, int>(texture_import_dark_or(wxColour(0xC2, 0xC2, 0xC2), wxColour(0x5A, 0x5A, 0x60)), StateColor::Disabled),
-        std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+        std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
     StateColor ok_bd(
         std::pair<wxColour, int>(texture_import_dark_or(wxColour(0xC2, 0xC2, 0xC2), wxColour(0x5A, 0x5A, 0x60)), StateColor::Disabled),
-        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
     StateColor ok_text(
         std::pair<wxColour, int>(texture_import_dark_or(wxColour(0xFF, 0xFF, 0xFE), wxColour(0x9A, 0x9A, 0x9E)), StateColor::Disabled),
         std::pair<wxColour, int>(wxColour("#FFFFFE"), StateColor::Normal));

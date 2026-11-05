@@ -15,11 +15,11 @@
 namespace Slic3r { namespace GUI {
 
 static const wxColour BgNormalColor  = wxColour("#FFFFFF");
-static const wxColour BgSelectColor  = wxColour("#EBF9F0");
+static const wxColour BgSelectColor  = wxColour("#EBF2FE");
 static const wxColour BgDisableColor = wxColour("#CECECE");
 
 static const wxColour BorderNormalColor   = wxColour("#CECECE");
-static const wxColour BorderSelectedColor = wxColour("#00AE42");
+static const wxColour BorderSelectedColor = wxColour("#1E6EF0");
 static const wxColour BorderDisableColor  = wxColour("#EEEEEE");
 
 static const wxColour TextNormalBlackColor = wxColour("#262E30");
@@ -99,9 +99,9 @@ PurgeModeDialog::PurgeModeDialog(wxWindow *parent, PurgeModeDialogType dialog_ty
     btn_sizer->AddStretchSpacer();
 
     StateColor ok_btn_bg(
-        std::pair<wxColour, int>(wxColour("#1B8844"), StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour("#3DCB73"), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour("#00AE42"), StateColor::Normal)
+        std::pair<wxColour, int>(wxColour("#1656C8"), StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour("#4A8DF6"), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour("#1E6EF0"), StateColor::Normal)
     );
     StateColor ok_btn_text(
         std::pair<wxColour, int>(wxColour("#FFFFFE"), StateColor::Normal)
@@ -123,7 +123,7 @@ PurgeModeDialog::PurgeModeDialog(wxWindow *parent, PurgeModeDialogType dialog_ty
     ok_btn->SetCornerRadius(FromDIP(12));
     ok_btn->SetBackgroundColor(ok_btn_bg);
     ok_btn->SetFont(Label::Body_12);
-    ok_btn->SetBorderColor(wxColour("#00AE42"));
+    ok_btn->SetBorderColor(wxColour("#1E6EF0"));
     ok_btn->SetTextColor(ok_btn_text);
     ok_btn->SetId(wxID_OK);
 

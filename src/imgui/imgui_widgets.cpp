@@ -130,7 +130,7 @@ static bool             InputTextFilterCharacter(unsigned int* p_char, ImGuiInpu
 static int              InputTextCalcTextLenAndLineCount(const char* text_begin, const char** out_text_end);
 static ImVec2           InputTextCalcTextSizeW(const ImWchar* text_begin, const ImWchar* text_end, const ImWchar** remaining = NULL, ImVec2* out_offset = NULL, bool stop_on_new_line = false);
 
-const ImVec4 IMGUI_COL_BAMBUSTUDIO = {0.0f, 174.f / 255.0f, 66.0f / 255, 1.0f};
+const ImVec4 IMGUI_COL_BAMBUSTUDIO = {30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1.0f};
 const ImVec4 IMGUI_COL_WHITE       = {1.0f, 1.0f, 1.0f, 1.0f};
 
 //-------------------------------------------------------------------------
@@ -3083,9 +3083,9 @@ bool ImGui::DragFloat(const char* label, float* v, float v_speed, float v_min, f
 
 bool ImGui::BBLDragFloat(const char *label, float *v, float v_speed, float v_min, float v_max, const char *format, ImGuiSliderFlags flags)
 {
-    ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.00f, 0.68f, 0.26f, 0.00f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.00f, 0.68f, 0.26f, 0.00f));
+    ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.118f, 0.431f, 0.941f, 0.00f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.118f, 0.431f, 0.941f, 0.00f));
     bool bbl_drag_scalar = BBLDragScalar(label, ImGuiDataType_Float, v, v_speed, &v_min, &v_max, format, flags);
     if (v_max > v_min + 0.001) {
         *v = std::clamp(*v, v_min, v_max);
@@ -4466,7 +4466,7 @@ bool ImGui::InputDouble(const char* label, double* v, double step, double step_f
 
 bool ImGui::BBLInputDouble(const char *label, double *v, double step, double step_fast, const char *format, ImGuiInputTextFlags flags, bool support_numerical_operation)
 {
-    ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
     flags |= ImGuiInputTextFlags_CharsScientific;
     bool bbl_input_scalar = BBLInputScalar(label, ImGuiDataType_Double, (void *) v, (void *) (step > 0.0 ? &step : NULL), (void *) (step_fast > 0.0 ? &step_fast : NULL), format,
                                            flags, support_numerical_operation);

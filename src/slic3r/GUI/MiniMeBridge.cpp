@@ -58,6 +58,8 @@ struct ToolError : std::runtime_error
 
 std::atomic_bool s_stop{false};
 std::atomic_bool s_running{false};
+std::atomic_int  s_port{0};
+std::atomic_bool s_chat_needs{false};
 std::thread      s_thread;
 std::mutex       s_status_mutex;
 std::string      s_status{"off"};
@@ -1345,31 +1347,41 @@ void serve(tcp::socket &socket)
     socket.shutdown(tcp::socket::shutdown_both, ec);
 }
 
-void run_server(int port)
+void run_server(int first_port, int tries)
 {
     boost::asio::io_context io;
     tcp::acceptor           acceptor(io);
     boost::system::error_code ec;
-    const tcp::endpoint     ep(boost::asio::ip::make_address("127.0.0.1"), (unsigned short) port);
-    acceptor.open(ep.protocol(), ec);
+    int port = first_port;
+    for (int i = 0; i < std::max(1, tries); ++i) {
+        port = first_port + i;
+        ec.clear();
+        if (acceptor.is_open())
+            acceptor.close(ec);
+        const tcp::endpoint ep(boost::asio::ip::make_address("127.0.0.1"), (unsigned short) port);
+        acceptor.open(ep.protocol(), ec);
 #ifdef _WIN32
-    if (!ec) {
-        BOOL exclusive = TRUE;
-        ::setsockopt(acceptor.native_handle(), SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char *>(&exclusive), sizeof(exclusive));
-    }
+        if (!ec) {
+            BOOL exclusive = TRUE;
+            ::setsockopt(acceptor.native_handle(), SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char *>(&exclusive), sizeof(exclusive));
+        }
 #endif
-    if (!ec)
-        acceptor.bind(ep, ec);
-    if (!ec)
-        acceptor.listen(8, ec);
-    if (!ec)
-        acceptor.non_blocking(true, ec);
+        if (!ec)
+            acceptor.bind(ep, ec);
+        if (!ec)
+            acceptor.listen(8, ec);
+        if (!ec)
+            acceptor.non_blocking(true, ec);
+        if (!ec)
+            break;
+    }
     if (ec) {
         BOOST_LOG_TRIVIAL(warning) << "Claude bridge: cannot listen on 127.0.0.1:" << port << ": " << ec.message();
         set_status("cannot use port " + std::to_string(port) + " (" + ec.message() + "); another MiniMe may have it");
         s_running = false;
         return;
     }
+    s_port = port;
     BOOST_LOG_TRIVIAL(info) << "Claude bridge: listening on http://127.0.0.1:" << port << "/mcp";
     set_status("on: http://127.0.0.1:" + std::to_string(port) + "/mcp");
     while (!s_stop) {
@@ -1387,13 +1399,14 @@ void run_server(int port)
         }
     }
     acceptor.close(ec);
+    s_port = 0;
     set_status("off");
     s_running = false;
 }
 
 } // namespace
 
-void ClaudeBridge::start(int port)
+void ClaudeBridge::start(int port, int tries)
 {
     if (s_running)
         return;
@@ -1402,7 +1415,7 @@ void ClaudeBridge::start(int port)
     s_stop    = false;
     s_running = true;
     set_status("starting");
-    s_thread = std::thread([port] { run_server(port); });
+    s_thread = std::thread([port, tries] { run_server(port, tries); });
 }
 
 void ClaudeBridge::stop()
@@ -1416,6 +1429,14 @@ void ClaudeBridge::stop()
 
 bool ClaudeBridge::running() { return s_running; }
 
+int ClaudeBridge::port() { return s_port; }
+
+void ClaudeBridge::set_needed_by_chat(bool needed)
+{
+    s_chat_needs = needed;
+    apply_preference();
+}
+
 std::string ClaudeBridge::status()
 {
     std::lock_guard<std::mutex> lock(s_status_mutex);
@@ -1425,7 +1446,10 @@ std::string ClaudeBridge::status()
 void ClaudeBridge::apply_preference()
 {
     AppConfig *config = wxGetApp().app_config;
-    if (config != nullptr && config->get_bool(CONFIG_KEY))
+    if (s_chat_needs)
+        // the chat finds a free port itself; an external Claude uses the default one
+        start(DEFAULT_PORT, 10);
+    else if (config != nullptr && config->get_bool(CONFIG_KEY))
         start();
     else
         stop();

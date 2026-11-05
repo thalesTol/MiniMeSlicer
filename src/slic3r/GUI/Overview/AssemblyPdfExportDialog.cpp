@@ -57,11 +57,11 @@ AssemblyPdfExportDialog::AssemblyPdfExportDialog(wxWindow *parent, const Assembl
 
     // Disabled palette mirrors the AMS_CONTROL_DISABLE_* tokens used elsewhere
     StateColor ok_btn_bg(std::pair<wxColour, int>(wxColour(206, 206, 206), StateColor::Disabled),
-                         std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-                         std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-                         std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+                         std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+                         std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+                         std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
     StateColor ok_btn_bd(std::pair<wxColour, int>(wxColour(206, 206, 206), StateColor::Disabled),
-                         std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+                         std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
     StateColor ok_btn_text(std::pair<wxColour, int>(wxColour(128, 128, 128), StateColor::Disabled),
                            std::pair<wxColour, int>(wxColour(255, 255, 254), StateColor::Normal));
     StateColor cancel_btn_bg(std::pair<wxColour, int>(wxColour(206, 206, 206), StateColor::Pressed),

@@ -3,9 +3,9 @@
 
 namespace Slic3r { namespace GUI {
 
-const StateColor btn_bg_green_in_plate_swap(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-                        std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
-                        std::pair<wxColour, int>(wxColour(0, 174, 66), StateColor::Normal));
+const StateColor btn_bg_green_in_plate_swap(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+                        std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
+                        std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
 const StateColor btn_bg_disable_bg_in_plate_swap(std::pair<wxColour, int>(wxColour(205, 201, 201), StateColor::Pressed),
                                    std::pair<wxColour, int>(wxColour(205, 201, 201), StateColor::Hovered),
                                    std::pair<wxColour, int>(wxColour(205, 201, 201), StateColor::Normal));

@@ -6,9 +6,9 @@ static bool gDarkMode = false;
 static bool operator<(wxColour const &l, wxColour const &r) { return l.GetRGBA() < r.GetRGBA(); }
 
 static std::map<wxColour, wxColour> gDarkColors{
-    {ThemeColor::BrandGreen,  "#21A452"},/*green*/
-    {ThemeColor::BrandGreenPressed, "#1C8A46"},
-    {ThemeColor::BrandGreenHovered, "#37B865"},
+    {ThemeColor::BrandGreen,  "#2E78E8"},/*MiniMe blue*/
+    {ThemeColor::BrandGreenPressed, "#1A5CC0"},
+    {ThemeColor::BrandGreenHovered, "#4A8BEE"},
     // {"#1F8EEA", "#2778D2"},/*blue*/ -- dead, only used by disabled Notebook.cpp:80 OnPaint
     {ThemeColor::Warning,     "#D15B00"},
     {ThemeColor::Danger,      "#BB2A3A"},/*red*/
@@ -27,7 +27,6 @@ static std::map<wxColour, wxColour> gDarkColors{
     {ThemeColor::Grey250,     "#36363B"},
     {"#3B4446", "#2D2D30"},
     {"#CECECE", "#54545B"},
-    {"#DBFDD5", "#3B3B40"},
     {"#000000", "#FFFFFE"},
     {"#F4F4F4", "#36363D"},
     {"#F7F7F7", "#333337"},
@@ -41,12 +40,12 @@ static std::map<wxColour, wxColour> gDarkColors{
     {"#363636", "#B2B3B5"},
     {"#F0F0F1", "#404040"},
     {"#9E9E9E", "#53545A"},
-    {"#D7E8DE", "#1F2B27"},
+    {"#D5E2F7", "#1F2A3D"},
     {"#2B3436", "#808080"},
     {"#ABABAB", "#ABABAB"},
     {"#D9D9D9", "#2D2D32"},
-    {"#EBF9F0", "#293F34"},
-    {"#DBFDE7", "#1F3529"}
+    {"#EBF2FE", "#233350"},
+    {"#DDEAFF", "#1E2E4A"} /* light blue tint (was the Bambu green tints DBFDE7 and DBFDD5) */
     //{"#F0F0F0", "#4C4C54"},
 };
 

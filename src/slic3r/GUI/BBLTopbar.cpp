@@ -17,6 +17,11 @@
 #define TOPBAR_ICON_SIZE  18
 #define TOPBAR_TITLE_WIDTH  300
 
+// MiniMe title bar: deep navy, so MiniMe never looks like Bambu Studio's #262E30 bar.
+static const wxColour TOPBAR_BG_COLOUR(15, 27, 51);         // #0F1B33
+static const wxColour TOPBAR_BG_HOVER_COLOUR(31, 50, 89);   // #1F3259
+static const wxColour TOPBAR_BG_PRESSED_COLOUR(8, 15, 30);  // #080F1E
+
 using namespace Slic3r;
 
 enum CUSTOM_ID
@@ -29,6 +34,7 @@ enum CUSTOM_ID
     ID_MODEL_STORE,
     ID_PUBLISH,
     ID_CALIB,
+    ID_CLAUDE_CHAT,
     ID_TOOL_BAR = 3200,
     ID_AMS_NOTEBOOK,
 };
@@ -72,7 +78,8 @@ void BBLTopbarArt::DrawLabel(wxDC& dc, wxWindow* wnd, const wxAuiToolBarItem& it
 
 void BBLTopbarArt::DrawBackground(wxDC& dc, wxWindow* wnd, const wxRect& rect)
 {
-    dc.SetBrush(wxBrush(wxColour(38, 46, 48)));
+    dc.SetPen(wxPen(TOPBAR_BG_COLOUR));
+    dc.SetBrush(wxBrush(TOPBAR_BG_COLOUR));
     wxRect clipRect = rect;
     clipRect.y -= 8;
     clipRect.height += 8;
@@ -134,19 +141,19 @@ void BBLTopbarArt::DrawButton(wxDC& dc, wxWindow* wnd, const wxAuiToolBarItem& i
     {
         if (item.GetState() & wxAUI_BUTTON_STATE_PRESSED)
         {
-            dc.SetPen(wxPen(m_highlightColour));
-            dc.SetBrush(wxBrush(m_highlightColour.ChangeLightness(20)));
+            dc.SetPen(wxPen(TOPBAR_BG_PRESSED_COLOUR));
+            dc.SetBrush(wxBrush(TOPBAR_BG_PRESSED_COLOUR));
             dc.DrawRectangle(rect);
         }
         else if ((item.GetState() & wxAUI_BUTTON_STATE_HOVER) || item.IsSticky())
         {
-            dc.SetPen(wxPen(m_highlightColour));
-            dc.SetBrush(wxBrush(m_highlightColour.ChangeLightness(40)));
+            dc.SetPen(wxPen(TOPBAR_BG_HOVER_COLOUR));
+            dc.SetBrush(wxBrush(TOPBAR_BG_HOVER_COLOUR));
 
             // draw an even lighter background for checked item hovers (since
             // the hover background is the same color as the check background)
             if (item.GetState() & wxAUI_BUTTON_STATE_CHECKED)
-                dc.SetBrush(wxBrush(m_highlightColour.ChangeLightness(50)));
+                dc.SetBrush(wxBrush(TOPBAR_BG_HOVER_COLOUR.ChangeLightness(115)));
 
             dc.DrawRectangle(rect);
         }
@@ -154,8 +161,8 @@ void BBLTopbarArt::DrawButton(wxDC& dc, wxWindow* wnd, const wxAuiToolBarItem& i
         {
             // it's important to put this code in an else statement after the
             // hover, otherwise hovers won't draw properly for checked items
-            dc.SetPen(wxPen(m_highlightColour));
-            dc.SetBrush(wxBrush(m_highlightColour.ChangeLightness(40)));
+            dc.SetPen(wxPen(TOPBAR_BG_HOVER_COLOUR));
+            dc.SetBrush(wxBrush(TOPBAR_BG_HOVER_COLOUR));
             dc.DrawRectangle(rect);
         }
     }
@@ -269,6 +276,12 @@ void BBLTopbar::Init(wxFrame* parent)
     this->AddSpacer(FromDIP(10));
     this->AddStretchSpacer(1);
 
+    // SliceOfMe: opens and closes the Claude chat at the right
+    wxBitmap chat_bitmap = create_scaled_bitmap("topbar_claude", nullptr, TOPBAR_ICON_SIZE);
+    m_chat_item          = this->AddTool(ID_CLAUDE_CHAT, _L("Claude"), chat_bitmap, wxEmptyString, wxITEM_CHECK);
+    m_chat_item->SetShortHelp(_L("Talk with Claude about this plate") + " (" + ctrl + "Shift+J)");
+    this->AddSpacer(FromDIP(10));
+
     m_publish_bitmap = create_scaled_bitmap("topbar_publish", nullptr, TOPBAR_ICON_SIZE);
     m_publish_item = this->AddTool(ID_PUBLISH, "", m_publish_bitmap);
     m_publish_disable_bitmap = create_scaled_bitmap("topbar_publish_disable", nullptr, TOPBAR_ICON_SIZE);
@@ -313,6 +326,10 @@ void BBLTopbar::Init(wxFrame* parent)
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnFileToolItem, this, ID_TOP_FILE_MENU);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnDropdownToolItem, this, ID_TOP_DROPDOWN_MENU);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnCalibToolItem, this, ID_CALIB);
+    this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, [this](wxAuiToolBarEvent &) {
+        if (MainFrame *frame = dynamic_cast<MainFrame *>(m_frame))
+            frame->toggle_chat();
+    }, ID_CLAUDE_CHAT);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnIconize, this, wxID_ICONIZE_FRAME);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnFullScreen, this, wxID_MAXIMIZE_FRAME);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnCloseFrame, this, wxID_CLOSE_FRAME);
@@ -339,6 +356,14 @@ void BBLTopbar::OnOpenProject(wxAuiToolBarEvent& event)
     MainFrame* main_frame = dynamic_cast<MainFrame*>(m_frame);
     Plater* plater = main_frame->plater();
     plater->load_project();
+}
+
+void BBLTopbar::update_chat_button(bool open)
+{
+    if (m_chat_item == nullptr)
+        return;
+    ToggleTool(ID_CLAUDE_CHAT, open);
+    Refresh();
 }
 
 void BBLTopbar::show_publish_button(bool show)

@@ -774,8 +774,8 @@ namespace Slic3r
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 10.0 * m_scale));
                 ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(1.0f, 1.0f, 1.0f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.00f, 0.68f, 0.26f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.00f, 0.68f, 0.26f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.118f, 0.431f, 0.941f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.118f, 0.431f, 0.941f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ImVec4(0.42f, 0.42f, 0.42f, 1.00f));
                 ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ImVec4(0.93f, 0.93f, 0.93f, 1.00f));
                 ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, ImVec4(0.93f, 0.93f, 0.93f, 1.00f));
@@ -1435,8 +1435,8 @@ namespace Slic3r
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
                 ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(1.0f, 1.0f, 1.0f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.00f, 0.68f, 0.26f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.00f, 0.68f, 0.26f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.118f, 0.431f, 0.941f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.118f, 0.431f, 0.941f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ImVec4(0.42f, 0.42f, 0.42f, 1.00f));
                 ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ImVec4(0.93f, 0.93f, 0.93f, 1.00f));
                 ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, ImVec4(0.93f, 0.93f, 0.93f, 1.00f));
@@ -1515,7 +1515,7 @@ namespace Slic3r
                             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0 * m_scale, 0.0));
                             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(1.00f, 0.68f, 0.26f, 0.0f));
                             ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(1.00f, 0.68f, 0.26f, 0.0f));
-                            ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+                            ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
                             float max_height = 0.f;
                             for (auto column_offset : columns_offsets) {
                                 if (ImGui::CalcTextSize(column_offset.first.c_str()).y > max_height)
@@ -1529,7 +1529,7 @@ namespace Slic3r
                             if (checkbox) {
                                 ImGui::SameLine(checkbox_offset);
                                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0, 0.0));
-                                ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+                                ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
                                 ImGui::Checkbox(("##" + columns_offsets[0].first).c_str(), &visible);
                                 ImGui::PopStyleColor(1);
                                 ImGui::PopStyleVar(1);
@@ -1731,8 +1731,8 @@ namespace Slic3r
                 else
                     btn_name = ImGui::FoldButtonIcon + boost::nowide::widen(std::string(""));
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.68f, 0.26f, 1.00f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 0.68f, 0.26f, 0.78f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.118f, 0.431f, 0.941f, 0.78f));
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
                 float button_width = ImGui::CalcTextSize(into_u8(btn_name).c_str()).x;
                 ImGui::SetCursorPosY(8.f);
@@ -2283,7 +2283,7 @@ namespace Slic3r
 
                         // Render as hyperlink with green color and underline
                         std::string label = _u8L("View Summary");
-                        ImColor HyperColor = ImColor(0, 174, 66, 255).Value;
+                        ImColor HyperColor = ImColor(30, 110, 240, 255).Value;
                         ImGui::PushStyleColor(ImGuiCol_Text, HyperColor.Value);
                         imgui.text(label.c_str());
                         ImGui::PopStyleColor();
@@ -2763,7 +2763,7 @@ namespace Slic3r
                 ImGuiWrapper& imgui = *wxGetApp().imgui();
                 auto link_text = [&](const std::string& label) {
                     ImVec2 wiki_part_size = ImGui::CalcTextSize(label.c_str());
-                    ImColor HyperColor = ImColor(0, 174, 66, 255).Value;
+                    ImColor HyperColor = ImColor(30, 110, 240, 255).Value;
                     ImGui::PushStyleColor(ImGuiCol_Text, HyperColor.Value);
                     imgui.text(label.c_str());
                     ImGui::PopStyleColor();
@@ -2786,7 +2786,7 @@ namespace Slic3r
                     };
                 auto link_text_set_to_optional = [&](const std::string& label) {
                     ImVec2 wiki_part_size = ImGui::CalcTextSize(label.c_str());
-                    ImColor HyperColor = ImColor(0, 174, 66, 255).Value;
+                    ImColor HyperColor = ImColor(30, 110, 240, 255).Value;
                     ImGui::PushStyleColor(ImGuiCol_Text, HyperColor.Value);
                     imgui.text(label.c_str());
                     ImGui::PopStyleColor();
@@ -2812,7 +2812,7 @@ namespace Slic3r
                     };
                 auto link_filament_group_wiki = [&](const std::string& label) {
                     ImVec2 wiki_part_size = ImGui::CalcTextSize(label.c_str());
-                    ImColor HyperColor = ImColor(0, 174, 66, 255).Value;
+                    ImColor HyperColor = ImColor(30, 110, 240, 255).Value;
                     ImGui::PushStyleColor(ImGuiCol_Text, HyperColor.Value);
                     imgui.text(label.c_str());
                     ImGui::PopStyleColor();
@@ -3196,9 +3196,9 @@ namespace Slic3r
                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
                 ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
                 ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.0f, 0.0f, 0.0f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.00f, 0.68f, 0.26f, 0.0f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.00f, 0.68f, 0.26f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.118f, 0.431f, 0.941f, 0.0f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.118f, 0.431f, 0.941f, 1.0f));
             }
             void BaseRenderer::pop_combo_style()
             {
@@ -3448,8 +3448,8 @@ namespace Slic3r
                     }
                     return ret;
                 };
-                static const ImVec4 LINE_NUMBER_COLOR = { 0, 174.0f / 255.0f, 66.0f / 255.0f, 1.0f };
-                static const ImVec4 SELECTION_RECT_COLOR = { 0, 174.0f / 255.0f, 66.0f / 255.0f, 1.0f };
+                static const ImVec4 LINE_NUMBER_COLOR = { 30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1.0f };
+                static const ImVec4 SELECTION_RECT_COLOR = { 30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f, 1.0f };
                 static const ImVec4 COMMAND_COLOR = m_is_dark ? ImVec4(240.0f / 255.0f, 240.0f / 255.0f, 240.0f / 255.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
                 static const ImVec4 PARAMETERS_COLOR = m_is_dark ? ImVec4(179.0f / 255.0f, 179.0f / 255.0f, 179.0f / 255.0f, 1.0f) : ImVec4(206.0f / 255.0f, 206.0f / 255.0f, 206.0f / 255.0f, 1.0f);
                 static const ImVec4 COMMENT_COLOR = m_is_dark ? ImVec4(129.0f / 255.0f, 129.0f / 255.0f, 129.0f / 255.0f, 1.0f) : ImVec4(172.0f / 255.0f, 172.0f / 255.0f, 172.0f / 255.0f, 1.0f);

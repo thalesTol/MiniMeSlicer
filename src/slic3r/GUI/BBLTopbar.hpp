@@ -32,6 +32,8 @@ public:
     void OnMenuClose(wxMenuEvent& event);
     void OnOpenProject(wxAuiToolBarEvent& event);
     void show_publish_button(bool show);
+    // SliceOfMe: shows the Claude button pressed while the chat is open
+    void update_chat_button(bool open);
     void OnSaveProject(wxAuiToolBarEvent& event);
     void OnUndo(wxAuiToolBarEvent& event);
     void OnRedo(wxAuiToolBarEvent& event);
@@ -69,6 +71,7 @@ private:
     wxMenu* m_file_menu;
     wxMenu m_calib_menu;
     wxAuiToolBarItem* m_title_item;
+    wxAuiToolBarItem* m_chat_item{nullptr};
     wxAuiToolBarItem* m_account_item;
     wxAuiToolBarItem* m_model_store_item;
 

@@ -598,7 +598,7 @@ void GLGizmoMove3D::change_cs_by_selection() {
 void GLGizmoMove3D::render_selected_bounding_boxes(const BoundingBoxf3 &box)
 {
     const float     CORNER_BOX_LINE_SCALE = 1.0f;
-    const std::array<float, 4> hover_rgba   = {66.f / 255.f, 174.f / 255.f, 0, 1}; // abgr_u32_to_rgba(MeshBooleanConfig::COLOR_HOVER_BORDER);
+    const std::array<float, 4> hover_rgba   = {30.f / 255.f, 110.f / 255.f, 240.f / 255.f, 1}; // abgr_u32_to_rgba(MeshBooleanConfig::COLOR_HOVER_BORDER);
     float            border_color_rgb[3] = {hover_rgba[0], hover_rgba[1], hover_rgba[2]};
 
     Selection &selection = m_parent.get_selection();

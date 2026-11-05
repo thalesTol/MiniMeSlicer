@@ -219,9 +219,9 @@ bool filament_icon_button(int filament_idx, const FilamentIconButtonOpts &opts)
     draw_filament_icon(draw_list, r_min, r_max, filament_idx, opts.fallback_hex_color);
 
     if (opts.selected)
-        draw_list->AddRect(r_min, r_max, IM_COL32(0, 174, 66, 255), 0.f, 0, 2.f);
+        draw_list->AddRect(r_min, r_max, IM_COL32(30, 110, 240, 255), 0.f, 0, 2.f);
     else if (opts.hover_ring && hovered)
-        draw_list->AddRect(r_min, r_max, IM_COL32(0, 174, 66, 160), 0.f, 0, 1.f);
+        draw_list->AddRect(r_min, r_max, IM_COL32(30, 110, 240, 160), 0.f, 0, 1.f);
 
     if (opts.disabled) {
         ImGui::PopStyleVar();

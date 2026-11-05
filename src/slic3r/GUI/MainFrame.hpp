@@ -52,6 +52,8 @@ class MainFrame;
 class ParamsDialog;
 class FilamentGroupPopup;
 class DeviceWebPage;
+class ChatPanel;
+class ChatSash;
 
 enum QuickSlice
 {
@@ -269,6 +271,11 @@ public:
     void update_filament_tab_ui();
 
     void        update_title();
+    // SliceOfMe: the Claude chat docked at the right
+    void        show_chat(bool show);
+    void        toggle_chat() { show_chat(!is_chat_shown()); }
+    bool        is_chat_shown() const;
+    void        resize_chat_to(int sash_x);
     void        set_max_recent_count(int max);
 
     void        show_calibration_button(bool show, bool is_BBL);
@@ -381,6 +388,8 @@ public:
 
     // BBS. Replace title bar and menu bar with top bar.
     BBLTopbar*            m_topbar{ nullptr };
+    ChatPanel*            m_chat{ nullptr };
+    ChatSash*             m_chat_sash{ nullptr };
     PrintHostQueueDialog* printhost_queue_dlg() { return m_printhost_queue_dlg; }
     Plater*               m_plater { nullptr };
     //BBS: GUI refactor

@@ -437,6 +437,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/HttpServer.cpp
     GUI/MiniMeBridge.hpp
     GUI/MiniMeBridge.cpp
+    GUI/MiniMeChat.hpp
+    GUI/MiniMeChat.cpp
     Config/Snapshot.cpp
     Config/Snapshot.hpp
     Config/Version.cpp

@@ -298,19 +298,19 @@ AboutDialog::AboutDialog()
         version_font.SetPointSize(FromDIP(16));
         version->SetFont(version_font);
         version->SetForegroundColour(wxColour("#FFFFFD"));
-        version->SetBackgroundColour(wxColour("#00AF42"));
+        version->SetBackgroundColour(wxColour("#080D17"));
         vesizer->Add(version, 0, wxALL | wxALIGN_CENTER_HORIZONTAL, FromDIP(5));
 #if BBL_INTERNAL_TESTING
         wxString plugin_version = wxString::Format("Plugin Version: %s", wxGetApp().getAgent() ? wxGetApp().getAgent()->get_version() : "");
         wxStaticText *plugin_version_text = new wxStaticText(this, wxID_ANY, plugin_version, wxDefaultPosition, wxDefaultSize);
         plugin_version_text->SetForegroundColour(wxColour("#FFFFFE"));
-        plugin_version_text->SetBackgroundColour(wxColour("#00AF42"));
+        plugin_version_text->SetBackgroundColour(wxColour("#080D17"));
         vesizer->Add(plugin_version_text, 0, wxALL | wxALIGN_CENTER_HORIZONTAL, FromDIP(5));
 
         wxString build_time = wxString::Format("Build Time: %s", std::string(SLIC3R_BUILD_TIME));
         wxStaticText* build_time_text = new wxStaticText(this, wxID_ANY, build_time, wxDefaultPosition, wxDefaultSize);
         build_time_text->SetForegroundColour(wxColour("#FFFFFE"));
-        build_time_text->SetBackgroundColour(wxColour("#00AF42"));
+        build_time_text->SetBackgroundColour(wxColour("#080D17"));
         vesizer->Add(build_time_text, 0, wxALL | wxALIGN_CENTER_HORIZONTAL, FromDIP(5));
 #endif
         vesizer->Add(0, 0, 1, wxEXPAND, FromDIP(5));

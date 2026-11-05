@@ -111,7 +111,7 @@ void AMSRFIDMaterialView::create()
 
     bool is_zh = (region == "zh");
     wxString wiki_label = is_zh ? wxString::FromUTF8("\xe8\xaf\xa6\xe6\x83\x85\xe6\x9f\xa5\xe7\x9c\x8bwiki") : _L("View wiki for details");
-    wxColour wiki_colour = wxColour("#00AE42");
+    wxColour wiki_colour = wxColour("#1E6EF0");
     auto* wiki_ctrl = new Label(m_panel_kn, wiki_label);
     wiki_ctrl->SetFont(Label::Body_13);
     wiki_ctrl->SetForegroundColour(wiki_colour);
@@ -207,11 +207,11 @@ void AMSRFIDMaterialView::create()
 
     m_button_confirm = new Button(this, _L("Confirm"));
     m_btn_bg_green = StateColor(
-        std::pair<wxColour, int>(wxColour(27,  136, 68),  StateColor::Pressed),
-        std::pair<wxColour, int>(wxColour(61,  203, 115), StateColor::Hovered),
-        std::pair<wxColour, int>(wxColour(0,   174, 66),  StateColor::Normal));
+        std::pair<wxColour, int>(wxColour(22,  86, 200),  StateColor::Pressed),
+        std::pair<wxColour, int>(wxColour(74,  141, 246), StateColor::Hovered),
+        std::pair<wxColour, int>(wxColour(30,   110, 240),  StateColor::Normal));
     m_button_confirm->SetBackgroundColor(m_btn_bg_green);
-    m_button_confirm->SetBorderColor(wxColour(0, 174, 66));
+    m_button_confirm->SetBorderColor(wxColour(30, 110, 240));
     m_button_confirm->SetTextColor(wxColour("#FFFFFF"));
     m_button_confirm->SetMinSize(AMS_MATERIALS_SETTING_BUTTON_SIZE);
     m_button_confirm->SetCornerRadius(FromDIP(12));

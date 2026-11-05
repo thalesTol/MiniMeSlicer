@@ -373,7 +373,7 @@ void SkipPartCanvas::Render()
     };
     // draw unchecked shapes
     // stencil1 => unchecked
-    draw_shape(uncheckd_stencil, psUnCheck, ColorRGB{0, 174 / 255.f, 66 / 255.f});
+    draw_shape(uncheckd_stencil, psUnCheck, ColorRGB{30.0f / 255.0f, 110.0f / 255.0f, 240.0f / 255.0f});
 
     // draw checked shapes
     // stencil2 => checked

@@ -33,7 +33,7 @@ namespace Slic3r { namespace GUI {
 #define STOP_SIZE      wxSize(FromDIP(28), FromDIP(28))
 #define PAGE_SIZE      wxSize(FromDIP(520), FromDIP(330))
 #define PADDING        FromDIP(16)
-#define BRAND_GREEN    wxColour(0, 174, 66)
+#define BRAND_GREEN    wxColour(30, 110, 240)
 #define TEXT_GREY      wxColour("#6B6B6B")
 
 namespace {
@@ -180,8 +180,8 @@ FilamentLookDialog::FilamentLookDialog(wxWindow *parent, const wxString &fila_id
     main_sizer->Add(m_book, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, PADDING);
 
     // OK / Cancel
-    StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(27, 136, 68), StateColor::Pressed),
-                            std::pair<wxColour, int>(wxColour(61, 203, 115), StateColor::Hovered),
+    StateColor btn_bg_green(std::pair<wxColour, int>(wxColour(22, 86, 200), StateColor::Pressed),
+                            std::pair<wxColour, int>(wxColour(74, 141, 246), StateColor::Hovered),
                             std::pair<wxColour, int>(BRAND_GREEN, StateColor::Normal));
     StateColor btn_bg_white(std::pair<wxColour, int>(wxColour(206, 206, 206), StateColor::Pressed),
                             std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Hovered),

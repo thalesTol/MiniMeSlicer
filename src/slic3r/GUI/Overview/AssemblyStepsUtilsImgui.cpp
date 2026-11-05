@@ -1042,10 +1042,10 @@ void AssemblyStepsUtils::render_assemble_play_bar(float canvas_w, float bottom_y
         ImGui::PushStyleColor(ImGuiCol_Text, text_col);
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.00f, 0.00f, 0.00f, 0.00f));
         ImGui::PushStyleColor(ImGuiCol_PopupBg, popup_bg);
-        ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.00f, 0.68f, 0.26f, 0.50f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.00f, 0.68f, 0.26f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_BorderActive, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.118f, 0.431f, 0.941f, 0.50f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.118f, 0.431f, 0.941f, 1.00f));
         // Arrow button must share the same dark mask as the text frame (not transparent).
         ImGui::PushStyleColor(ImGuiCol_Button, frame_bg);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, frame_hover);
@@ -1216,7 +1216,7 @@ void AssemblyStepsUtils::draw_arrow_svg_icon(int idx, const ImVec2 &center, cons
     ImDrawList *dl = ImGui::GetBackgroundDrawList();
     dl->AddRectFilled(box_min, box_max, IM_COL32(255, 255, 255, 255), rounding);
     dl->AddRect(box_min, box_max,
-                selected ? IM_COL32(25, 166, 77, 242) : IM_COL32(178, 178, 178, 255),
+                selected ? IM_COL32(30, 110, 240, 242) : IM_COL32(178, 178, 178, 255),
                 rounding, 0, 1.0f);
     if (tex) {
         const ImVec2 img_min(center.x - icon_sz * 0.5f, center.y - icon_sz * 0.5f);
@@ -1435,7 +1435,7 @@ void AssemblyStepsUtils::render_part_number_labels_on_canvas(
         // Visible affordance: small green dot at the start so users discover
         // the handle. Drawn on the foreground list so it floats above the
         // line stroke that render_assembly_notes_on_canvas batched earlier.
-        fg->AddCircleFilled(start_screen, handle_sz * 0.6f, IM_COL32(0, 200, 80, 200));
+        fg->AddCircleFilled(start_screen, handle_sz * 0.6f, IM_COL32(58, 132, 245, 200));
     }
 
     // Inline rename field, rendered once and last so it stays on top of every
@@ -1873,7 +1873,7 @@ void AssemblyStepsUtils::render_assembly_notes_on_canvas(const Vec2d &object_scr
     };
 
     auto draw_note_resize_handle = [&](const ImVec2 &center, float handle_size = -1.0f,
-                                       ImU32 fill_col = IM_COL32(0, 200, 80, 230),
+                                       ImU32 fill_col = IM_COL32(58, 132, 245, 230),
                                        ImU32 border_col = IM_COL32(80, 80, 80, 230)) {
         float sz = handle_size > 0.0f ? handle_size : resize_sz;
         ImVec2 min(center.x - sz * 0.5f, center.y - sz * 0.5f);
@@ -2066,7 +2066,7 @@ void AssemblyStepsUtils::render_assembly_notes_on_canvas(const Vec2d &object_scr
                 ImGui::End();
                 ImGui::PopStyleColor(2);
                 ImGui::PopStyleVar(2);
-                draw_list->AddCircleFilled(arrow_start, handle_sz * 0.6f, IM_COL32(0, 200, 80, 150));
+                draw_list->AddCircleFilled(arrow_start, handle_sz * 0.6f, IM_COL32(58, 132, 245, 150));
             }
         }
 
@@ -2197,7 +2197,7 @@ void AssemblyStepsUtils::render_assembly_notes_on_canvas(const Vec2d &object_scr
                                  ImGui::ColorConvertFloat4ToU32(label_bg), label_rounding);
         if (text_selected)
             draw_list->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                               IM_COL32(25, 166, 77, 242), label_rounding, 0, 1.0f);
+                               IM_COL32(30, 110, 240, 242), label_rounding, 0, 1.0f);
 
         char win_id[64];
         snprintf(win_id, sizeof(win_id), "##text_label_%d", ni);
@@ -2911,7 +2911,7 @@ void AssemblyStepsUtils::render_assembly_notes_on_canvas(const Vec2d &object_scr
             drag_arrow_point("##plain_arrow_end", arrow_end, false);
         }
         if (plain_arrow_selected) {
-            draw_list->AddCircleFilled(arrow_start, handle_sz * 0.6f, IM_COL32(0, 200, 80, 150));
+            draw_list->AddCircleFilled(arrow_start, handle_sz * 0.6f, IM_COL32(58, 132, 245, 150));
             draw_list->AddCircleFilled(arrow_end, handle_sz * 0.6f, IM_COL32(0, 160, 220, 150));
         }
 
@@ -4536,7 +4536,7 @@ AssemblyTreeRenderResult AssemblyStepsUtils::render_assembly_tree_selector(
 
     const ImU32 text_col      = m_is_dark ? IM_COL32(0xE0, 0xE0, 0xE0, 255) : IM_COL32(38, 46, 48, 255);
     const ImU32 sub_text_col  = m_is_dark ? IM_COL32(0x90, 0x90, 0x90, 255) : IM_COL32(144, 144, 144, 255);
-    const ImU32 green_col     = IM_COL32(0, 174, 66, 255);
+    const ImU32 green_col     = IM_COL32(30, 110, 240, 255);
     const ImU32 line_col      = m_is_dark ? IM_COL32(80, 80, 84, 255)  : IM_COL32(209, 213, 216, 255);
     const ImU32 border_col    = m_is_dark ? IM_COL32(90, 90, 94, 255)  : IM_COL32(190, 190, 190, 255);
     const ImU32 separator_col = m_is_dark ? IM_COL32(60, 60, 64, 255)  : IM_COL32(229, 229, 229, 255);
@@ -5479,7 +5479,7 @@ int AssemblyStepsUtils::render_timeline_keyframe(
     const char *label, float label_fs, float sc,
     bool show_delete_badge)
 {
-    const ImU32 brand   = IM_COL32(0, 174, 66, 255);
+    const ImU32 brand   = IM_COL32(30, 110, 240, 255);
     const ImU32 grey200 = m_is_dark ? IM_COL32(50, 50, 54, 255)  : IM_COL32(248, 248, 248, 255);
     const ImU32 grey300 = m_is_dark ? IM_COL32(60, 60, 64, 255)  : IM_COL32(238, 238, 238, 255);
     const ImU32 grey400 = m_is_dark ? IM_COL32(70, 70, 74, 255)  : IM_COL32(206, 206, 206, 255);
@@ -5532,7 +5532,7 @@ int AssemblyStepsUtils::render_timeline_keyframe(
         const ImVec2 slot_max(x + w, y + h);
 
         if (selected) {
-            dl->AddRectFilled(slot_min, slot_max, IM_COL32(44, 173, 0, 38));
+            dl->AddRectFilled(slot_min, slot_max, IM_COL32(30, 110, 240, 38));
             dl->AddRect(slot_min, slot_max, brand, 0, 0, 1.5f * sc);
         } else {
             dl->AddRectFilled(slot_min, slot_max, grey200);
@@ -5626,7 +5626,7 @@ bool AssemblyStepsUtils::render_note_tool_btn(
 {
     const ImU32 white_c = m_is_dark ? IM_COL32(45, 45, 49, 255) : IM_COL32(255, 255, 255, 255);
     const ImU32 grey400 = m_is_dark ? IM_COL32(70, 70, 74, 255) : IM_COL32(206, 206, 206, 255);
-    const ImU32 brand   = IM_COL32(0, 174, 66, 255);
+    const ImU32 brand   = IM_COL32(30, 110, 240, 255);
     const float rounding = 4.0f * sc;
 
     const ImVec2 bmin(x, y);
@@ -5693,7 +5693,7 @@ bool AssemblyStepsUtils::render_note_color_control(ImDrawList *dl, float x, floa
         if (color_selected == i)
             dl->AddRect(ImVec2(smin.x - 2.4f * sc, smin.y - 2.4f * sc),
                 ImVec2(smax.x + 2.4f * sc, smax.y + 2.4f * sc),
-                IM_COL32(0, 174, 66, 255), swatch_rounding + 2.4f * sc, 0, 1.8f * sc);
+                IM_COL32(30, 110, 240, 255), swatch_rounding + 2.4f * sc, 0, 1.8f * sc);
 
         ImGui::SetCursorScreenPos(smin);
         ImGui::PushID(item.id);
@@ -5773,7 +5773,7 @@ bool AssemblyStepsUtils::render_note_bg_color_control(ImDrawList *dl, float x, f
         if (m_guide_note_bg_color_selected == i)
             dl->AddRect(ImVec2(smin.x - 2.4f * sc, smin.y - 2.4f * sc),
                 ImVec2(smax.x + 2.4f * sc, smax.y + 2.4f * sc),
-                IM_COL32(0, 174, 66, 255), swatch_rounding + 2.4f * sc, 0, 1.8f * sc);
+                IM_COL32(30, 110, 240, 255), swatch_rounding + 2.4f * sc, 0, 1.8f * sc);
 
         ImGui::SetCursorScreenPos(smin);
         ImGui::PushID(item.id);
@@ -5836,9 +5836,9 @@ bool AssemblyStepsUtils::render_footer_button(const char* id, const std::string&
     const ImU32 dis_border = m_is_dark ? IM_COL32(70, 70, 74, 255)   : IM_COL32(206, 206, 206, 255);
 
     const ImU32 bg = disabled ? dis_bg :
-        (primary ? (hovered ? IM_COL32(0, 190, 74, 255) : IM_COL32(0, 174, 66, 255)) : sec_bg);
+        (primary ? (hovered ? IM_COL32(58, 132, 245, 255) : IM_COL32(30, 110, 240, 255)) : sec_bg);
     const ImU32 border = disabled ? dis_border :
-        (primary ? bg : (hovered ? IM_COL32(0, 174, 66, 255) : sec_border));
+        (primary ? bg : (hovered ? IM_COL32(30, 110, 240, 255) : sec_border));
     const ImU32 text = disabled ? IM_COL32(172, 172, 172, 255) :
         (primary ? IM_COL32(255, 255, 255, 255) : sec_text);
     draw_list->AddRectFilled(pos, ImVec2(pos.x + draw_size.x, pos.y + draw_size.y), bg, draw_size.y * 0.5f);
@@ -5972,7 +5972,7 @@ void AssemblyStepsUtils::render_labels_show_type_menu_popup(const char* popup_id
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
     if (ImGui::BeginPopup(popup_id, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove)) {
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
-        const ImU32 brand = IM_COL32(0, 174, 66, 255);
+        const ImU32 brand = IM_COL32(30, 110, 240, 255);
         for (int i = 0; i < kTypeCount; ++i) {
             ImGui::PushID(i);
             ImVec2 row_pos = ImGui::GetCursorScreenPos();
@@ -6020,7 +6020,7 @@ bool AssemblyStepsUtils::render_checkbox(
 {
     const ImU32 white_c = IM_COL32(255, 255, 255, 255);
     const ImU32 grey400 = IM_COL32(206, 206, 206, 255);
-    const ImU32 brand   = IM_COL32(0, 174, 66, 255);
+    const ImU32 brand   = IM_COL32(30, 110, 240, 255);
     const float rounding = 2.0f * sc;
     // One extra pixel on every stroke so the box reads clearly at small sizes.
     const float stroke_bump = 1.0f * sc;
@@ -6575,7 +6575,7 @@ void AssemblyStepsUtils::render_assembly_guide_panel(float panel_x, float panel_
     const ImU32 grey300    = is_dark ? IM_COL32(60, 60, 64, 255)       : IM_COL32(238, 238, 238, 255);
     const ImU32 grey200    = is_dark ? IM_COL32(50, 50, 54, 255)       : IM_COL32(248, 248, 248, 255);
     const ImU32 white_col  = is_dark ? IM_COL32(55, 55, 59, 255)       : IM_COL32(255, 255, 255, 255);
-    const ImU32 brand_col  = IM_COL32(0, 174, 66, 255);
+    const ImU32 brand_col  = IM_COL32(30, 110, 240, 255);
 
     const float font_sz      = ImGui::GetFontSize();
     const float small_fs     = std::max(font_sz * 0.77f, 10.0f * sc);
