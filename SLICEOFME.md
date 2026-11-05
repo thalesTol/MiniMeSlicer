@@ -17,8 +17,12 @@ Done:
   and `Plater.cpp`; drawn as a rim glow (`glow_term()` in `gouraud.fs`). Not sent to the printer.
 - **Branding**: visible name `SLIC3R_APP_FULL_NAME` = "MiniMe Slicer". `SLIC3R_APP_NAME`/`SLIC3R_APP_KEY` stay
   "BambuStudio" (network plugin, server headers, settings file depend on them).
-  - Logo (a small figure printed under a nozzle): `python tools/branding/make_logo.py` writes the SVGs,
-    `tools/branding/render_logo.ps1` renders the PNG/ICO files with Edge headless. Bambu's file names are kept.
+  - Logo: the user's artwork in `tools/branding/art` (icon + tall poster). `tools/branding/install_artwork.ps1`
+    makes the icons, the About banner, the splash poster and the chat pictures from it (Bambu's file names kept).
+    The first-run wizard uses `resources/web/image/logo.png` and the texts t1/t2/t83/t85 in `resources/web/data/text.js`.
+- **Installer**: `tools/installer/build_installer.ps1` (Inno Setup 6 + VS 2022 C++ runtime DLLs, put next to the exe)
+  makes `dist/MiniMeSlicer-Setup-<version>.exe` from `install_dir`; per-user install by default, English and
+  Brazilian Portuguese. Settings of an installed MiniMe live in `%APPDATA%\MiniMeSlicer`.
   - Colours: Bambu green → MiniMe blue `#1E6EF0`, navy top bar `#0F1B33`, by `python tools/branding/recolor.py`
     (idempotent; filament colour data, profiles and libslic3r stay as they are; see its exclusion lists).
     Run it again after merging upstream.
