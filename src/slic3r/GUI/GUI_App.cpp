@@ -117,6 +117,7 @@
 #include "KBShortcutsDialog.hpp"
 #include "DownloadProgressDialog.hpp"
 #include "HttpServer.hpp"
+#include "MiniMeBridge.hpp"
 
 #include "BitmapCache.hpp"
 #include "Notebook.hpp"
@@ -1186,6 +1187,9 @@ void GUI_App::post_init()
 
 
     wxGetApp().report_consent_common(app_config->get("firstguide", "privacyuse") == "true"? true : false, "studio_improvement_policy_enable", "StudioImprovementPolicy");
+
+    // SliceOfMe: the Claude tool bridge, when switched on in Preferences
+    ClaudeBridge::apply_preference();
 
     /*request helio config*/
     if (app_config->get("helio_enable") == "true") {
@@ -2927,6 +2931,8 @@ bool GUI_App::OnInit()
 
 int GUI_App::OnExit()
 {
+    // SliceOfMe: no more Claude tool calls
+    ClaudeBridge::stop();
     // SliceOfMe: also when the app is closed from outside (another installer, Windows shutting down), let the backup
     // worker finish the object it is writing before anything it uses is destroyed
     Slic3r::stop_backup();

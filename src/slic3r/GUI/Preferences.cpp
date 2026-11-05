@@ -12,6 +12,8 @@
 #include <cassert>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <thread>
 #include <wx/string.h>
 #include <wx/tokenzr.h>
 #include <wx/event.h>
@@ -28,6 +30,7 @@
 #include <wx/sizer.h>
 #include "Gizmos/GLGizmoBase.hpp"
 #include "OpenGLManager.hpp"
+#include "MiniMeBridge.hpp"
 #ifdef __WINDOWS__
 #ifdef _MSW_DARK_MODE
 #include "dark_mode.hpp"
@@ -960,6 +963,17 @@ wxBoxSizer *PreferencesDialog::create_item_checkbox(wxString title, wxWindow *pa
             app_config->save();
         }
 
+        if (param == ClaudeBridge::CONFIG_KEY) {
+            ClaudeBridge::apply_preference();
+            if (checkbox->GetValue()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                MessageDialog(this, from_u8(_u8L("Claude can now use MiniMe through its local tool bridge:") + "\n" + ClaudeBridge::status() + "\n\n" +
+                                            _u8L("Only programs on this computer can reach it. In Claude Code add it once with:") +
+                                            "\nclaude mcp add --transport http minime http://127.0.0.1:13700/mcp"),
+                              _L("Claude bridge"), wxOK | wxICON_INFORMATION).ShowModal();
+            }
+        }
+
         if (param == "staff_pick_switch") {
             bool pbool = app_config->get("staff_pick_switch") == "true";
             wxGetApp().switch_staff_pick(pbool);
@@ -1507,6 +1521,12 @@ wxWindow *PreferencesDialog::create_user_tab()
 #ifdef _WIN32
     auto item_webview_auto_fill = create_item_checkbox(_L("Auto-fill previously logged-in accounts."), scrolled, _L(""), 50, "webview_auto_fill");
 #endif
+    // SliceOfMe
+    auto item_claude_bridge = create_item_checkbox(_L("Let Claude use MiniMe (local tool bridge)"), scrolled,
+                                                   _L("Claude Code (or another MCP client on this computer) can look at the plate, slice, and change objects, "
+                                                      "supports and settings through MiniMe's tools at http://127.0.0.1:13700/mcp. Only this computer can reach it; "
+                                                      "every change is one undo step; it can never print."),
+                                                   50, ClaudeBridge::CONFIG_KEY);
 
     sizer->Add(title_user, wxSizerFlags().Expand().Border(wxTOP, FromDIP(24)));
     sizer->AddSpacer(FromDIP(8));
@@ -1523,6 +1543,7 @@ wxWindow *PreferencesDialog::create_user_tab()
 #ifdef _WIN32
     sizer->Add(wrap_option_row(scrolled, item_webview_auto_fill), flags);
 #endif
+    sizer->Add(wrap_option_row(scrolled, item_claude_bridge), flags);
 
     scrolled->SetSizer(sizer);
     scrolled->FitInside();

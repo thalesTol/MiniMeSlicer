@@ -3110,6 +3110,17 @@ void GLCanvas3D::render(bool only_init)
     }
 
     ogl_manager.unbind_vao();
+    if (m_frame_grab) {
+        FrameGrab grab = std::move(m_frame_grab);
+        m_frame_grab   = nullptr;
+        const Size cnv_size = get_canvas_size();
+        const int  w = cnv_size.get_width(), h = cnv_size.get_height();
+        if (w > 0 && h > 0) {
+            std::vector<uint8_t> rgba(size_t(w) * size_t(h) * 4);
+            ogl_manager.read_pixel(OpenGLManager::s_back_frame, 0, 0, uint32_t(w), uint32_t(h), EPixelFormat::RGBA, EPixelDataType::UByte, rgba.data());
+            grab(w, h, std::move(rgba));
+        }
+    }
     ogl_manager.clear_dirty();
     m_canvas->SwapBuffers();
 

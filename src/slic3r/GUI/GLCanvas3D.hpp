@@ -1279,6 +1279,11 @@ public:
 
     void request_extra_frame() { m_extra_frame_requested = true; }
 
+    // SliceOfMe: hands the next rendered frame over (RGBA, bottom row first), for the Claude tool bridge
+    using FrameGrab = std::function<void(int width, int height, std::vector<uint8_t> &&rgba)>;
+    void grab_next_frame(FrameGrab grab) { m_frame_grab = std::move(grab); }
+    FrameGrab m_frame_grab;
+
     void schedule_extra_frame(int miliseconds);
 
     int get_main_toolbar_item_id(const std::string& name) const;
