@@ -1062,6 +1062,28 @@ void PrintConfigDef::init_common_params()
     def->gui_type = ConfigOptionDef::GUIType::one_string;
     def->set_default_value(new ConfigOptionPointsGroups{});
 
+    // SliceOfMe: painted on the plate with the support painting tool, stored per plate
+    def = this->add("support_plate_block_area", coPointsGroups);
+    def->label = L("Support blocked plate area");
+    def->tooltip = L("Plate areas where tree supports may not start.");
+    def->mode = comDevelop;
+    def->gui_type = ConfigOptionDef::GUIType::one_string;
+    def->set_default_value(new ConfigOptionPointsGroups{});
+
+    def = this->add("support_plate_allow_area", coPointsGroups);
+    def->label = L("Support allowed plate area");
+    def->tooltip = L("When set, tree supports may start on the plate only inside these areas.");
+    def->mode = comDevelop;
+    def->gui_type = ConfigOptionDef::GUIType::one_string;
+    def->set_default_value(new ConfigOptionPointsGroups{});
+
+    def = this->add("support_plate_land_area", coPointsGroups);
+    def->label = L("Supports stand on objects");
+    def->tooltip = L("Tree supports above these plate areas stand on the object below them instead of going to the plate.");
+    def->mode = comDevelop;
+    def->gui_type = ConfigOptionDef::GUIType::one_string;
+    def->set_default_value(new ConfigOptionPointsGroups{});
+
     //BBS: add "bed_exclude_area"
     def = this->add("bed_exclude_area", coPoints);
     def->label = L("Bed exclude area");

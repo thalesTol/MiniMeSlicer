@@ -2299,6 +2299,8 @@ public:
             // BBS
             case coEnums:           { auto opt = new ConfigOptionEnumsGeneric(this->enum_keys_map); archive(*opt); return opt; }
             case coIntsGroups:      { auto opt = new ConfigOptionIntsGroups();      archive(*opt); return opt; }
+            // SliceOfMe: plate support zones live in the plate config, which goes into the undo history
+            case coPointsGroups:    { auto opt = new ConfigOptionPointsGroups();    archive(*opt); return opt; }
 		    default:                throw ConfigurationError(std::string("ConfigOptionDef::load_option_from_archive(): Unknown option type for option ") + this->opt_key);
 		    }
 		}
@@ -2335,6 +2337,7 @@ public:
             // BBS
             case coEnums:           archive(*static_cast<const ConfigOptionEnumsGeneric*>(opt));    break;
             case coIntsGroups:      archive(*static_cast<const ConfigOptionIntsGroups *>(opt));     break;
+            case coPointsGroups:    archive(*static_cast<const ConfigOptionPointsGroups *>(opt));   break;
 		    default:                throw ConfigurationError(std::string("ConfigOptionDef::save_option_to_archive(): Unknown option type for option ") + this->opt_key);
 		    }
 		}

@@ -7,6 +7,7 @@
 // CuraEngine is released under the terms of the AGPLv3 or higher.
 
 #include "TreeModelVolumes.hpp"
+#include "SupportSurroundings.hpp"
 #include "TreeSupportCommon.hpp"
 
 #include "../BuildVolume.hpp"
@@ -127,13 +128,40 @@ TreeModelVolumes::TreeModelVolumes(
         size_t num_raft_layers = m_raft_layers.size();
         size_t num_layers = print_object.layer_count() + num_raft_layers;
         outlines.assign(num_layers, Polygons{});
+        // SliceOfMe: the other objects on the plate are obstacles too, and plate zones keep the feet away
+        const SupportSurroundings surroundings = support_depends_on_surroundings(print_object) ? support_surroundings(print_object) : SupportSurroundings();
         tbb::parallel_for(tbb::blocked_range<size_t>(num_raft_layers, num_layers, std::min<size_t>(1, std::max<size_t>(16, num_layers / (8 * tbb::this_task_arena::max_concurrency())))),
             [&](const tbb::blocked_range<size_t> &range) {
                 for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
                     outlines[layer_idx] = polygons_simplify(to_polygons(print_object.get_layer(layer_idx - num_raft_layers)->lslices), mesh_settings.resolution);
+                    if (const size_t obj_idx = layer_idx - num_raft_layers; obj_idx < surroundings.foreign.size() && !surroundings.foreign[obj_idx].empty())
+                        append(outlines[layer_idx], polygons_simplify(to_polygons(surroundings.foreign[obj_idx]), mesh_settings.resolution));
                     outlines[layer_idx].insert(outlines[layer_idx].end(), machine_borders.begin(), machine_borders.end());
                 }
         });
+        m_floor_forbidden     = to_polygons(surroundings.floor_forbidden);
+        m_floor_forbidden_raw = m_floor_forbidden;
+        // the branches are kept apart by their collision radius, which stops growing at the branch radius; trunks and
+        // the plate foot get thicker: keep their centres that much farther from the zones too
+        if (const coord_t margin = std::max(config.bp_radius, 2 * config.branch_radius) - config.increase_radius_until_radius;
+            margin > 0 && !m_floor_forbidden.empty())
+            m_floor_forbidden = offset(union_ex(m_floor_forbidden), float(margin), ClipperLib::jtRound, scaled<float>(0.05));
+        if (surroundings.has_landing && mesh_settings.support_material_buildplate_only) {
+            m_restrict_placeable = true;
+            m_landing_only.assign(num_layers, Polygons{});
+            for (size_t obj_idx = 0; obj_idx < surroundings.landing.size() && obj_idx + num_raft_layers < num_layers; ++obj_idx)
+                m_landing_only[obj_idx + num_raft_layers] = to_polygons(surroundings.landing[obj_idx]);
+        }
+        if (surroundings.has_forced_landing) {
+            m_forced_landing.assign(num_layers, ExPolygons{});
+            for (size_t obj_idx = 0; obj_idx < surroundings.forced_landing.size() && obj_idx + num_raft_layers < num_layers; ++obj_idx)
+                m_forced_landing[obj_idx + num_raft_layers] = surroundings.forced_landing[obj_idx];
+            m_forced_landing_polys.assign(num_layers, Polygons{});
+            for (size_t i = 0; i < num_layers; ++i)
+                m_forced_landing_polys[i] = to_polygons(m_forced_landing[i]);
+            m_land_floor.assign(num_layers, std::nullopt);
+            m_has_forced_landing = true;
+        }
     }
 #endif
 
@@ -143,6 +171,12 @@ TreeModelVolumes::TreeModelVolumes(
         m_support_rests_on_model |= ! data_pair.first.support_material_buildplate_only;
         m_min_resolution = std::min(m_min_resolution, data_pair.first.resolution);
     }
+    // SliceOfMe: painted support base on other objects
+    m_support_rests_on_model |= m_restrict_placeable || m_has_forced_landing;
+    BOOST_LOG_TRIVIAL(warning) << "SliceOfMe supports: volumes for '" << (print_object.model_object() ? print_object.model_object()->name : std::string())
+                               << "' depends on surroundings " << support_depends_on_surroundings(print_object) << ", floor forbidden polygons "
+                               << m_floor_forbidden.size() << ", forced landing " << m_has_forced_landing << ", restrict placeable " << m_restrict_placeable
+                               << ", rests on model " << m_support_rests_on_model << ", raft layers " << m_raft_layers.size();
 
 
 #if 0
@@ -392,6 +426,75 @@ const Polygons& TreeModelVolumes::getPlaceableAreas(const coord_t orig_radius, L
     return getPlaceableAreas(orig_radius, layer_idx, throw_on_cancel);
 }
 
+const Polygons &TreeModelVolumes::getLandFloor(LayerIndex layer_idx) const
+{
+    static const Polygons empty;
+    if (!m_has_forced_landing || layer_idx <= 0 || size_t(layer_idx) >= m_land_floor.size() || m_forced_landing_polys[layer_idx].empty())
+        return empty;
+    {
+        std::lock_guard<std::mutex> lock(m_land_floor_mutex);
+        if (m_land_floor[layer_idx])
+            return *m_land_floor[layer_idx];
+    }
+    Polygons floor = intersection(getPlaceableAreas(0, layer_idx, {}), m_forced_landing_polys[layer_idx]);
+    std::lock_guard<std::mutex> lock(m_land_floor_mutex);
+    if (!m_land_floor[layer_idx])
+        m_land_floor[layer_idx] = std::move(floor);
+    return *m_land_floor[layer_idx];
+}
+
+const Polygons &TreeModelVolumes::getLandStandable(LayerIndex layer_idx, coord_t radius) const
+{
+    static const Polygons empty;
+    const Polygons &floor = getLandFloor(layer_idx);
+    if (floor.empty() || m_layer_outlines.empty())
+        return empty;
+    const coord_t step = scaled<coord_t>(0.25);
+    radius             = std::max<coord_t>(step, ((radius + step - 1) / step) * step);
+    const auto key     = std::make_pair(layer_idx, radius);
+    {
+        std::lock_guard<std::mutex> lock(m_land_standable_mutex);
+        if (auto it = m_land_standable.find(key); it != m_land_standable.end())
+            return it->second;
+    }
+    const TreeSupportMeshGroupSettings &settings = m_layer_outlines[m_current_outline_idx].first;
+    const std::vector<Polygons>        &outlines = m_layer_outlines[m_current_outline_idx].second;
+    const coord_t layer_height = std::max<coord_t>(1, settings.layer_height);
+    const int     zb           = int(std::round(double(settings.support_bottom_distance) / double(layer_height)));
+    // the layer the branch stands on and, below it, as deep as a 45 degree slope falls over the radius
+    const int     top          = int(layer_idx) - zb - 1;
+    const int     depth        = int(radius / layer_height) + 1;
+    Polygons      solid;
+    if (top >= 0 && size_t(top) < outlines.size()) {
+        BoundingBox box = get_extents(floor);
+        box.offset(radius + scaled<coord_t>(1.));
+        const Polygon clip = box.polygon();
+        for (int j = std::max(0, top - depth); j <= top; ++j)
+            append(solid, intersection(outlines[j], Polygons{clip}));
+    }
+    Polygons stand = solid.empty() ? Polygons() : intersection(floor, offset(union_(solid), -float(radius)));
+    std::lock_guard<std::mutex> lock(m_land_standable_mutex);
+    return m_land_standable.emplace(key, std::move(stand)).first->second;
+}
+
+const Polygons &TreeModelVolumes::getFloorKeepout(coord_t reach) const
+{
+    static const Polygons empty;
+    if (m_floor_forbidden_raw.empty() || reach <= 0)
+        return empty;
+    const coord_t step = scaled<coord_t>(0.25);
+    reach              = ((reach + step - 1) / step) * step;
+    {
+        std::lock_guard<std::mutex> lock(m_floor_keepout_mutex);
+        if (auto it = m_floor_keepout.find(reach); it != m_floor_keepout.end())
+            return it->second;
+    }
+    Polygons grown = offset(union_ex(m_floor_forbidden_raw), float(reach), ClipperLib::jtRound, scaled<float>(0.05));
+    std::lock_guard<std::mutex> lock(m_floor_keepout_mutex);
+    // std::map nodes stay put: the reference stays valid while other reaches are added
+    return m_floor_keepout.emplace(reach, std::move(grown)).first->second;
+}
+
 const Polygons& TreeModelVolumes::getWallRestriction(const coord_t orig_radius, LayerIndex layer_idx, bool min_xy_dist) const
 {
     assert(layer_idx > 0);
@@ -471,11 +574,15 @@ void TreeModelVolumes::calculateCollision(const coord_t radius, const LayerIndex
                 std::max<LayerIndex>(0, data.begin() - z_distance_bottom_layers),
                 std::min<LayerIndex>(outlines.size(), data.end() + z_distance_top_layers));
             tbb::parallel_for(tbb::blocked_range<LayerIndex>(collision_areas_offsetted.begin(), collision_areas_offsetted.end()),
-                [&outlines, &machine_border = std::as_const(m_machine_border), offset_value = radius + xy_distance, &collision_areas_offsetted, &throw_on_cancel]
+                [&outlines, &machine_border = std::as_const(m_machine_border), &floor_forbidden = std::as_const(m_floor_forbidden), offset_value = radius + xy_distance, &collision_areas_offsetted, &throw_on_cancel]
                 (const tbb::blocked_range<LayerIndex> &range) {
                 for (LayerIndex layer_idx = range.begin(); layer_idx != range.end(); ++ layer_idx) {
                     Polygons collision_areas = machine_border;
                     append(collision_areas, outlines[layer_idx]);
+                    // SliceOfMe: the feet keep out of the painted plate zones; the avoidance built on top of this
+                    // makes the branches bend towards another place on the plate
+                    if (layer_idx == 0)
+                        append(collision_areas, floor_forbidden);
                     // jtRound is not needed here, as the overshoot can not cause errors in the algorithm, because no assumptions are made about the model.
                     // if a key does not exist when it is accessed it is added!
                     collision_areas_offsetted[layer_idx] = offset_value == 0 ?
@@ -555,7 +662,8 @@ void TreeModelVolumes::calculateCollision(const coord_t radius, const LayerIndex
                 // Calculating both the collision areas and placable areas.
                 tbb::parallel_for(tbb::blocked_range<LayerIndex>(std::max(z_distance_bottom_layers + 1, data.begin()), data.end()),
                     [&collision_areas_offsetted, &outlines, &anti_overhang = m_anti_overhang, processing_last_mesh,
-                     min_resolution = m_min_resolution, z_distance_bottom_layers, xy_distance, &data_placeable, &throw_on_cancel]
+                     min_resolution = m_min_resolution, z_distance_bottom_layers, xy_distance, &data_placeable, &throw_on_cancel,
+                     restrict_placeable = m_restrict_placeable, &landing_only = std::as_const(m_landing_only)]
                 (const tbb::blocked_range<LayerIndex>& range) {
                     for (LayerIndex layer_idx = range.begin(); layer_idx != range.end(); ++ layer_idx) {
                         LayerIndex layer_idx_below = layer_idx - z_distance_bottom_layers - 1;
@@ -566,6 +674,11 @@ void TreeModelVolumes::calculateCollision(const coord_t radius, const LayerIndex
                             // Inflate the surface to sit on by the separation distance to increase chance of a support being placed on a sloped surface.
                             offset(below, xy_distance), 
                             layer_idx_below < int(anti_overhang.size()) ? union_(current, anti_overhang[layer_idx_below]) : current);
+                        // SliceOfMe: limited to the plate - only on other objects' painted support base
+                        if (restrict_placeable)
+                            placable = layer_idx_below < LayerIndex(landing_only.size()) && !landing_only[layer_idx_below].empty() ?
+                                           intersection(placable, offset(landing_only[layer_idx_below], xy_distance)) :
+                                           Polygons{};
                         auto &dst     = data_placeable[layer_idx];
                         if (processing_last_mesh) {
                             if (! dst.empty())
@@ -710,6 +823,10 @@ void TreeModelVolumes::calculateAvoidance(const std::vector<RadiusLayerPair> &ke
                             ClipperLib::jtRound, m_min_resolution));
                 if (task.to_model)
                     latest_avoidance = diff(latest_avoidance, getPlaceableAreas(task.radius, layer_idx, throw_on_cancel));
+                else if (m_has_forced_landing && size_t(layer_idx) < m_forced_landing_polys.size() && !m_forced_landing_polys[layer_idx].empty())
+                    // SliceOfMe: above the plate areas painted "stand on objects" the objects are a raised build plate:
+                    // a branch there does not have to get away from them (it only avoids colliding with them)
+                    latest_avoidance = union_(current_layer_collisions, diff(latest_avoidance, m_forced_landing_polys[layer_idx]));
                 latest_avoidance = polygons_simplify(latest_avoidance, m_min_resolution);
                 data.emplace_back(RadiusLayerPair{task.radius, layer_idx}, latest_avoidance);
                 if (throw_on_cancel)

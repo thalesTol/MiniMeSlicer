@@ -31,6 +31,7 @@
 #include "slic3r/GUI/MainFrame.hpp"
 #include "slic3r/Utils/UndoRedo.hpp"
 #include "slic3r/GUI/Gizmos/GLGizmoPainterBase.hpp"
+#include "slic3r/GUI/Gizmos/GLGizmoFdmSupports.hpp"
 #include "slic3r/GUI/BitmapCache.hpp"
 #include "slic3r/Utils/MacDarkMode.hpp"
 #include "slic3r/GUI/GuiColor.hpp"
@@ -2898,9 +2899,14 @@ void GLCanvas3D::render(bool only_init)
         } else {
             only_current = true;
         }
-    } else if (m_gizmos.is_paint_gizmo())
-        no_partplate = true;
-    else if (gizmo_type == GLGizmosManager::BrimEars && !camera.is_looking_downward())
+    } else if (m_gizmos.is_paint_gizmo()) {
+        // SliceOfMe: painting support zones on the plate needs the plate itself
+        const auto *fdm = dynamic_cast<const GLGizmoFdmSupports *>(m_gizmos.get_current());
+        if (fdm != nullptr && fdm->shows_plate())
+            only_current = true;
+        else
+            no_partplate = true;
+    } else if (gizmo_type == GLGizmosManager::BrimEars && !camera.is_looking_downward())
         show_grid = false;
 
     /* view3D render*/

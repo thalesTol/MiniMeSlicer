@@ -411,6 +411,9 @@ public:
      * \brief True if the branches may connect to the model.
      */
     bool support_rests_on_model;
+    // SliceOfMe: limited to the build plate but allowed onto other objects' painted support base: branches may end on
+    // the model only where they can land gracefully (placeable areas), never just dropped onto it
+    bool only_gracious_to_model{false};
     /*!
      * \brief How far should support be from the model.
      */

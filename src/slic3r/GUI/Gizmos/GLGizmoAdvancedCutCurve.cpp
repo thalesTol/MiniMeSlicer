@@ -900,7 +900,13 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
         int                  conn;
     };
     std::vector<PlaneOp>                            ops_plane;
-    std::vector<std::pair<int, indexed_triangle_set>> keys_plane; // connector, key in the plane frame
+    struct PlaneKey
+    {
+        int                  conn;
+        indexed_triangle_set its; // key in the plane frame
+        Vec3d                up;  // print orientation in the plane frame
+    };
+    std::vector<PlaneKey> keys_plane;
     const BoundingBoxf3  tbb  = transformed_bounding_box(m_plane_center, m_rotate_matrix); // plane frame
     const double         z_lo = tbb.defined ? tbb.min.z() : -m_radius, z_hi = tbb.defined ? tbb.max.z() : m_radius;
     const OutlineSampler sampler(pts, m_shape_mode);
@@ -916,6 +922,10 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
                 f.dir = -f.dir; // grows out of part B into part A
             const double tol = c.tolerance;
             const double z   = std::clamp(conn.z, z_lo, z_hi);
+            // how a separate piece is printed: dowels and pins standing, the clip and the keys on their profile
+            const Vec3d key_up = (c.type == ConnType::Dowel || c.type == ConnType::Pin) ? Vec3d(f.dir.x(), f.dir.y(), 0.0) :
+                                 c.type == ConnType::Snap                               ? Vec3d(f.tangent.x(), f.tangent.y(), 0.0) :
+                                                                                          Vec3d::UnitZ();
             auto add_3d = [&](indexed_triangle_set solid, indexed_triangle_set hole) {
                 // a broken connector shape is left out instead of breaking the whole cut
                 if (!its_is_closed_manifold(solid) || !its_is_closed_manifold(hole)) {
@@ -925,7 +935,7 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
                 if (c.separate()) {
                     ops_plane.push_back({hole, true, false, ci});
                     ops_plane.push_back({std::move(hole), false, true, ci});
-                    keys_plane.emplace_back(ci, std::move(solid));
+                    keys_plane.push_back({ci, std::move(solid), key_up});
                 } else if (!owner_b) {
                     ops_plane.push_back({std::move(solid), true, true, ci});
                     ops_plane.push_back({std::move(hole), false, true, ci});
@@ -943,7 +953,7 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
                 }
                 sub_a.push_back(slot);
                 add_b.push_back(slot);
-                keys_plane.emplace_back(ci, std::move(solid));
+                keys_plane.push_back({ci, std::move(solid), key_up});
             };
             switch (c.type) {
             case ConnType::Dovetail:
@@ -1009,9 +1019,9 @@ bool GLGizmoAdvancedCut::curve_build_cutters(CurveCutters &out) const
         its_transform(op.its, plane, true);
         out.ops.push_back({TriangleMesh(std::move(op.its)), op.on_a, op.unite, op.conn});
     }
-    for (auto &[conn, its] : keys_plane) {
-        its_transform(its, plane, true);
-        out.keys.push_back({conn, TriangleMesh(std::move(its))});
+    for (PlaneKey &k : keys_plane) {
+        its_transform(k.its, plane, true);
+        out.keys.push_back({k.conn, TriangleMesh(std::move(k.its)), (plane.linear() * k.up).normalized()});
     }
     return true;
 }
@@ -2370,26 +2380,47 @@ void GLGizmoAdvancedCut::perform_curve_cut(const Selection &selection)
     if (results.empty())
         return;
 
-    // separate connector pieces become their own objects, where they belong; ones whose holes could not
-    // be made are left out
-    for (CurveCutters::Key &k : cutters.keys) {
-        if (std::find(skipped.begin(), skipped.end(), k.conn) != skipped.end())
-            continue;
-        TriangleMesh key    = std::move(k.mesh);
-        const Vec3d  center = key.bounding_box().center();
-        key.translate(-center.cast<float>());
-        ModelObject *obj = scratch.add_object();
-        obj->name        = mo->name + " - " + _u8L("connector") + " " + std::to_string(k.conn + 1);
-        obj->add_volume(std::move(key));
-        obj->add_instance()->set_offset(center);
-        obj->invalidate_bounding_box();
-        results.push_back(obj);
+    // Separate connector pieces (dowels, keys, loose pins and clips) become objects of their own, printed apart
+    // and fitted into the holes of both parts afterwards: turned to print well, set down on the plate and
+    // lined up in front of the cut object, the way the planar cut places its dowels. Ones whose holes could
+    // not be made are left out.
+    int keys_left_out = 0;
+    {
+        const BoundingBoxf3 obj_box = mo->instance_bounding_box(size_t(instance_idx));
+        const double        gap     = 5.0;
+        double              x       = obj_box.min.x();
+        for (CurveCutters::Key &k : cutters.keys) {
+            if (std::find(skipped.begin(), skipped.end(), k.conn) != skipped.end()) {
+                ++keys_left_out;
+                continue;
+            }
+            TriangleMesh key = std::move(k.mesh);
+            if (k.up.squaredNorm() > EPSILON)
+                key.transform(Transform3d(Eigen::Quaterniond::FromTwoVectors(k.up, Vec3d::UnitZ())));
+            const BoundingBoxf3 box = key.bounding_box();
+            key.translate(-box.center().cast<float>());
+            const Vec3d size = box.size();
+            ModelObject *obj = scratch.add_object();
+            obj->name        = mo->name + " - " + _u8L("connector") + " " + std::to_string(k.conn + 1);
+            obj->add_volume(std::move(key));
+            obj->add_instance()->set_offset(Vec3d(x + 0.5 * size.x(), obj_box.min.y() - gap - 0.5 * size.y(), 0.5 * size.z()));
+            obj->invalidate_bounding_box();
+            results.push_back(obj);
+            x += size.x() + gap;
+        }
     }
 
     m_parent.reset_all_gizmos();
     Plater::TakeSnapshot snapshot(plater, m_shape_mode ? "Cut by shape" : "Cut by curve");
     plater->apply_cut_object_to_model(size_t(object_idx), results);
     curve_reset();
+    if (keys_left_out > 0)
+        MessageDialog(wxGetApp().mainframe,
+                      wxString::Format(_L("%d separate connector piece(s) were left out: their holes could not be made in the parts. "
+                                          "Try a different size or position for them."),
+                                       keys_left_out),
+                      _L("Cut"), wxOK | wxICON_WARNING)
+            .ShowModal();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

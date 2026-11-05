@@ -332,6 +332,10 @@ static constexpr const char* FIRST_LAYER_PRINT_SEQUENCE_ATTR = "first_layer_prin
 static constexpr const char* OTHER_LAYERS_PRINT_SEQUENCE_ATTR = "other_layers_print_sequence";
 static constexpr const char* OTHER_LAYERS_PRINT_SEQUENCE_NUMS_ATTR = "other_layers_print_sequence_nums";
 static constexpr const char* SPIRAL_VASE_MODE = "spiral_mode";
+// SliceOfMe: plate zones painted in the support painting tool
+static constexpr const char* SUPPORT_PLATE_BLOCK_AREA_ATTR = "support_plate_block_area";
+static constexpr const char* SUPPORT_PLATE_ALLOW_AREA_ATTR = "support_plate_allow_area";
+static constexpr const char* SUPPORT_PLATE_LAND_AREA_ATTR = "support_plate_land_area";
 static constexpr const char* FILAMENT_MAP_MODE_ATTR = "filament_map_mode";
 static constexpr const char* FILAMENT_MAP_ATTR = "filament_maps";
 static constexpr const char* LIMIT_FILAMENT_MAP_ATTR = "limit_filament_maps";
@@ -4756,6 +4760,11 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 std::istringstream(value) >> std::boolalpha >> spiral_mode;
                 m_curr_plater->config.set_key_value("spiral_mode", new ConfigOptionBool(spiral_mode));
             }
+            else if (key == SUPPORT_PLATE_BLOCK_AREA_ATTR || key == SUPPORT_PLATE_ALLOW_AREA_ATTR || key == SUPPORT_PLATE_LAND_AREA_ATTR) {
+                auto *opt = new ConfigOptionPointsGroups();
+                opt->deserialize(value);
+                m_curr_plater->config.set_key_value(key, opt);
+            }
             else if (key == FILAMENT_MAP_MODE_ATTR)
             {
                 FilamentMapMode map_mode = FilamentMapMode::fmmAutoForFlush;
@@ -8522,6 +8531,11 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 if (spiral_mode_opt)
                     stream << "    <" << METADATA_TAG << " " << KEY_ATTR << "=\"" << SPIRAL_VASE_MODE << "\" " << VALUE_ATTR << "=\"" << spiral_mode_opt->getBool() << "\"/>\n";
 
+                // SliceOfMe: plate zones for the supports (numbers, 'x', ',' and '#' only)
+                for (const char *zone_key : {SUPPORT_PLATE_BLOCK_AREA_ATTR, SUPPORT_PLATE_ALLOW_AREA_ATTR, SUPPORT_PLATE_LAND_AREA_ATTR})
+                    if (const ConfigOption *zone_opt = plate_data->config.option(zone_key); zone_opt != nullptr && !zone_opt->serialize().empty())
+                        stream << "    <" << METADATA_TAG << " " << KEY_ATTR << "=\"" << zone_key << "\" " << VALUE_ATTR << "=\"" << zone_opt->serialize() << "\"/>\n";
+
                 //filament map related
                 ConfigOption* filament_map_mode_opt = plate_data->config.option("filament_map_mode");
                 t_config_enum_names filament_map_mode_names = ConfigOptionEnum<FilamentMapMode>::get_enum_names();
@@ -9509,6 +9523,26 @@ private:
         m_thread.join();
     }
 
+public:
+    // SliceOfMe: wait (bounded) until the worker is not writing and no object task is queued. Called before the
+    // application tears down the model: an object being saved when the app was asked to quit made it crash.
+    void drain(long timeout_ms) {
+        boost::unique_lock lock(m_mutex);
+        const boost::system_time deadline = boost::get_system_time() + boost::posix_time::milliseconds(timeout_ms);
+        auto pending = [this]() {
+            if (m_busy)
+                return true;
+            for (const Task &t : m_tasks)
+                if (t.type == AddObject || t.type == RemoveObject || t.type == RemoveBackup)
+                    return true;
+            return false;
+        };
+        m_cond.notify_all(); // wake a delayed task
+        while (pending())
+            if (!m_idle.timed_wait(lock, deadline))
+                break;
+    }
+
     void push_task(Task const & t) {
         boost::unique_lock lock(m_mutex);
         if (t.delay && !m_tasks.empty() && m_tasks.back() == t) {
@@ -9630,9 +9664,13 @@ public:
                     continue;
             }
             m_tasks.pop_front();
+            m_busy = true;
             lock.unlock();
             process_task(t);
             lock.lock();
+            // SliceOfMe: let drain() know a file task finished
+            m_busy = false;
+            m_idle.notify_all();
             if (t.type > None) {
                 m_ui_tasks.push_back(t);
                 // Read and invoke the UI post-callback under the re-acquired lock, not a
@@ -9676,6 +9714,8 @@ public:
 private:
     boost::mutex m_mutex;
     boost::condition_variable m_cond;
+    boost::condition_variable m_idle; // SliceOfMe: signalled after each processed task
+    bool m_busy = false;              // SliceOfMe: a task is being processed (outside the lock)
     std::deque<Task> m_tasks;
     std::deque<Task> m_ui_tasks;
     size_t m_task_seq = 0;
@@ -9808,6 +9848,11 @@ void set_backup_callback(std::function<void(int)> callback)
 void stop_backup()
 {
     _BBS_Backup_Manager::get().stop();
+}
+
+void drain_backup(long timeout_ms)
+{
+    _BBS_Backup_Manager::get().drain(timeout_ms);
 }
 
 void run_backup_ui_tasks()

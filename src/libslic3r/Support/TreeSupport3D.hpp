@@ -82,6 +82,7 @@ struct SupportElementStateBits {
         supports_roof(false),
         can_use_safe_radius(false),
         skip_ovalisation(false),
+        landing_forced(false),
 #ifdef TREE_SUPPORTS_TRACK_LOST
         lost(false),
         verylost(false),
@@ -119,6 +120,10 @@ struct SupportElementStateBits {
      * \brief Skip the ovalisation to parent and children when generating the final circles.
      */
     bool skip_ovalisation : 1;
+
+    // SliceOfMe: started above a plate area painted "stand on objects": must stand on the object below, never
+    // routed to the build plate
+    bool landing_forced : 1;
 
 #ifdef TREE_SUPPORTS_TRACK_LOST
     // Likely a lost branch, debugging information.

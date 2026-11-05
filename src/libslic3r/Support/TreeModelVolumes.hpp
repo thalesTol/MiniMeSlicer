@@ -9,6 +9,7 @@
 #ifndef slic3r_TreeModelVolumes_hpp
 #define slic3r_TreeModelVolumes_hpp
 
+#include <map>
 #include <mutex>
 #include <unordered_map>
 
@@ -167,6 +168,32 @@ public:
     }
 
     Polygon m_bed_area;
+    // SliceOfMe: plate areas the supports may not start on (support layer 0), in object coordinates
+    Polygons m_floor_forbidden;
+    Polygons m_floor_forbidden_raw; // the same, as painted (without the margin for trunks)
+    // SliceOfMe: the "no supports" plate zones grown by 'reach' (rounded up to 0.25 mm), cached: where a branch whose
+    // trunk will be that much wider than its collision radius at the plate can not go
+    const Polygons &getFloorKeepout(coord_t reach) const;
+    // SliceOfMe: supports also rest on other objects (painted as support base, or anywhere when not limited to the plate)
+    bool support_rests_on_model() const { return m_support_rests_on_model; }
+    bool restricts_placeable() const { return m_restrict_placeable; }
+    // SliceOfMe: a support starting at this point must stand on what lies below it (plate painted "stand on objects")
+    bool forced_landing(LayerIndex layer_idx, const Point &pt) const
+    {
+        if (!m_has_forced_landing || layer_idx < 0 || size_t(layer_idx) >= m_forced_landing.size())
+            return false;
+        for (const ExPolygon &expoly : m_forced_landing[layer_idx])
+            if (expoly.contains(pt))
+                return true;
+        return false;
+    }
+    bool has_forced_landing() const { return m_has_forced_landing; }
+    // SliceOfMe: the top surfaces inside the plate areas painted "stand on objects" a branch of this layer may stand
+    // on: they work as a raised build plate
+    const Polygons &getLandFloor(LayerIndex layer_idx) const;
+    // SliceOfMe: the part of that floor where a branch of this radius stands fully on the object: the disc around its
+    // centre lies on what is below (flat tops lose their rim, slopes keep their width), cached per 0.25 mm of radius
+    const Polygons &getLandStandable(LayerIndex layer_idx, coord_t radius) const;
 
 private:
     // Caching polygons for a range of layers.
@@ -445,6 +472,19 @@ private:
      * \brief Does at least one mesh allow support to rest on a model.
      */
     bool m_support_rests_on_model;
+    // SliceOfMe: limited to the build plate, but other objects are painted as support base: the supports may rest
+    // on the model only there (per support layer)
+    bool                  m_restrict_placeable{false};
+    std::vector<Polygons> m_landing_only;
+    mutable std::mutex                      m_floor_keepout_mutex;
+    mutable std::map<coord_t, Polygons>     m_floor_keepout;
+    mutable std::mutex                                       m_land_standable_mutex;
+    mutable std::map<std::pair<LayerIndex, coord_t>, Polygons> m_land_standable;
+    bool                    m_has_forced_landing{false};
+    std::vector<ExPolygons> m_forced_landing; // per support layer
+    std::vector<Polygons>   m_forced_landing_polys;
+    mutable std::mutex                           m_land_floor_mutex;
+    mutable std::vector<std::optional<Polygons>> m_land_floor;
 #ifdef SLIC3R_TREESUPPORTS_PROGRESS
     /*!
      * \brief The progress of the precalculate function for communicating it to the progress bar.

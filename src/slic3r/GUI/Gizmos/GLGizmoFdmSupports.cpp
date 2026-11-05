@@ -299,6 +299,61 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
     float       window_width    = minimal_slider_width + sliders_left_width + slider_icon_width;
     float drag_pos_times     = 0.7;
 
+    // SliceOfMe: what the brush paints
+    {
+        const PaintTarget old_target = m_paint_target;
+        ImGui::AlignTextToFramePadding();
+        m_imgui->text(_L("Paint"));
+        const std::array<std::pair<PaintTarget, wxString>, 4> targets = {{{PaintTarget::Supports, _L("Supports")},
+                                                                          {PaintTarget::PlateLand, _L("Stand on objects")},
+                                                                          {PaintTarget::PlateBlock, _L("Plate: no supports")},
+                                                                          {PaintTarget::PlateAllow, _L("Plate: only here")}}};
+        const std::array<wxString, 4> tips = {_L("Left mouse: enforce supports, right mouse: block supports."),
+                                              _L("Paint on any object on the plate: the tree supports above the painted area stand on that "
+                                                 "object instead of going to the plate, even when limited to the build plate. "
+                                                 "All objects are shown."),
+                                              _L("Paint the plate where tree supports may not start; the branches land somewhere else."),
+                                              _L("Paint the plate where tree supports may start; nowhere else on the plate.")};
+        for (size_t i = 0; i < targets.size(); ++i) {
+            if (i % 2 == 1)
+                ImGui::SameLine(sliders_left_width + m_imgui->scaled(2.f));
+            if (ImGui::RadioButton((into_u8(targets[i].second) + "##paint_target").c_str(), m_paint_target == targets[i].first))
+                m_paint_target = targets[i].first;
+            if (ImGui::IsItemHovered())
+                m_imgui->tooltip(tips[i], max_tooltip_width);
+        }
+        // painting the plate needs the whole plate in view: the other objects stay visible
+        const bool was_plate = is_plate_target(old_target);
+        if (plate_mode() != was_plate)
+            plate_show_scene(plate_mode());
+        else if (plate_mode())
+            for (const GLVolume *vol : m_parent.get_volumes().volumes)
+                if (!vol->is_active && !vol->is_wipe_tower && vol->composite_id.volume_id >= 0) {
+                    plate_show_scene(true); // hidden again by the tool (e.g. after a selection update)
+                    break;
+                }
+        if (m_paint_target != old_target) {
+            m_plate_hover.reset();
+            for (auto &triangle_selector : m_triangle_selectors) {
+                triangle_selector->seed_fill_unselect_all_triangles();
+                triangle_selector->request_update_render_data();
+            }
+            m_parent.set_as_dirty();
+        }
+        if (plate_mode()) {
+            ImGui::Separator();
+            render_plate_panel(sliders_left_width, sliders_width, drag_left_width);
+            m_imgui_end_pos[0] = m_imgui_start_pos[0] + ImGui::GetWindowWidth();
+            m_imgui_end_pos[1] = m_imgui_start_pos[1] + ImGui::GetWindowHeight();
+            GizmoImguiEnd();
+            ImGuiWrapper::pop_toolbar_style();
+            return;
+        }
+        if (m_paint_target == PaintTarget::SupportBase)
+            m_imgui->text(_L("Yellow: other objects' supports may rest here. Right mouse erases."));
+        ImGui::Separator();
+    }
+
     ImGui::AlignTextToFramePadding();
     m_imgui->text(m_desc.at("tool_type"));
     std::array<wchar_t, 4> tool_ids = { ImGui::CircleButtonIcon, ImGui::SphereButtonIcon, ImGui::FillButtonIcon, ImGui::GapFillIcon };
@@ -680,6 +735,8 @@ void GLGizmoFdmSupports::update_from_model_object(bool first_update)
     ebt_colors.push_back(GLVolume::NEUTRAL_COLOR);
     ebt_colors.push_back(TriangleSelectorGUI::enforcers_color);
     ebt_colors.push_back(TriangleSelectorGUI::blockers_color);
+    // SliceOfMe: support base for other objects' supports
+    ebt_colors.push_back({0.95f, 0.75f, 0.2f, 1.f});
     for (const ModelVolume* mv : mo->volumes) {
         if (! mv->is_model_part())
             continue;
@@ -712,6 +769,8 @@ wxString GLGizmoFdmSupports::handle_snapshot_action_name(bool shift_down, GLGizm
     wxString action_name;
     if (shift_down)
         action_name = ("Unselect all");
+    else if (m_paint_target == PaintTarget::SupportBase)
+        action_name = button_down == Button::Left ? "Paint support base" : "Erase support base";
     else {
         if (button_down == Button::Left)
             action_name = ("Enforce supports");

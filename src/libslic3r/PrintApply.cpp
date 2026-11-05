@@ -2,6 +2,7 @@
 #include "Model.hpp"
 #include "Print.hpp"
 #include "FilamentMixer.hpp"
+#include "Support/SupportSurroundings.hpp"
 
 #include <cfloat>
 #include <memory>
@@ -1494,6 +1495,9 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
     unsigned int apply_status = APPLY_STATUS_UNCHANGED;
     auto update_apply_status = [&apply_status](bool invalidated)
         { apply_status = std::max<unsigned int>(apply_status, invalidated ? APPLY_STATUS_INVALIDATED : APPLY_STATUS_CHANGED); };
+    // SliceOfMe: an object moved, appeared, disappeared or got new support painting: the tree supports of the
+    // other objects may go around it or rest on it
+    bool surroundings_changed = false;
     if (! (print_diff.empty() && object_diff.empty() && region_diff.empty())) {
         update_apply_status(false);
         //BBS: add more logs
@@ -1702,6 +1706,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
         } else {
             model_object_status.print_object_regions_status = ModelObjectStatus::PrintObjectRegionsStatus::Valid;
             if (supports_differ || model_custom_supports_data_changed(model_object, model_object_new)) {
+                surroundings_changed = true;
                 // First stop background processing before shuffling or deleting the ModelVolumes in the ModelObject's list.
                 if (supports_differ) {
                     this->call_cancel_callback();
@@ -1833,6 +1838,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
                     // The PrintObject already exists and the copies differ.
 					PrintBase::ApplyStatus status = (*it_old)->print_object->set_instances(std::move(new_instances.instances));
                     if (status != PrintBase::APPLY_STATUS_UNCHANGED) {
+                        surroundings_changed = true;
                         size_t extruder_num = new_full_config.option<ConfigOptionFloatsNullable>("nozzle_diameter")->size();
                         update_apply_status(status == PrintBase::APPLY_STATUS_INVALIDATED);
                     }
@@ -1842,6 +1848,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             }
         }
         if (m_objects != print_objects_new) {
+            surroundings_changed = true;
             //BBS: add more logs
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(" %1%: found print object changed.")%__LINE__;
             this->call_cancel_callback();
@@ -2112,6 +2119,19 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
                     }
             }
     }
+
+    // SliceOfMe: tree supports depend on the plate zones and on the other objects; recalculate them whenever another
+    // object changed shape or place. The state mutex is already held here, so only the unguarded queries may be used.
+    if (!surroundings_changed)
+        for (const PrintObject *object : m_objects)
+            if (!object->is_step_done_unguarded(posSlice)) {
+                surroundings_changed = true;
+                break;
+            }
+    if (surroundings_changed)
+        for (PrintObject *object : m_objects)
+            if (support_depends_on_surroundings(*object) && object->invalidate_step(posSupportMaterial))
+                update_apply_status(true);
 
     // Update SlicingParameters for each object where the SlicingParameters is not valid.
     // If it is not valid, then it is ensured that PrintObject.m_slicing_params is not in use

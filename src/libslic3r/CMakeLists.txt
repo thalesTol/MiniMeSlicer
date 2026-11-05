@@ -353,6 +353,8 @@ set(lisbslic3r_sources
     Support/TreeModelVolumes.cpp
     Support/TreeSupportCommon.hpp
     Support/SupportParameters.hpp
+    Support/SupportSurroundings.cpp
+    Support/SupportSurroundings.hpp
     MinimumSpanningTree.hpp
     MinimumSpanningTree.cpp
     Surface.cpp

@@ -8,6 +8,7 @@
 #include "Fill/FillBase.hpp"
 #include "I18N.hpp"
 #include "Layer.hpp"
+#include "Support/SupportSurroundings.hpp"
 #include "MinimumSpanningTree.hpp"
 #include "Print.hpp"
 #include "ShortestPath.hpp"
@@ -609,6 +610,9 @@ TreeSupport::TreeSupport(PrintObject& object, const SlicingParameters &slicing_p
     : m_object(&object), m_slicing_params(slicing_params), m_support_params(object), m_object_config(&object.config())
 {
     m_print_config = &m_object->print()->config();
+    // SliceOfMe: the collision data includes the other objects and the plate zones, which may have changed since a
+    // previous run: never reuse it
+    m_object->clear_tree_support_preview_cache();
     m_raft_layers = slicing_params.base_raft_layers + slicing_params.interface_raft_layers;
     support_type = m_object_config->support_type;
 
@@ -2556,8 +2560,12 @@ void TreeSupport::draw_circles()
                         size_t obj_layer_nr_next = m_ts_data->layer_heights[layer_nr_next].obj_layer_nr;
                         for (size_t i = 0; i <= bottom_gap_layers && i <= obj_layer_nr_next; i++)
                         {
-                            const Layer *below_layer      = m_object->get_layer(obj_layer_nr_next - i);
-                            ExPolygons bottom_interface = std::move(intersection_ex(base_areas, below_layer->lslices));
+                            // SliceOfMe: supports resting on other objects get a floor too
+                            const size_t below_nr = obj_layer_nr_next - i;
+                            const Layer *below_layer      = m_object->get_layer(below_nr);
+                            ExPolygons bottom_interface = std::move(intersection_ex(base_areas,
+                                below_nr < m_ts_data->m_foreign.size() && !m_ts_data->m_foreign[below_nr].empty() ?
+                                    union_ex(below_layer->lslices, m_ts_data->m_foreign[below_nr]) : below_layer->lslices));
                             floor_areas.insert(floor_areas.end(), bottom_interface.begin(), bottom_interface.end());
                         }
                     }
@@ -2568,8 +2576,11 @@ void TreeSupport::draw_circles()
                     }
                 }
                 if (bottom_gap_layers > 0 && m_ts_data->layer_heights[layer_nr].obj_layer_nr > bottom_gap_layers) {
-                    const Layer* below_layer = m_object->get_layer(m_ts_data->layer_heights[layer_nr].obj_layer_nr - bottom_gap_layers);
-                    ExPolygons bottom_gap_area = std::move(intersection_ex(floor_areas, below_layer->lslices));
+                    const size_t gap_nr      = m_ts_data->layer_heights[layer_nr].obj_layer_nr - bottom_gap_layers;
+                    const Layer* below_layer = m_object->get_layer(gap_nr);
+                    ExPolygons bottom_gap_area = std::move(intersection_ex(floor_areas,
+                        gap_nr < m_ts_data->m_foreign.size() && !m_ts_data->m_foreign[gap_nr].empty() ?
+                            union_ex(below_layer->lslices, m_ts_data->m_foreign[gap_nr]) : below_layer->lslices));
                     if (!bottom_gap_area.empty()) {
                         floor_areas = std::move(diff_ex(floor_areas, bottom_gap_area));
                     }
@@ -3231,7 +3242,8 @@ void TreeSupport::drop_nodes()
 
             if (!node.to_buildplate) {
                 // Can't rest on model and unable to reach the build plate. Then we must drop the node and leave parts unsupported.
-                if (support_on_buildplate_only) {
+                // SliceOfMe: unless it is over another object painted as support base
+                if (support_on_buildplate_only && !m_ts_data->may_rest_on(obj_layer_nr, node.position)) {
                     unsupported_branch_leaves.push_front({layer_nr, p_node});
                     continue;
                 }
@@ -3572,7 +3584,7 @@ first_pass_next:;
                     double dist2_to_outside = vsize2_with_unscale(node.position - to_outside);
                     if (dist2_to_outside >= branch_radius_node * branch_radius_node) //Too far inside.
                     {
-                        if (support_on_buildplate_only)
+                        if (support_on_buildplate_only && !m_ts_data->may_rest_on(obj_layer_nr, node.position))
                         {
                             unsupported_branch_leaves.push_front({ layer_nr, p_node });
                         }
@@ -3695,6 +3707,9 @@ first_pass_next:;
                 //else
                 //    movement = normal(move_to_neighbor_center, scale_(get_max_move_dist(&node)));
                 if (vsize2_with_unscale(movement) > get_max_move_dist(&node, 2)) movement = normal(movement, scale_(get_max_move_dist(&node)));
+                // SliceOfMe: above a plate area painted "stand on objects", with an object below: straight down onto it
+                if (m_ts_data->must_rest_on(obj_layer_nr, node.position))
+                    movement = Point(0, 0);
 
                 next_layer_vertex += movement;
 
@@ -3736,7 +3751,7 @@ first_pass_next:;
 
         if (layer_nr_next == 0 && support_on_buildplate_only && !contact_nodes[layer_nr_next].empty()) {
             for (SupportNode *node : contact_nodes[layer_nr_next]) {
-                if (!node->to_buildplate) { 
+                if (!node->to_buildplate && !m_ts_data->may_rest_on(0, node->position)) { 
                     unsupported_branch_leaves.push_front({layer_nr_next, node});
                 }
             }
@@ -4430,6 +4445,16 @@ void TreeSupport::insert_dropped_node(std::vector<SupportNode*>& nodes_layer, Su
     conflicting_node->support_roof_layers_below = std::max(conflicting_node->support_roof_layers_below, p_node->support_roof_layers_below);
 }
 
+bool TreeSupportData::may_rest_on(size_t layer_nr, const Point &pt) const
+{
+    return m_has_landing && layer_nr < m_landing.size() && !m_landing[layer_nr].empty() && is_inside_ex(m_landing[layer_nr], pt);
+}
+
+bool TreeSupportData::must_rest_on(size_t layer_nr, const Point &pt) const
+{
+    return layer_nr < m_forced_landing.size() && !m_forced_landing[layer_nr].empty() && is_inside_ex(m_forced_landing[layer_nr], pt);
+}
+
 TreeSupportData::TreeSupportData(const PrintObject &object, coordf_t xy_distance, coordf_t radius_sample_resolution)
     : m_xy_distance(xy_distance), m_radius_sample_resolution(radius_sample_resolution)
 {
@@ -4454,6 +4479,16 @@ TreeSupportData::TreeSupportData(const PrintObject &object, coordf_t xy_distance
         machine_border = machine_outline.split_expoly_with_holes(scale_(1.), {m_machine_border});
     }
 
+    // SliceOfMe: the other objects on the plate are obstacles too (and may be rested on), plate zones keep the feet away
+    SupportSurroundings surroundings = support_depends_on_surroundings(object) ? support_surroundings(object) : SupportSurroundings();
+    m_floor_forbidden                = std::move(surroundings.floor_forbidden);
+    m_landing                        = std::move(surroundings.landing);
+    m_has_landing                    = surroundings.has_landing;
+    if (surroundings.has_forced_landing)
+        m_forced_landing = std::move(surroundings.forced_landing);
+    if (surroundings.has_foreign)
+        m_foreign = surroundings.foreign;
+
     for (std::size_t layer_nr = 0; layer_nr < object.layers().size(); ++layer_nr) {
         const Layer *layer             = object.get_layer(layer_nr);
         m_max_move_distances[layer_nr] = layer->height * branch_scale_factor;
@@ -4461,6 +4496,8 @@ TreeSupportData::TreeSupportData(const PrintObject &object, coordf_t xy_distance
         outline.clear();
         outline.reserve(layer->lslices.size());
         for (const ExPolygon &poly : layer->lslices) { append(outline, union_ex_2( poly.simplify_p(scale_(m_radius_sample_resolution)))); }
+        if (layer_nr < surroundings.foreign.size())
+            for (const ExPolygon &poly : surroundings.foreign[layer_nr]) { append(outline, union_ex_2( poly.simplify_p(scale_(m_radius_sample_resolution)))); }
         append(outline, machine_border);
 
         if (layer_nr == 0)
@@ -4552,6 +4589,10 @@ const ExPolygons& TreeSupportData::calculate_collision(const RadiusLayerPair& ke
     assert(key.layer_nr < m_layer_outlines.size());
 
     ExPolygons collision_areas = std::move(offset_ex(m_layer_outlines[key.layer_nr], scale_(key.radius+m_xy_distance)));
+    // SliceOfMe: the feet keep out of the painted plate zones; the avoidance built on top of this makes the
+    // branches bend towards another place on the plate
+    if (key.layer_nr == 0 && !m_floor_forbidden.empty())
+        collision_areas = union_ex(collision_areas, offset_ex(m_floor_forbidden, scale_(key.radius + m_xy_distance)));
     collision_areas = expolygons_simplify(collision_areas, scale_(m_radius_sample_resolution));
     // collision_areas.emplace_back(m_machine_border);
     const auto ret = m_collision_cache.insert({ key, std::move(collision_areas) });
@@ -4577,6 +4618,10 @@ const ExPolygons& TreeSupportData::calculate_avoidance(const RadiusLayerPair& ke
         }
 
         avoidance_areas = std::move(offset_ex(get_avoidance(radius, layer_nr - 1), scale_(-m_max_move_distances[layer_nr-1])));
+        // SliceOfMe: above the plate areas painted "stand on objects" the objects are a raised build plate: a branch
+        // there does not have to get away from them (it still avoids colliding with them, added below)
+        if (size_t(layer_nr) < m_forced_landing.size() && !m_forced_landing[layer_nr].empty())
+            avoidance_areas = diff_ex(avoidance_areas, m_forced_landing[layer_nr]);
     }
     const ExPolygons &collision       = get_collision(radius, layer_nr);
     avoidance_areas.insert(avoidance_areas.end(), collision.begin(), collision.end());

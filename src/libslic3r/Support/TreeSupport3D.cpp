@@ -39,6 +39,8 @@
 
 #include <boost/log/trivial.hpp>
 
+#include <atomic>
+
 #define TBB_PREVIEW_GLOBAL_CONTROL 1
 #include <tbb/global_control.h>
 #include <tbb/parallel_for.h>
@@ -149,6 +151,9 @@ static inline void check_self_intersections(const ExPolygon &expoly, const std::
 }
 
 static constexpr const auto tiny_area_threshold = sqr(scaled<double>(0.001));
+
+// SliceOfMe: diagnostics of "stand on objects" (logged after each object)
+static std::atomic<int> g_som_forced_tips{0}, g_som_snaps{0}, g_som_stops{0}, g_som_floor_seen{0};
 
 static std::vector<std::pair<TreeSupportSettings, std::vector<size_t>>> group_meshes(const Print &print, const std::vector<size_t> &print_object_ids)
 {
@@ -372,16 +377,18 @@ static std::vector<std::pair<TreeSupportSettings, std::vector<size_t>>> group_me
     const bool min_xy_dist = config.xy_distance > config.xy_min_distance;
 
     LineStatus type = LineStatus::INVALID;
+    // SliceOfMe: above a plate area painted "stand on objects", with an object below: never to the build plate
+    const bool forced = volumes.forced_landing(layer_idx, p);
 
-    if (!contains(volumes.getAvoidance(radius, layer_idx, TreeModelVolumes::AvoidanceType::FastSafe, false, min_xy_dist), p))
+    if (!forced && !contains(volumes.getAvoidance(radius, layer_idx, TreeModelVolumes::AvoidanceType::FastSafe, false, min_xy_dist), p))
         type = LineStatus::TO_BP_SAFE;
-    else if (!contains(volumes.getAvoidance(radius, layer_idx, TreeModelVolumes::AvoidanceType::Fast, false, min_xy_dist), p))
+    else if (!forced && !contains(volumes.getAvoidance(radius, layer_idx, TreeModelVolumes::AvoidanceType::Fast, false, min_xy_dist), p))
         type = LineStatus::TO_BP;
     else if (config.support_rests_on_model && !contains(volumes.getAvoidance(radius, layer_idx, TreeModelVolumes::AvoidanceType::FastSafe, true, min_xy_dist), p))
         type = LineStatus::TO_MODEL_GRACIOUS_SAFE;
     else if (config.support_rests_on_model && !contains(volumes.getAvoidance(radius, layer_idx, TreeModelVolumes::AvoidanceType::Fast, true, min_xy_dist), p))
         type = LineStatus::TO_MODEL_GRACIOUS;
-    else if (config.support_rests_on_model && !contains(volumes.getCollision(radius, layer_idx, min_xy_dist), p))
+    else if (config.support_rests_on_model && !config.only_gracious_to_model && !contains(volumes.getCollision(radius, layer_idx, min_xy_dist), p))
         type = LineStatus::TO_MODEL;
 
     return type;
@@ -406,15 +413,17 @@ static std::vector<std::pair<TreeSupportSettings, std::vector<size_t>>> group_me
     for (const Polyline &line : polylines) {
         LineInformation res_line;
         for (Point p : line) {
-            if (! contains(volumes.getAvoidance(config.getRadius(0), layer_idx, TreeModelVolumes::AvoidanceType::FastSafe, false, min_xy_dist), p))
+            // SliceOfMe: above a plate area painted "stand on objects", with an object below: never to the build plate
+            const bool forced = volumes.forced_landing(layer_idx, p);
+            if (! forced && ! contains(volumes.getAvoidance(config.getRadius(0), layer_idx, TreeModelVolumes::AvoidanceType::FastSafe, false, min_xy_dist), p))
                 res_line.emplace_back(p, LineStatus::TO_BP_SAFE);
-            else if (! contains(volumes.getAvoidance(config.getRadius(0), layer_idx, TreeModelVolumes::AvoidanceType::Fast, false, min_xy_dist), p))
+            else if (! forced && ! contains(volumes.getAvoidance(config.getRadius(0), layer_idx, TreeModelVolumes::AvoidanceType::Fast, false, min_xy_dist), p))
                 res_line.emplace_back(p, LineStatus::TO_BP);
             else if (config.support_rests_on_model && ! contains(volumes.getAvoidance(config.getRadius(0), layer_idx, TreeModelVolumes::AvoidanceType::FastSafe, true, min_xy_dist), p))
                 res_line.emplace_back(p, LineStatus::TO_MODEL_GRACIOUS_SAFE);
             else if (config.support_rests_on_model && ! contains(volumes.getAvoidance(config.getRadius(0), layer_idx, TreeModelVolumes::AvoidanceType::Fast, true, min_xy_dist), p))
                 res_line.emplace_back(p, LineStatus::TO_MODEL_GRACIOUS);
-            else if (config.support_rests_on_model && ! contains(volumes.getCollision(config.getRadius(0), layer_idx, min_xy_dist), p))
+            else if (config.support_rests_on_model && ! config.only_gracious_to_model && ! contains(volumes.getCollision(config.getRadius(0), layer_idx, min_xy_dist), p))
                 res_line.emplace_back(p, LineStatus::TO_MODEL);
             else if (!res_line.empty()) {
                 result.emplace_back(res_line);
@@ -858,7 +867,7 @@ private:
         bool to_bp = p.second == LineStatus::TO_BP || p.second == LineStatus::TO_BP_SAFE;
         bool gracious = to_bp || p.second == LineStatus::TO_MODEL_GRACIOUS || p.second == LineStatus::TO_MODEL_GRACIOUS_SAFE;
         bool safe_radius = p.second == LineStatus::TO_BP_SAFE || p.second == LineStatus::TO_MODEL_GRACIOUS_SAFE;
-        if (! config.support_rests_on_model && ! to_bp) {
+        if ((! config.support_rests_on_model && ! to_bp) || (config.only_gracious_to_model && ! gracious)) {
             BOOST_LOG_TRIVIAL(warning) << "Tried to add an invalid support point";
             tree_supports_show_error("Unable to add tip. Some overhang may not be supported correctly."sv, true);
             return;
@@ -891,6 +900,9 @@ private:
                 state.can_use_safe_radius = safe_radius;
                 state.missing_roof_layers = force_tip_to_roof ? dont_move_until : 0;
                 state.skip_ovalisation = skip_ovalisation;
+                state.landing_forced = ! to_bp && volumes.forced_landing(insert_layer, p.first);
+                if (state.landing_forced)
+                    ++ g_som_forced_tips;
                 move_bounds[insert_layer].emplace_back(state, std::move(circle));
             }
         }
@@ -1519,7 +1531,8 @@ static Point move_inside_if_outside(const Polygons &polygons, Point from, int di
 
     if (mergelayer || current_elem.to_buildplate) {
         to_bp_data = safe_union(diff_clipped(increased, volumes.getAvoidance(radius, layer_idx - 1, settings.type, false, settings.use_min_distance)));
-        if (! current_elem.to_buildplate && area(to_bp_data) > tiny_area_threshold) {
+        // SliceOfMe: a branch that must stand on an object stays away from the build plate
+        if (! current_elem.to_buildplate && ! current_elem.landing_forced && area(to_bp_data) > tiny_area_threshold) {
             // mostly happening in the tip, but with merges one should check every time, just to be sure.
             current_elem.to_buildplate = true; // sometimes nodes that can reach the buildplate are marked as cant reach, tainting subtrees. This corrects it.
             BOOST_LOG_TRIVIAL(debug) << "Corrected taint leading to a wrong to model value on layer " << layer_idx - 1 << " targeting " <<
@@ -1600,6 +1613,27 @@ static Point move_inside_if_outside(const Polygons &polygons, Point from, int di
                     volumes.ceilRadius(support_element_collision_radius(config, current_elem), settings.use_min_distance);
                 tree_supports_show_error("Area lost catching up radius. May not cause visible malformation."sv, true);
             }
+        }
+    }
+
+    // SliceOfMe: "no supports" plate zones, planned with the real thickness of the trunk. The avoidances keep the centre
+    // away by the collision radius, which stops growing at the branch radius; the trunk keeps getting thicker on its
+    // way down. Keep the centre as far from the zones as the trunk (and its foot) will be wide at the plate, minus how
+    // far the branch can still move sideways before it gets there, so it moves elsewhere in time.
+    if (! volumes.m_floor_forbidden_raw.empty() && layer_idx > 0) {
+        const LayerIndex below      = layer_idx - 1;
+        const coord_t    r_at_plate = config.getRadius(getEffectiveDTT(config, current_elem) + size_t(below), current_elem.elephant_foot_increases);
+        const double     reach      = double(r_at_plate) + double(config.xy_distance) + scaled<double>(1.2) -
+                                      double(below) * double(std::max<coord_t>(config.maximum_move_distance_slow, scaled<coord_t>(0.02)));
+        const Polygons *keepout_ptr = reach > double(radius) ? &volumes.getFloorKeepout(coord_t(reach)) : nullptr;
+        if (keepout_ptr && ! keepout_ptr->empty() && get_extents(*keepout_ptr).overlap(get_extents(increased))) {
+            const Polygons &keepout = *keepout_ptr;
+            increased = diff(increased, keepout);
+            if (! to_bp_data.empty())
+                to_bp_data = diff(to_bp_data, keepout);
+            if (! to_model_data.empty())
+                to_model_data = diff(to_model_data, keepout);
+            check_layer_data = current_elem.to_buildplate ? to_bp_data : to_model_data;
         }
     }
 
@@ -1799,6 +1833,15 @@ static void increase_areas_one_layer(
                 // Only do not move when already in a no hole avoidance with the regular xy distance.
                 insertSetting({ AvoidanceType::Slow, 0, increase_radius, no_error, !use_min_radius, !move }, false);
 
+            // SliceOfMe: a branch standing on a top painted "stand on objects" ends there
+            bool parent_landed = false;
+            if (parent.state.landing_forced && volumes.has_forced_landing())
+                if (const Polygons &floor = volumes.getLandFloor(layer_idx); ! floor.empty() && ! intersection(parent.influence_area, floor).empty()) {
+                    parent_landed = true;
+                    ++ g_som_stops;
+                    order.clear();
+                }
+
             Polygons inc_wo_collision;
             // Check whether it is faster to calculate the area increased with the fast speed independently from the slow area, or time could be saved by reusing the slow area to calculate the fast one.
             // Calculated by comparing the steps saved when calcualting idependently with the saved steps when not.
@@ -1886,6 +1929,40 @@ static void increase_areas_one_layer(
                     BOOST_LOG_TRIVIAL(warning) << "Trying to keep area by moving faster than intended: FAILURE! WRONG BRANCHES LIKLY!";
             }
 
+            // SliceOfMe: inside the plate areas painted "stand on objects" the tops below work as a raised build plate,
+            // preferred to the real one: a branch that can get onto one (whatever path it took so far, and even if it
+            // could go on towards the plate) goes there and ends on it. The whole reachable area counts, not only what
+            // keeps clear of the collision radius, so curved and sloped tops catch branches too.
+            if (config.support_rests_on_model && volumes.has_forced_landing() && layer_idx > 1 && ! parent_landed) {
+                if (const Polygons &floor = volumes.getLandFloor(layer_idx - 1); ! floor.empty()) {
+                    ++ g_som_floor_seen;
+                    const Polygons &reach = ! inc_wo_collision.empty() ? inc_wo_collision :
+                                            ! offset_fast.empty()      ? offset_fast :
+                                            ! offset_slow.empty()      ? offset_slow : parent.influence_area;
+                    // where the whole trunk stands on the top, so it does not hang over the rim; failing that where
+                    // at least its collision radius does; else the top is too small for it and it goes on down
+                    const SupportElementState probe = add ? elem : SupportElementState::propagate_down(parent.state);
+                    Polygons on_floor = intersection(reach, volumes.getLandStandable(layer_idx - 1, support_element_radius(config, probe)));
+                    if (area(on_floor) <= tiny_area_threshold)
+                        on_floor = intersection(reach, volumes.getLandStandable(layer_idx - 1, support_element_collision_radius(config, probe)));
+                    if (area(on_floor) > tiny_area_threshold) {
+                        ++ g_som_snaps;
+                        if (! add) {
+                            elem   = SupportElementState::propagate_down(parent.state);
+                            radius = support_element_collision_radius(config, elem);
+                        }
+                        elem.to_buildplate     = false;
+                        elem.to_model_gracious = true;
+                        elem.landing_forced    = true;
+                        add                    = true;
+                        bypass_merge           = true; // ends on the next layer, nothing to merge with
+                        to_bp_data.clear();
+                        to_model_data    = on_floor;
+                        inc_wo_collision = std::move(on_floor);
+                    }
+                }
+            }
+
             if (add) {
                 // Union seems useless, but some rounding errors somewhere can cause to_bp_data to be slightly bigger than it should be.
                 assert(! inc_wo_collision.empty() || ! to_bp_data.empty() || ! to_model_data.empty());
@@ -1907,7 +1984,10 @@ static void increase_areas_one_layer(
                 // But as branches connecting with the model that are to small have to be culled, the bottom most point has to be not set.
                 // A point can be set on the top most tip layer (maybe more if it should not move for a few layers).
                 parent.state.result_on_layer_reset();
-                parent.state.to_model_gracious = false;
+                // SliceOfMe: a branch standing on a painted top keeps standing properly (gracious): otherwise the drawing
+                // drops whatever hangs over the rim of the top on down to the plate
+                if (! parent_landed)
+                    parent.state.to_model_gracious = false;
             }
             throw_on_cancel();
         }
@@ -1939,6 +2019,7 @@ static void increase_areas_one_layer(
 
     out.to_buildplate = first.to_buildplate && second.to_buildplate;
     out.to_model_gracious = first.to_model_gracious && second.to_model_gracious; // valid as we do not merge non-gracious with gracious
+    out.landing_forced = first.landing_forced || second.landing_forced;
 
     out.elephant_foot_increases = 0;
     if (config.bp_radius_increase_per_layer > 0) {
@@ -2505,7 +2586,9 @@ static void set_to_model_contact_to_model_gracious(
     if (last_successfull_layer == nullptr) {
         BOOST_LOG_TRIVIAL(warning) << "No valid placement found for to model gracious element on layer " << first_elem.state.layer_idx;
         tree_supports_show_error("Could not fine valid placement on model! Just placing it down anyway. Could cause floating branches."sv, true);
-        first_elem.state.to_model_gracious = false;
+        // SliceOfMe: one standing on a painted top stands there (see increase_areas_one_layer); not dropped any further
+        const Polygons &land = volumes.getLandFloor(first_elem.state.layer_idx);
+        first_elem.state.to_model_gracious = first_elem.state.landing_forced && ! land.empty() && ! intersection(first_elem.influence_area, land).empty();
         set_to_model_contact_simple(first_elem);
     } else {
         // Found a gracious area above first_elem. Remove all below last_successfull_layer.
@@ -2564,6 +2647,58 @@ static void remove_deleted_elements(std::vector<SupportElements> &move_bounds)
         }
         std::swap(map_current, map_parents);
     }
+}
+
+// SliceOfMe: the pathing keeps branch centres away from the "no supports" plate zones by the collision radius, which
+// stops growing at the branch radius, while trunks keep getting thicker. Near the plate such a trunk would reach into
+// the zone and only lose its foot there. Instead it gets thinner wherever it would: at the plate as far as the zone
+// allows, widening again at 45 degrees above it. Returns how many elements were thinned.
+static size_t thin_trunks_near_floor_zones(const TreeModelVolumes &volumes, const TreeSupportSettings &config, std::vector<SupportElements> &move_bounds)
+{
+    const Polygons &zones = volumes.m_floor_forbidden;
+    if (zones.empty() || config.branch_radius_increase_per_layer <= 0. || config.layer_height <= 0)
+        return 0;
+    const Lines       lines = to_lines(zones);
+    const BoundingBox box   = get_extents(zones);
+    std::atomic<size_t> thinned{0};
+    // above this height the 45 degree widening clears any trunk
+    const double max_height = scaled<double>(40.);
+    for (size_t li = 0; li < move_bounds.size() && double(li) * double(config.layer_height) < max_height; ++li) {
+        SupportElements &layer = move_bounds[li];
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, layer.size()), [&](const tbb::blocked_range<size_t> &range) {
+            for (size_t k = range.begin(); k < range.end(); ++k) {
+                SupportElement &e = layer[k];
+                if (e.state.deleted || ! e.state.result_on_layer_is_set())
+                    continue;
+                const Point   p = e.state.result_on_layer;
+                const coord_t r = support_element_radius(config, e);
+                // gap to keep: the xy distance, plus the flare of the plate foot (append_organic_plate_foot_slices, 1.2 mm)
+                const double  lift = double(li) * double(config.layer_height) - double(config.xy_distance) - scaled<double>(1.2);
+                // too far from every zone to matter
+                BoundingBox reach = box;
+                reach.offset(coord_t(double(r) - lift) + 1);
+                if (! reach.contains(p))
+                    continue;
+                double d = 0.;
+                if (! contains(zones, p)) {
+                    d = std::numeric_limits<double>::max();
+                    for (const Line &l : lines)
+                        d = std::min(d, l.distance_to(p));
+                }
+                const double allowed = d + lift;
+                if (allowed >= double(r))
+                    continue;
+                // the radius grows by branch_radius_increase_per_layer per layer of effective_radius_height past the tip
+                const double k_fit = double(config.tip_layers) + (allowed - double(config.branch_radius)) / config.branch_radius_increase_per_layer;
+                const size_t erh   = k_fit <= 0. ? 0 : size_t(k_fit);
+                if (erh < e.state.effective_radius_height) {
+                    e.state.effective_radius_height = erh;
+                    ++ thinned;
+                }
+            }
+        });
+    }
+    return thinned;
 }
 
 /*!
@@ -3811,7 +3946,8 @@ void organic_smooth_branches_avoid_collisions(
             element,
             link_down,
             // locked
-            element.parents.empty() || (link_down == -1 && element.state.layer_idx > 0),
+            // SliceOfMe: with plate zones the feet on the plate stay where the pathing put them, clear of the zones
+            element.parents.empty() || (link_down == -1 && (element.state.layer_idx > 0 || ! volumes.m_floor_forbidden.empty())),
             unscaled<float>(support_element_radius(config, element)),
             // 3D position
             to_3d(unscaled<float>(element.state.result_on_layer), float(layer_z(slicing_params, config, element.state.layer_idx)))
@@ -4898,6 +5034,18 @@ static void generate_support_areas(Print &print, TreeSupport* tree_support, cons
             m_progress_multiplier, m_progress_offset,
 #endif // SLIC3R_TREESUPPORTS_PROGRESS
             /* additional_excluded_areas */{} };
+        // SliceOfMe: limited to the plate, but other objects are painted as support base
+        config.support_rests_on_model |= volumes.support_rests_on_model();
+        // With "no supports" / "only here" plate zones every branch that rests on the model has to plan its way (gracious):
+        // the others only look one layer down, so near a zone they end right above it instead of moving away in time
+        config.only_gracious_to_model = volumes.restricts_placeable() || ! volumes.m_floor_forbidden.empty();
+        g_som_forced_tips = 0;
+        g_som_snaps       = 0;
+        g_som_stops       = 0;
+        g_som_floor_seen  = 0;
+        BOOST_LOG_TRIVIAL(warning) << "SliceOfMe supports: organic tree for '" << print_object.model_object()->name << "', rests on model "
+                                   << config.support_rests_on_model << ", only gracious " << config.only_gracious_to_model
+                                   << ", forced landing " << volumes.has_forced_landing();
 
         //FIXME generating overhangs just for the first mesh of the group.
         assert(processing.second.size() == 1);
@@ -5026,7 +5174,45 @@ static void generate_support_areas(Print &print, TreeSupport* tree_support, cons
 
             // ### Set a point in each influence area
             create_nodes_from_area(volumes, config, move_bounds, throw_on_cancel);
+            const size_t som_thinned = thin_trunks_near_floor_zones(volumes, config, move_bounds);
             auto t_place = std::chrono::high_resolution_clock::now();
+            {
+                size_t to_bp_roots = 0, forced_roots = 0;
+                if (! move_bounds.empty())
+                    for (const SupportElement &e : move_bounds.front())
+                        to_bp_roots += ! e.state.deleted;
+                for (size_t li = 1; li < move_bounds.size(); ++li)
+                    for (const SupportElement &e : move_bounds[li])
+                        forced_roots += ! e.state.deleted && e.state.landing_forced;
+                // branches ending in a "no supports" plate zone: on the plate, or hanging just above it
+                size_t in_red_plate = 0, in_red_hanging = 0;
+                if (! volumes.m_floor_forbidden.empty()) {
+                    for (size_t li = 0; li < move_bounds.size() && li <= 12; ++li) {
+                        for (size_t k = 0; k < move_bounds[li].size(); ++k) {
+                            const SupportElement &e = move_bounds[li][k];
+                            if (e.state.deleted || ! e.state.result_on_layer_is_set() || ! contains(volumes.m_floor_forbidden, e.state.result_on_layer))
+                                continue;
+                            if (li == 0)
+                                ++ in_red_plate;
+                            else {
+                                // a branch end: no element of the layer below has it as a parent
+                                bool child = false;
+                                for (const SupportElement &b : move_bounds[li - 1])
+                                    if (! b.state.deleted && std::find(b.parents.begin(), b.parents.end(), int32_t(k)) != b.parents.end()) {
+                                        child = true;
+                                        break;
+                                    }
+                                in_red_hanging += ! child;
+                            }
+                        }
+                    }
+                }
+                BOOST_LOG_TRIVIAL(warning) << "SliceOfMe supports: '" << print_object.model_object()->name << "' forced tips " << g_som_forced_tips
+                                           << ", floor checks " << g_som_floor_seen << ", pulled onto a painted top " << g_som_snaps
+                                           << ", stopped on it " << g_som_stops << ", elements on the plate layer " << to_bp_roots
+                                           << ", elements going to a painted top " << forced_roots << ", in no-support zones: on the plate "
+                                           << in_red_plate << ", ending just above " << in_red_hanging << ", trunk pieces thinned near them " << som_thinned;
+            }
 
             // ### draw these points as circles
 #if 0

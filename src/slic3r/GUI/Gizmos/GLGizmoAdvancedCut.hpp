@@ -454,6 +454,7 @@ public: // used by helpers in GLGizmoAdvancedCutCurve.cpp
         {
             int          conn{-1};
             TriangleMesh mesh;
+            Vec3d        up{Vec3d::UnitZ()}; // world direction that points up when the piece is printed on its own
         };
         TriangleMesh     a, b;
         std::vector<Op>  ops;       // 3D connectors, applied in order on a background thread

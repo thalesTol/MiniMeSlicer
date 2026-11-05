@@ -104,7 +104,8 @@ namespace instance_check_internal
 			return true;
 		std::wstring classNameString(className);
 		std::wstring wndTextString(wndText);
-		if (wndTextString.find(L"BambuStudio") != std::wstring::npos && classNameString == L"wxWindowNR") {
+		if ((wndTextString.find(L"MiniMe Slicer") != std::wstring::npos || wndTextString.find(L"BambuStudio") != std::wstring::npos) &&
+		    classNameString == L"wxWindowNR") {
 			//check if other instances has same instance hash
 			//if not it is not same version(binary) as this version
 			HANDLE   handle = GetProp(hwnd, L"Instance_Hash_Minor");

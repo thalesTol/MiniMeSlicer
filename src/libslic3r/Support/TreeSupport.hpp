@@ -332,6 +332,20 @@ public:
     // union contours of all layers below
     std::vector<ExPolygons> m_layer_outlines_below;
 
+    // SliceOfMe: plate areas the supports may not start on (object layer 0), in object coordinates
+    ExPolygons              m_floor_forbidden;
+    // SliceOfMe: per object layer, other objects' tops painted as support base (may rest there even when limited
+    // to the build plate)
+    std::vector<ExPolygons> m_landing;
+    // SliceOfMe: per object layer, the other objects (also part of m_layer_outlines)
+    std::vector<ExPolygons> m_foreign;
+    bool                    m_has_landing{false};
+    bool may_rest_on(size_t layer_nr, const Point &pt) const;
+    // SliceOfMe: per object layer, where the branches must stand on the object below (plate painted "stand on
+    // objects"): they go straight down there instead of moving towards the build plate
+    std::vector<ExPolygons> m_forced_landing;
+    bool must_rest_on(size_t layer_nr, const Point &pt) const;
+
     std::vector<double> m_max_move_distances;
 
     /*!

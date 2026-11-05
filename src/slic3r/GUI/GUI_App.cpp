@@ -70,6 +70,7 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Debounce.hpp"
 #include "libslic3r/Model.hpp"
+#include "libslic3r/Format/bbs_3mf.hpp"
 #include "libslic3r/I18N.hpp"
 #include "libslic3r/LogSink.hpp"
 #include "libslic3r/PresetBundle.hpp"
@@ -270,7 +271,7 @@ bool is_associate_files(std::wstring extend)
     wchar_t app_path[MAX_PATH];
     ::GetModuleFileNameW(nullptr, app_path, sizeof(app_path));
 
-    std::wstring prog_id             = L" Bambu.Studio.1";
+    std::wstring prog_id             = L"MiniMe.Slicer.1";
     std::wstring reg_base            = L"Software\\Classes";
     std::wstring reg_extension       = reg_base + L"\\." + extend;
 
@@ -2638,7 +2639,10 @@ void GUI_App::init_app_config()
 	// Mac : "~/Library/Application Support/Slic3r"
 
     if (data_dir().empty()) {
-        #ifndef __linux__
+        #if defined(_WIN32)
+            // SliceOfMe: never share the official Bambu Studio's folder (presets, login, caches, instance locks)
+            std::string data_dir = (wxStandardPaths::Get().GetUserConfigDir() + wxS("\\MiniMeSlicer")).ToUTF8().data();
+        #elif !defined(__linux__)
             std::string data_dir = wxStandardPaths::Get().GetUserDataDir().ToUTF8().data();
         #else
             // Since version 2.3, config dir on Linux is in ${XDG_CONFIG_HOME}.
@@ -2923,6 +2927,11 @@ bool GUI_App::OnInit()
 
 int GUI_App::OnExit()
 {
+    // SliceOfMe: also when the app is closed from outside (another installer, Windows shutting down), let the backup
+    // worker finish the object it is writing before anything it uses is destroyed
+    Slic3r::stop_backup();
+    Slic3r::drain_backup(5000);
+
 #ifdef __APPLE__
     UnRegisterMacPowerCallBack();
 #endif
@@ -3417,8 +3426,11 @@ bool GUI_App::on_init_inner()
     if (m_init_app_config_from_older)
         copy_older_config();
 
+    // SliceOfMe: do not take the file types back from the official Bambu Studio on every start (the settings copied
+    // from it say "associate"); choosing it in Preferences still registers MiniMe Slicer right away
     if (is_editor()) {
 #ifdef __WXMSW__
+        if (app_config->get("minime_associate_on_start") == "true") {
         if (app_config->get("associate_3mf") == "true")
             associate_files(L"3mf");
         if (app_config->get("associate_stl") == "true")
@@ -3429,6 +3441,7 @@ bool GUI_App::on_init_inner()
         }
         if (app_config->get("associate_gcode") == "true")
             associate_files(L"gcode");
+        }
 #endif // __WXMSW__
 
         preset_updater = new PresetUpdater();
@@ -8679,8 +8692,8 @@ void GUI_App::associate_files(std::wstring extend)
     ::GetModuleFileNameW(nullptr, app_path, sizeof(app_path));
 
     std::wstring prog_path = L"\"" + std::wstring(app_path) + L"\"";
-    std::wstring prog_id = L" Bambu.Studio.1";
-    std::wstring prog_desc = L"BambuStudio";
+    std::wstring prog_id = L"MiniMe.Slicer.1";
+    std::wstring prog_desc = L"MiniMe Slicer";
     std::wstring prog_command = prog_path + L" \"%1\"";
     std::wstring reg_base = L"Software\\Classes";
     std::wstring reg_extension = reg_base + L"\\." + extend;
@@ -8702,8 +8715,8 @@ void GUI_App::disassociate_files(std::wstring extend)
     ::GetModuleFileNameW(nullptr, app_path, sizeof(app_path));
 
     std::wstring prog_path = L"\"" + std::wstring(app_path) + L"\"";
-    std::wstring prog_id = L" Bambu.Studio.1";
-    std::wstring prog_desc = L"BambuStudio";
+    std::wstring prog_id = L"MiniMe.Slicer.1";
+    std::wstring prog_desc = L"MiniMe Slicer";
     std::wstring prog_command = prog_path + L" \"%1\"";
     std::wstring reg_base = L"Software\\Classes";
     std::wstring reg_extension = reg_base + L"\\." + extend;

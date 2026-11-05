@@ -203,7 +203,8 @@ if (WIN32)
     endif()
     target_compile_definitions(BambuStudio_app_gui PRIVATE -DSLIC3R_WRAPPER_NOCONSOLE)
     add_dependencies(BambuStudio_app_gui BambuStudio)
-    set_target_properties(BambuStudio_app_gui PROPERTIES OUTPUT_NAME "bambu-studio")
+    # SliceOfMe: its own executable name, so the official Bambu Studio (and its installer) never take it for theirs
+    set_target_properties(BambuStudio_app_gui PROPERTIES OUTPUT_NAME "minime-slicer")
     target_link_libraries(BambuStudio_app_gui PRIVATE boost_headeronly)
 endif ()
 

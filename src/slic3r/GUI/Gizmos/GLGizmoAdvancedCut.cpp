@@ -3069,21 +3069,30 @@ void GLGizmoAdvancedCut::render_connectors_input_window(float x, float y, float 
     type_changed |= render_connect_type_radio_button(CutConnectorType::Dowel);
     type_changed |= render_connect_type_radio_button(CutConnectorType::Snap);
     type_changed |= render_connect_type_radio_button(CutConnectorType::Thread);
+    ImGui::PopStyleColor(1);
+    // SliceOfMe: a plug made as its own piece, with a slot in both parts, is a dowel; say so plainly
+    if (m_connector_type == CutConnectorType::Plug || m_connector_type == CutConnectorType::Dowel) {
+        bool separate = m_connector_type == CutConnectorType::Dowel;
+        if (m_imgui->bbl_checkbox(_L("Separate piece (slots in both parts)"), separate)) {
+            m_connector_type = separate ? CutConnectorType::Dowel : CutConnectorType::Plug;
+            type_changed     = true;
+        }
+        if (ImGui::IsItemHovered())
+            m_imgui->tooltip(_L("The connector becomes its own object after the cut, and both parts get a slot for it (same as \"Dowel\"). "
+                                "Works with every shape; the frustum style makes it taper towards both ends."),
+                             m_imgui->scaled(20.f));
+    }
     if (type_changed)
         apply_selected_connectors([this, &connectors](size_t idx) { connectors[idx].attribs.type = CutConnectorType(m_connector_type); });
-    ImGui::PopStyleColor(1);
 
     std::vector<std::string> connector_styles = {_u8L("Prizm"), _u8L("Frustum")};
     std::vector<std::string> connector_shapes = { _u8L("Triangle"), _u8L("Square"), _u8L("Hexagon"), _u8L("Circle") };
 
     // 1. THE LOCKDOWN: Added Thread to the disabled list so the dropdown greys out!
-    m_imgui->disabled_begin(m_connector_type == CutConnectorType::Dowel || m_connector_type == CutConnectorType::Snap || m_connector_type == CutConnectorType::Thread);
+    // SliceOfMe: dowels may taper too (its_make_frustum_dowel: narrowing towards both ends)
+    m_imgui->disabled_begin(m_connector_type == CutConnectorType::Snap || m_connector_type == CutConnectorType::Thread);
 
-    if (type_changed && m_connector_type == CutConnectorType::Dowel) {
-        m_connector_style = size_t(CutConnectorStyle::Prizm);
-        apply_selected_connectors([this, &connectors](size_t idx) { connectors[idx].attribs.style = CutConnectorStyle(m_connector_style); });
-    }
-    else if (type_changed && m_connector_type == CutConnectorType::Thread) {
+    if (type_changed && m_connector_type == CutConnectorType::Thread) {
         // 2. THE FORCE: Automatically sets the UI value to Circle (index 3)
         m_connector_shape_id = size_t(CutConnectorShape::Circle);
         apply_selected_connectors([this, &connectors](size_t idx) { connectors[idx].attribs.shape = CutConnectorShape(m_connector_shape_id); });

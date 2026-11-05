@@ -1475,6 +1475,13 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionBool,               avoid_crossing_wall_includes_support))
     ((ConfigOptionPoints,             printable_area))
     ((ConfigOptionPointsGroups,       extruder_printable_area))
+    // SliceOfMe: plate areas painted in the support painting tool (plate coordinates, mm). Tree supports may not
+    // start on "block" areas; when "allow" areas exist, they may start only there. Polygons with clockwise
+    // orientation are holes.
+    ((ConfigOptionPointsGroups,       support_plate_block_area))
+    ((ConfigOptionPointsGroups,       support_plate_allow_area))
+    // supports above these areas stand on the object below them
+    ((ConfigOptionPointsGroups,       support_plate_land_area))
     //BBS: add bed_exclude_area
     ((ConfigOptionPoints,             bed_exclude_area))
     // Nested heat-soak zones on bed (inner rectangle first).

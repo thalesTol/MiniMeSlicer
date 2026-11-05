@@ -9,6 +9,7 @@
 #include "I18N.hpp"
 #include "ShortestPath.hpp"
 #include "Support/SupportMaterial.hpp"
+#include "Support/SupportSurroundings.hpp"
 #include "Thread.hpp"
 #include "Time.hpp"
 #include "GCode.hpp"
@@ -236,6 +237,11 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
     bool invalidated = false;
 
     for (const t_config_option_key &opt_key : opt_keys) {
+        // SliceOfMe: by object / by layer decides whether tree supports go around the other objects
+        if (opt_key == "print_sequence") {
+            osteps.emplace_back(posSupportMaterial);
+            osteps.emplace_back(posSimplifySupportPath);
+        }
         if (steps_gcode.find(opt_key) != steps_gcode.end()) {
             // These options only affect G-code export or they are just notes without influence on the generated G-code,
             // so there is nothing to invalidate.
@@ -398,6 +404,10 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
             steps.emplace_back(psSkirtBrim);
         }else if (opt_key == "z_hop_types") {
             osteps.emplace_back(posDetectOverhangsForLift);
+        } else if (opt_key == "support_plate_block_area" || opt_key == "support_plate_allow_area" || opt_key == "support_plate_land_area") {
+            // SliceOfMe: only where the supports may start changed
+            osteps.emplace_back(posSupportMaterial);
+            osteps.emplace_back(posSimplifySupportPath);
         } else {
             // for legacy, if we can't handle this option let's invalidate all steps
             //FIXME invalidate all steps of all objects as well?
@@ -2007,6 +2017,9 @@ void Print::process(std::unordered_map<std::string, long long>* slice_time, bool
     auto is_print_object_the_same = [this](const PrintObject* object1, const PrintObject* object2) -> bool{
         if (object1->trafo().matrix() != object2->trafo().matrix())
             return false;
+        // SliceOfMe: supports that depend on the plate zones and the neighbouring objects differ per position
+        if (support_depends_on_surroundings(*object1) || support_depends_on_surroundings(*object2))
+            return false;
         const ModelObject* model_obj1 = object1->model_object();
         const ModelObject* model_obj2 = object2->model_object();
         if (model_obj1->volumes.size() != model_obj2->volumes.size())
@@ -2276,19 +2289,24 @@ void Print::process(std::unordered_map<std::string, long long>* slice_time, bool
                 obj->ironing();
                 if (slice_time)
                     (*slice_time)[TIME_IRONING] += Slic3r::Utils::get_current_milliseconds_time_monotonic() - start_time;
-
-                if (slice_time)
-                    start_time = Slic3r::Utils::get_current_milliseconds_time_monotonic();
-                obj->generate_support_material();
-                if (slice_time)
-                    (*slice_time)[TIME_GENERATE_SUPPORT] += Slic3r::Utils::get_current_milliseconds_time_monotonic() - start_time;
-
-                if (slice_time)
-                    start_time = Slic3r::Utils::get_current_milliseconds_time_monotonic();
-                obj->detect_overhangs_for_lift();
-                if (slice_time)
-                    (*slice_time)[TIME_DETECT_OVERHANGS] += Slic3r::Utils::get_current_milliseconds_time_monotonic() - start_time;
             }
+        }
+        // SliceOfMe: supports only after every object is sliced, as tree supports go around (and may rest on)
+        // the other objects
+        for (PrintObject *obj : m_objects) {
+            if (m_reslicing_objects.count(obj) == 0)
+                continue;
+            if (slice_time)
+                start_time = Slic3r::Utils::get_current_milliseconds_time_monotonic();
+            obj->generate_support_material();
+            if (slice_time)
+                (*slice_time)[TIME_GENERATE_SUPPORT] += Slic3r::Utils::get_current_milliseconds_time_monotonic() - start_time;
+
+            if (slice_time)
+                start_time = Slic3r::Utils::get_current_milliseconds_time_monotonic();
+            obj->detect_overhangs_for_lift();
+            if (slice_time)
+                (*slice_time)[TIME_DETECT_OVERHANGS] += Slic3r::Utils::get_current_milliseconds_time_monotonic() - start_time;
         }
         if (slice_time) {
             SupportStageTimes raw_support_times;

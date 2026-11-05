@@ -339,6 +339,8 @@ extern void set_backup_callback(std::function<void(int)> callback);
 // Quiesce the backup worker (stop timer, drop UI callback + pending Backup posts) before the
 // owning frame is destroyed. Safe to call repeatedly; the worker is re-armed by a new frame.
 extern void stop_backup();
+// SliceOfMe: waits (at most timeout_ms) for the backup worker to finish writing objects
+extern void drain_backup(long timeout_ms);
 
 extern void run_backup_ui_tasks();
 

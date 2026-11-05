@@ -1129,6 +1129,8 @@ void MainFrame::shutdown()
     // timer, drops the UI callback and any queued Backup UI posts so the backup thread cannot
     // invoke a callback (wxPostEvent / export_3mf) against this MainFrame after it goes away.
     Slic3r::stop_backup();
+    // SliceOfMe: an object still being written must finish before the model it refers to goes away
+    Slic3r::drain_backup(5000);
 #ifdef _WIN32
 	if (m_hDeviceNotify) {
 		::UnregisterDeviceNotification(HDEVNOTIFY(m_hDeviceNotify));

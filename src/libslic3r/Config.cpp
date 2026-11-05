@@ -291,6 +291,7 @@ ConfigOption* ConfigOptionDef::create_empty_option() const
 	    case coEnum:            return new ConfigOptionEnumGeneric(this->enum_keys_map);
         // BBS
         case coEnums:           return new ConfigOptionEnumsGeneric(this->enum_keys_map);
+        case coPointsGroups:    return new ConfigOptionPointsGroups();
 	    default:                throw ConfigurationError(std::string("Unknown option type for option ") + this->label);
 	    }
 	}
