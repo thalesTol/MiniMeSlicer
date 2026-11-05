@@ -14,8 +14,12 @@ namespace Slic3r {
 class PrintObject;
 class PrintConfig;
 
-// Painted (support painting tool) on an object to let other objects' tree supports rest there.
+// Painted (support painting tool, "stand on objects") on an object's surface: the tree supports above it stand on it
+// (it works as a raised build plate). Being paint on the object it moves, turns, saves and undoes with it.
 constexpr EnforcerBlockerType SUPPORT_LANDING_STATE = EnforcerBlockerType(3);
+
+// True when some part of the object is painted "stand on objects".
+bool has_support_landing_paint(const ModelObject &object);
 
 struct SupportSurroundings
 {
@@ -44,6 +48,10 @@ bool support_depends_on_surroundings(const PrintObject &object);
 
 // Collects the surroundings of an object for its tree supports. Other objects must already be sliced.
 SupportSurroundings support_surroundings(const PrintObject &object);
+
+// The last tree support summary of each object (by name), kept for the Claude tool bridge. Thread safe.
+void                                             support_report_set(const std::string &object_name, const std::string &text);
+std::vector<std::pair<std::string, std::string>> support_report_get();
 
 } // namespace Slic3r
 

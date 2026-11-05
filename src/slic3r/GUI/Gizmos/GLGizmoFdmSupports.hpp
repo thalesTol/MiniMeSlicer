@@ -144,6 +144,7 @@ private:
     void       plate_commit();
     bool       plate_point(const Vec2d &mouse_position, Vec2d &plate_pt) const;
     void       plate_stamp(const Vec2d &p, uint8_t value);
+    void       plate_stroke_stamp(const Vec2d &p);
     void       plate_bucket(const Vec2d &p, uint8_t value);
     ExPolygons plate_areas(uint8_t value) const;
     void       render_plate_zones() const;
@@ -178,7 +179,27 @@ private:
     {
         Vec3f    a, b, c;
         uint32_t cell;
+        int      obj_idx{-1}, vol_idx{-1}, facet{-1}; // the triangle in the model
     };
+    // "stand on objects" is paint on the objects' own surfaces (SUPPORT_LANDING_STATE), so it moves, turns, saves and
+    // undoes with them. The edited object is painted through the tool's own selectors, the other objects of the plate
+    // through selectors made here while painting.
+    struct LandPart
+    {
+        int                               obj_idx{-1}, vol_idx{-1};
+        std::unique_ptr<TriangleSelector> selector;
+        bool                              dirty{false};
+    };
+    mutable std::vector<LandPart> m_land_parts;
+    bool                          m_land_edited_dirty{false};
+    mutable size_t                m_land_render_key{0};
+    mutable double                m_land_area{0.};
+    TriangleSelector *land_selector(int obj_idx, int vol_idx, bool create) const;
+    void              land_mark_dirty(int obj_idx, int vol_idx);
+    bool              land_paint_at(const Vec2d &plate_pt, double radius, EnforcerBlockerType state);
+    void              land_set_facets_in_cells(const std::vector<uint8_t> &marked, EnforcerBlockerType state);
+    void              land_commit();
+    size_t            land_key() const;
     mutable std::vector<UpTriangle> m_up_triangles;
     mutable GLModel                 m_land_surface_model;
     mutable bool                    m_land_surface_dirty{true};

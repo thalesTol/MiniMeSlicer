@@ -173,7 +173,7 @@ TreeModelVolumes::TreeModelVolumes(
     }
     // SliceOfMe: painted support base on other objects
     m_support_rests_on_model |= m_restrict_placeable || m_has_forced_landing;
-    BOOST_LOG_TRIVIAL(warning) << "SliceOfMe supports: volumes for '" << (print_object.model_object() ? print_object.model_object()->name : std::string())
+    BOOST_LOG_TRIVIAL(debug) << "SliceOfMe supports: volumes for '" << (print_object.model_object() ? print_object.model_object()->name : std::string())
                                << "' depends on surroundings " << support_depends_on_surroundings(print_object) << ", floor forbidden polygons "
                                << m_floor_forbidden.size() << ", forced landing " << m_has_forced_landing << ", restrict placeable " << m_restrict_placeable
                                << ", rests on model " << m_support_rests_on_model << ", raft layers " << m_raft_layers.size();

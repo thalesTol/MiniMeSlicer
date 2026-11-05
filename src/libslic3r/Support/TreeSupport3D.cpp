@@ -28,6 +28,7 @@
 #include "Time.hpp"
 #include "TriangleMeshSlicer.hpp"
 #include "TreeSupport.hpp"
+#include "SupportSurroundings.hpp"
 #include "I18N.hpp"
 
 #include <cassert>
@@ -36,6 +37,7 @@
 #include <stdio.h>
 #include <string>
 #include <string_view>
+#include <sstream>
 
 #include <boost/log/trivial.hpp>
 
@@ -5043,7 +5045,7 @@ static void generate_support_areas(Print &print, TreeSupport* tree_support, cons
         g_som_snaps       = 0;
         g_som_stops       = 0;
         g_som_floor_seen  = 0;
-        BOOST_LOG_TRIVIAL(warning) << "SliceOfMe supports: organic tree for '" << print_object.model_object()->name << "', rests on model "
+        BOOST_LOG_TRIVIAL(debug) << "SliceOfMe supports: organic tree for '" << print_object.model_object()->name << "', rests on model "
                                    << config.support_rests_on_model << ", only gracious " << config.only_gracious_to_model
                                    << ", forced landing " << volumes.has_forced_landing();
 
@@ -5207,11 +5209,14 @@ static void generate_support_areas(Print &print, TreeSupport* tree_support, cons
                         }
                     }
                 }
-                BOOST_LOG_TRIVIAL(warning) << "SliceOfMe supports: '" << print_object.model_object()->name << "' forced tips " << g_som_forced_tips
-                                           << ", floor checks " << g_som_floor_seen << ", pulled onto a painted top " << g_som_snaps
-                                           << ", stopped on it " << g_som_stops << ", elements on the plate layer " << to_bp_roots
-                                           << ", elements going to a painted top " << forced_roots << ", in no-support zones: on the plate "
-                                           << in_red_plate << ", ending just above " << in_red_hanging << ", trunk pieces thinned near them " << som_thinned;
+                std::ostringstream report;
+                report << "organic tree supports; branch tips forced onto painted tops " << g_som_forced_tips << ", floor checks " << g_som_floor_seen
+                       << ", branches pulled onto a painted top " << g_som_snaps << ", stopped on it " << g_som_stops
+                       << ", branch elements on the plate layer " << to_bp_roots << ", branches ending on a painted top " << forced_roots
+                       << ", branches in no-support plate zones: on the plate " << in_red_plate << ", ending just above " << in_red_hanging
+                       << ", trunk pieces thinned near those zones " << som_thinned << ", plate zones present " << (volumes.m_floor_forbidden.empty() ? "no" : "yes");
+                BOOST_LOG_TRIVIAL(info) << "SliceOfMe supports: '" << print_object.model_object()->name << "' " << report.str();
+                support_report_set(print_object.model_object()->name, report.str());
             }
 
             // ### draw these points as circles

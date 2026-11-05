@@ -9,6 +9,8 @@
 #include <boost/log/trivial.hpp>
 
 #include <algorithm>
+#include <map>
+#include <mutex>
 
 namespace Slic3r {
 
@@ -55,6 +57,41 @@ ExPolygons shifted(const ExPolygons &src, const Point &shift)
     return out;
 }
 
+// The upward facing surfaces of 'model_object' painted "stand on objects", projected onto the slicing planes of
+// 'src' (its print object, or the one it shares its slices with), per layer of 'src', object coordinates of 'src'.
+// Empty when nothing is painted.
+std::vector<ExPolygons> painted_landing_tops(const PrintObject &src, const ModelObject &model_object)
+{
+    std::vector<ExPolygons> painted;
+    const size_t            src_count = src.layer_count();
+    if (src_count == 0)
+        return painted;
+    const std::vector<float> zs     = zs_from_layers(src.layers());
+    const double             shrink = src.support_shrinkage_scale();
+    for (const ModelVolume *mv : model_object.volumes) {
+        // nothing painted: skip, reading the painting rebuilds the triangle structure of the whole part
+        if (!mv->is_model_part() || mv->supported_facets.empty() || !mv->supported_facets.has_facets(*mv, SUPPORT_LANDING_STATE))
+            continue;
+        const indexed_triangle_set facets = mv->supported_facets.get_facets_strict(*mv, SUPPORT_LANDING_STATE);
+        if (facets.indices.empty())
+            continue;
+        std::vector<Polygons> top;
+        // upward facing painted areas, projected onto their slicing planes
+        slice_mesh_slabs(facets, zs, src.trafo_centered() * mv->get_matrix(), &top, nullptr, nullptr, []() {});
+        if (painted.empty())
+            painted.assign(src_count, ExPolygons());
+        for (size_t k = 0; k < top.size() && k < painted.size(); ++k) {
+            if (top[k].empty())
+                continue;
+            if (shrink != 1.)
+                for (Polygon &poly : top[k])
+                    poly.scale(shrink);
+            append(painted[k], union_ex(top[k]));
+        }
+    }
+    return painted;
+}
+
 } // namespace
 
 ExPolygons support_plate_forbidden_area(const PrintConfig &config)
@@ -80,6 +117,13 @@ bool support_plate_zones_set(const PrintConfig &config)
     return set(config.support_plate_block_area) || set(config.support_plate_allow_area) || set(config.support_plate_land_area);
 }
 
+bool has_support_landing_paint(const ModelObject &object)
+{
+    return std::any_of(object.volumes.begin(), object.volumes.end(), [](const ModelVolume *mv) {
+        return mv->is_model_part() && !mv->supported_facets.empty() && mv->supported_facets.has_facets(*mv, SUPPORT_LANDING_STATE);
+    });
+}
+
 bool support_depends_on_surroundings(const PrintObject &object)
 {
     if (!is_tree(object.config().support_type.value))
@@ -91,6 +135,9 @@ bool support_depends_on_surroundings(const PrintObject &object)
     if (print == nullptr)
         return false;
     if (support_plate_zones_set(print->config()))
+        return true;
+    // painted "stand on objects", here or on another object
+    if (object.model_object() != nullptr && has_support_landing_paint(*object.model_object()))
         return true;
     return print->objects().size() > 1 && print->config().print_sequence.value != PrintSequence::ByObject;
 }
@@ -115,7 +162,29 @@ SupportSurroundings support_surroundings(const PrintObject &object)
         out.floor_forbidden = union_ex(out.floor_forbidden);
     }
 
-    // the plate areas where supports stand on the objects below them, in object coordinates
+    // per layer of this object: the surfaces painted "stand on objects" (this object's and the other objects'), in
+    // object coordinates
+    std::vector<ExPolygons> painted_here(num_layers);
+    bool                    any_painted = false;
+    if (object.model_object() != nullptr)
+        if (std::vector<ExPolygons> own = painted_landing_tops(object, *object.model_object()); !own.empty()) {
+            // every instance over every instance (they share the supports)
+            std::vector<Point> shifts;
+            for (const PrintInstance &mine : object.instances())
+                for (const PrintInstance &theirs : object.instances())
+                    if (std::find(shifts.begin(), shifts.end(), theirs.shift - mine.shift) == shifts.end())
+                        shifts.emplace_back(theirs.shift - mine.shift);
+            for (size_t i = 0; i < num_layers && i < own.size(); ++i)
+                if (!own[i].empty()) {
+                    const ExPolygons grown = offset_ex(union_ex(own[i]), scale_(0.3));
+                    for (const Point &shift : shifts)
+                        append(painted_here[i], shifted(grown, shift));
+                    any_painted = true;
+                }
+        }
+
+    // the plate areas painted "stand on objects" by earlier versions (the tool now paints the objects themselves):
+    // there supports stand on whatever object lies below, in object coordinates
     ExPolygons land_zone;
     if (const ExPolygons land = plate_areas(print->config().support_plate_land_area); !land.empty()) {
         const Vec3d origin = print->get_plate_origin();
@@ -155,36 +224,11 @@ SupportSurroundings support_surroundings(const PrintObject &object)
         if (shifts.empty())
             continue;
 
-        // painted support base of the other object, per layer of the other object
-        std::vector<ExPolygons> painted;
-        {
-            const std::vector<float> zs     = zs_from_layers(src->layers());
-            const double             shrink = src->support_shrinkage_scale();
-            for (const ModelVolume *mv : other->model_object()->volumes) {
-                // nothing painted: skip, reading the painting rebuilds the triangle structure of the whole part
-                if (!mv->is_model_part() || mv->supported_facets.empty() || !mv->supported_facets.has_facets(*mv, SUPPORT_LANDING_STATE))
-                    continue;
-                const indexed_triangle_set facets = mv->supported_facets.get_facets_strict(*mv, SUPPORT_LANDING_STATE);
-                if (facets.indices.empty())
-                    continue;
-                std::vector<Polygons> top;
-                // upward facing painted areas, projected onto their slicing planes
-                slice_mesh_slabs(facets, zs, src->trafo_centered() * mv->get_matrix(), &top, nullptr, nullptr, []() {});
-                if (painted.empty())
-                    painted.assign(src_count, ExPolygons());
-                for (size_t k = 0; k < top.size() && k < painted.size(); ++k) {
-                    if (top[k].empty())
-                        continue;
-                    if (shrink != 1.)
-                        for (Polygon &poly : top[k])
-                            poly.scale(shrink);
-                    append(painted[k], union_ex(top[k]));
-                }
-            }
-            for (ExPolygons &layer : painted)
-                if (!layer.empty())
-                    layer = offset_ex(union_ex(layer), scale_(0.3));
-        }
+        // painted "stand on objects" on the other object, per layer of the other object
+        std::vector<ExPolygons> painted = other->model_object() ? painted_landing_tops(*src, *other->model_object()) : std::vector<ExPolygons>();
+        for (ExPolygons &layer : painted)
+            if (!layer.empty())
+                layer = offset_ex(union_ex(layer), scale_(0.3));
 
         for (size_t i = 0; i < num_layers; ++i) {
             const Layer *layer = object.get_layer(int(i));
@@ -203,9 +247,13 @@ SupportSurroundings support_surroundings(const PrintObject &object)
                 for (int kk = std::max(0, k - 1); kk <= std::min(int(painted.size()) - 1, k + 1); ++kk)
                     append(here, painted[kk]);
                 if (!here.empty()) {
-                    for (const Point &shift : shifts)
-                        append(out.landing[i], shifted(here, shift));
+                    for (const Point &shift : shifts) {
+                        ExPolygons moved = shifted(here, shift);
+                        append(painted_here[i], moved);
+                        append(out.landing[i], std::move(moved));
+                    }
                     out.has_landing = true;
+                    any_painted     = true;
                 }
             }
         }
@@ -218,11 +266,12 @@ SupportSurroundings support_surroundings(const PrintObject &object)
                 out.landing[i] = union_ex(out.landing[i]);
         }
 
-    // 3) "stand on objects": inside the painted areas, wherever this or another object lies below a layer, the
-    // supports starting there must stand on it; they may rest there even when limited to the build plate
-    if (!land_zone.empty()) {
+    // 3) "stand on objects": above a painted surface (or, from earlier versions, inside a painted plate area where an
+    // object lies below) the supports starting there must stand on it; they may rest there even when limited to
+    // the build plate
+    if (!land_zone.empty() || any_painted) {
         out.forced_landing.assign(num_layers, ExPolygons());
-        ExPolygons below; // what lies below the current layer, inside the zone
+        ExPolygons below; // what lies below the current layer and may be stood on
         for (size_t i = 0; i < num_layers; ++i) {
             if (!below.empty()) {
                 out.forced_landing[i] = below;
@@ -232,10 +281,13 @@ SupportSurroundings support_surroundings(const PrintObject &object)
                 out.has_landing        = true;
                 out.has_forced_landing = true;
             }
-            ExPolygons here = object.get_layer(int(i))->lslices;
-            if (i < out.foreign.size())
-                append(here, out.foreign[i]);
-            here = intersection_ex(here, land_zone);
+            ExPolygons here = painted_here[i];
+            if (!land_zone.empty()) {
+                ExPolygons objects_here = object.get_layer(int(i))->lslices;
+                if (i < out.foreign.size())
+                    append(objects_here, out.foreign[i]);
+                append(here, intersection_ex(objects_here, land_zone));
+            }
             if (!here.empty())
                 below = union_ex(below, here);
         }
@@ -249,7 +301,7 @@ SupportSurroundings support_surroundings(const PrintObject &object)
         for (const ExPolygons &l : out.landing) landing_layers += !l.empty();
         for (const ExPolygons &l : out.foreign) foreign_layers += !l.empty();
         const Vec3d origin = print->get_plate_origin();
-        BOOST_LOG_TRIVIAL(warning) << "SliceOfMe supports: object '" << (object.model_object() ? object.model_object()->name : std::string()) << "' layers "
+        BOOST_LOG_TRIVIAL(debug) << "SliceOfMe supports: object '" << (object.model_object() ? object.model_object()->name : std::string()) << "' layers "
                                    << num_layers << ", plate origin " << origin.x() << "," << origin.y() << ", instance shift "
                                    << unscale<double>(object.instances().front().shift.x()) << "," << unscale<double>(object.instances().front().shift.y())
                                    << ", plate zones block/allow/land groups " << print->config().support_plate_block_area.values.size() << "/"
@@ -258,6 +310,21 @@ SupportSurroundings support_surroundings(const PrintObject &object)
                                    << ", foreign layers " << foreign_layers;
     }
     return out;
+}
+
+static std::mutex                         s_support_report_mutex;
+static std::map<std::string, std::string> s_support_report;
+
+void support_report_set(const std::string &object_name, const std::string &text)
+{
+    std::lock_guard<std::mutex> lock(s_support_report_mutex);
+    s_support_report[object_name] = text;
+}
+
+std::vector<std::pair<std::string, std::string>> support_report_get()
+{
+    std::lock_guard<std::mutex> lock(s_support_report_mutex);
+    return {s_support_report.begin(), s_support_report.end()};
 }
 
 } // namespace Slic3r

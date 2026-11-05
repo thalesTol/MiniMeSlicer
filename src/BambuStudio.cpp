@@ -8787,9 +8787,45 @@ static void bbl_out_of_memory_handler()
 }
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
+// SliceOfMe: MiniMe writes its own crash dump into its own log folder (<data dir>\log). The official Bambu Studio
+// installer has Windows keep dumps of "bambu-studio.exe" only, so without this a MiniMe crash would leave nothing.
+// dbghelp is loaded only when needed.
+#include <dbghelp.h>
+static LONG WINAPI minime_crash_filter(EXCEPTION_POINTERS *info)
+{
+    static volatile long s_writing = 0;
+    if (::InterlockedCompareExchange(&s_writing, 1, 0) != 0)
+        return EXCEPTION_CONTINUE_SEARCH;
+    using MiniDumpWriteDumpFn = BOOL(WINAPI *)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION,
+                                               PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
+    HMODULE dbghelp = ::LoadLibraryW(L"dbghelp.dll");
+    auto    write   = dbghelp ? reinterpret_cast<MiniDumpWriteDumpFn>(::GetProcAddress(dbghelp, "MiniDumpWriteDump")) : nullptr;
+    const std::string &dir = Slic3r::data_dir();
+    if (write != nullptr && !dir.empty()) {
+        SYSTEMTIME t;
+        ::GetLocalTime(&t);
+        wchar_t name[128];
+        swprintf_s(name, L"\\log\\crash_minime-slicer_%04d%02d%02d_%02d%02d%02d_%lu.dmp", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
+                   t.wSecond, ::GetCurrentProcessId());
+        const std::wstring path = boost::nowide::widen(dir) + name;
+        ::CreateDirectoryW((boost::nowide::widen(dir) + L"\\log").c_str(), nullptr);
+        HANDLE file = ::CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file != INVALID_HANDLE_VALUE) {
+            MINIDUMP_EXCEPTION_INFORMATION mei{::GetCurrentThreadId(), info, FALSE};
+            write(::GetCurrentProcess(), ::GetCurrentProcessId(), file,
+                  MINIDUMP_TYPE(MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules),
+                  info ? &mei : nullptr, nullptr, nullptr);
+            ::CloseHandle(file);
+        }
+    }
+    // let Windows go on as usual (error reporting, the "stopped working" dialog)
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 extern "C" {
     __declspec(dllexport) int __stdcall bambustu_main(int argc, wchar_t **argv)
     {
+        ::SetUnhandledExceptionFilter(minime_crash_filter);
         // Convert wchar_t arguments to UTF8.
         std::vector<std::string> 	argv_narrow;
         std::vector<char*>			argv_ptrs(argc + 1, nullptr);

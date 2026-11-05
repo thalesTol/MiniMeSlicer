@@ -153,6 +153,7 @@ void GLGizmoFdmSupports::plate_show_scene(bool show)
         m_scene_casters.clear();
         m_up_triangles.clear();
         m_up_triangles.shrink_to_fit();
+        m_land_parts.clear();
         m_shadow_key = 0;
         // back to the painting tools' view: only the edited object
         m_parent.toggle_model_objects_visibility(false);
@@ -205,6 +206,7 @@ void GLGizmoFdmSupports::plate_update_guides() const
         m_plate_models_dirty = true; // the "stand on objects" areas are drawn on the tops
         m_land_surface_dirty = true;
         m_land_prune_pending = true;
+        m_land_parts.clear(); // the objects changed: selectors are made again from their paint when needed
         const double cell = m_plate.cell;
         // the overhangs' shadow and, for every triangle, the height of the top surface
         bool         overhang = false;
@@ -222,7 +224,8 @@ void GLGizmoFdmSupports::plate_update_guides() const
             for (int inst_idx = 0; inst_idx < int(mo->instances.size()); ++inst_idx) {
                 if (!plate->contain_instance(obj_idx, inst_idx))
                     continue;
-                for (const ModelVolume *mv : mo->volumes) {
+                for (int vol_idx = 0; vol_idx < int(mo->volumes.size()); ++vol_idx) {
+                    const ModelVolume *mv = mo->volumes[vol_idx];
                     if (!mv->is_model_part())
                         continue;
                     const Transform3d          trafo = mo->instances[inst_idx]->get_matrix() * mv->get_matrix();
@@ -234,6 +237,7 @@ void GLGizmoFdmSupports::plate_update_guides() const
                         pts[v].y() -= plate_origin.y() + m_plate.origin.y();
                     }
                     for (const stl_triangle_vertex_indices &f : its.indices) {
+                        const int facet = int(&f - its.indices.data());
                         const Vec3d &a = pts[f[0]], &b = pts[f[1]], &c = pts[f[2]];
                         const double top_z = std::max({a.z(), b.z(), c.z()});
                         if (top_z < 0.3)
@@ -253,7 +257,7 @@ void GLGizmoFdmSupports::plate_update_guides() const
                             if (ci >= 0 && cj >= 0 && ci < m_plate.w && cj < m_plate.h) {
                                 const Vec3f off(float(m_plate.origin.x()), float(m_plate.origin.y()), 0.f);
                                 m_up_triangles.push_back({a.cast<float>() + off, b.cast<float>() + off, c.cast<float>() + off,
-                                                          uint32_t(cj * m_plate.w + ci)});
+                                                          uint32_t(cj * m_plate.w + ci), obj_idx, vol_idx, facet});
                             }
                         }
                         const double minx = std::min({a.x(), b.x(), c.x()}), maxx = std::max({a.x(), b.x(), c.x()});
@@ -569,22 +573,197 @@ void GLGizmoFdmSupports::plate_stamp(const Vec2d &p, uint8_t value)
     m_plate_models_dirty = true;
 }
 
+// "stand on objects" painted as plate areas by earlier versions: moved onto the surfaces of the objects below it
+// (what lies on the bare plate is dropped), then removed from the plate
 void GLGizmoFdmSupports::plate_prune_land()
 {
     m_land_prune_pending = false;
     if (m_top_z.size() != m_plate.cells.size())
         return;
-    bool changed = false;
+    std::vector<uint8_t> marked(m_plate.cells.size(), 0);
+    bool                 any = false;
     for (size_t idx = 0; idx < m_plate.cells.size(); ++idx)
-        if (m_plate.cells[idx] == 3 && m_top_z[idx] <= 0.3f) {
+        if (m_plate.cells[idx] == 3) {
+            marked[idx]        = 1;
             m_plate.cells[idx] = 0;
-            changed            = true;
+            any                = true;
         }
-    if (changed) {
-        m_plate_models_dirty = true;
-        m_land_surface_dirty = true;
-        plate_commit();
+    if (!any)
+        return;
+    land_set_facets_in_cells(marked, SUPPORT_LANDING_STATE);
+    land_commit();
+    m_plate_models_dirty = true;
+    m_land_surface_dirty = true;
+    plate_commit();
+}
+
+TriangleSelector *GLGizmoFdmSupports::land_selector(int obj_idx, int vol_idx, bool create) const
+{
+    const Model &model = wxGetApp().model();
+    if (obj_idx < 0 || obj_idx >= int(model.objects.size()))
+        return nullptr;
+    const ModelObject *mo = model.objects[obj_idx];
+    if (vol_idx < 0 || vol_idx >= int(mo->volumes.size()) || !mo->volumes[vol_idx]->is_model_part())
+        return nullptr;
+    // the edited object: the tool's own selectors (one per model part, in order)
+    const ModelObject *edited = m_c->selection_info() ? m_c->selection_info()->model_object() : nullptr;
+    if (mo == edited) {
+        int part = -1;
+        for (int v = 0; v <= vol_idx; ++v)
+            part += mo->volumes[v]->is_model_part();
+        return part >= 0 && part < int(m_triangle_selectors.size()) ? m_triangle_selectors[part].get() : nullptr;
     }
+    for (LandPart &p : m_land_parts)
+        if (p.obj_idx == obj_idx && p.vol_idx == vol_idx)
+            return p.selector.get();
+    if (!create)
+        return nullptr;
+    const ModelVolume *mv = mo->volumes[vol_idx];
+    LandPart           part;
+    part.obj_idx  = obj_idx;
+    part.vol_idx  = vol_idx;
+    part.selector = std::make_unique<TriangleSelector>(mv->mesh());
+    part.selector->deserialize(mv->supported_facets.get_data(), true);
+    m_land_parts.emplace_back(std::move(part));
+    return m_land_parts.back().selector.get();
+}
+
+void GLGizmoFdmSupports::land_mark_dirty(int obj_idx, int vol_idx)
+{
+    const Model       &model  = wxGetApp().model();
+    const ModelObject *edited = m_c->selection_info() ? m_c->selection_info()->model_object() : nullptr;
+    if (obj_idx >= 0 && obj_idx < int(model.objects.size()) && model.objects[obj_idx] == edited) {
+        m_land_edited_dirty = true;
+        for (auto &sel : m_triangle_selectors)
+            sel->request_update_render_data(true);
+    } else
+        for (LandPart &p : m_land_parts)
+            if (p.obj_idx == obj_idx && p.vol_idx == vol_idx)
+                p.dirty = true;
+    m_land_surface_dirty = true;
+}
+
+bool GLGizmoFdmSupports::land_paint_at(const Vec2d &plate_pt, double radius, EnforcerBlockerType state)
+{
+    const PartPlate *plate = wxGetApp().plater()->get_partplate_list().get_curr_plate();
+    if (plate == nullptr)
+        return false;
+    const Model &model = wxGetApp().model();
+    const Vec3d  world_top(plate_pt.x() + plate->get_origin().x(), plate_pt.y() + plate->get_origin().y(), 1e4);
+    // the surface seen from straight above this point: the highest hit of all objects on the plate
+    struct Hit
+    {
+        int         obj_idx{-1}, vol_idx{-1}, facet{-1};
+        Vec3d       pos_mesh, src_mesh;
+        Transform3d trafo;
+        double      z{-std::numeric_limits<double>::max()};
+    } best;
+    for (int obj_idx = 0; obj_idx < int(model.objects.size()); ++obj_idx) {
+        const ModelObject *mo = model.objects[obj_idx];
+        for (int inst_idx = 0; inst_idx < int(mo->instances.size()); ++inst_idx) {
+            if (!const_cast<PartPlate *>(plate)->contain_instance(obj_idx, inst_idx))
+                continue;
+            for (int vol_idx = 0; vol_idx < int(mo->volumes.size()); ++vol_idx) {
+                const ModelVolume *mv = mo->volumes[vol_idx];
+                if (!mv->is_model_part())
+                    continue;
+                const std::shared_ptr<const TriangleMesh> &mesh = mv->get_mesh_shared_ptr();
+                if (!mesh)
+                    continue;
+                auto it = std::find_if(m_scene_casters.begin(), m_scene_casters.end(), [&mesh](const auto &c) { return c.first == mesh; });
+                if (it == m_scene_casters.end()) {
+                    m_scene_casters.emplace_back(mesh, std::make_unique<MeshRaycaster>(*mesh));
+                    it = std::prev(m_scene_casters.end());
+                }
+                const Transform3d trafo = mo->instances[inst_idx]->get_matrix() * mv->get_matrix();
+                const Transform3d inv   = trafo.inverse();
+                const Vec3d       src   = inv * world_top;
+                const Vec3d       dir   = (inv.linear() * Vec3d(0., 0., -1.)).normalized();
+                const auto        hit   = it->second->get_aabb_mesh().query_ray_hit(src, dir);
+                if (!hit.is_hit())
+                    continue;
+                const double z = (trafo * hit.position()).z();
+                if (z > best.z) {
+                    best = {obj_idx, vol_idx, hit.face(), hit.position(), src, trafo, z};
+                }
+            }
+        }
+    }
+    if (best.facet < 0)
+        return false;
+    TriangleSelector *sel = land_selector(best.obj_idx, best.vol_idx, true);
+    if (sel == nullptr)
+        return false;
+    Transform3d not_translated = best.trafo;
+    not_translated.translation() = Vec3d::Zero();
+    // a circle seen from above: the upward facing surface within the radius
+    std::unique_ptr<TriangleSelector::Cursor> cursor = TriangleSelector::SinglePointCursor::cursor_factory(
+        best.pos_mesh.cast<float>(), best.src_mesh.cast<float>(), float(radius), TriangleSelector::CursorType::CIRCLE, best.trafo,
+        TriangleSelector::ClippingPlane());
+    sel->select_patch(best.facet, std::move(cursor), state, not_translated, true);
+    land_mark_dirty(best.obj_idx, best.vol_idx);
+    return true;
+}
+
+void GLGizmoFdmSupports::land_set_facets_in_cells(const std::vector<uint8_t> &marked, EnforcerBlockerType state)
+{
+    for (const UpTriangle &t : m_up_triangles) {
+        if (t.cell >= marked.size() || !marked[t.cell] || t.facet < 0)
+            continue;
+        // only the surface seen from above, not what lies under it
+        const float centre_z = (t.a.z() + t.b.z() + t.c.z()) / 3.f;
+        if (t.cell < m_top_z.size() && centre_z < m_top_z[t.cell] - 1.f)
+            continue;
+        if (TriangleSelector *sel = land_selector(t.obj_idx, t.vol_idx, true)) {
+            sel->set_facet(t.facet, state);
+            land_mark_dirty(t.obj_idx, t.vol_idx);
+        }
+    }
+}
+
+void GLGizmoFdmSupports::land_commit()
+{
+    const bool others = std::any_of(m_land_parts.begin(), m_land_parts.end(), [](const LandPart &p) { return p.dirty; });
+    if (!m_land_edited_dirty && !others)
+        return;
+    Model &model = wxGetApp().model();
+    {
+        // taken before the paint is written into the objects: undo brings back what they had
+        Plater::TakeSnapshot snapshot(wxGetApp().plater(), "Paint supports stand on objects");
+        if (m_land_edited_dirty) {
+            m_land_edited_dirty = false;
+            update_model_object(); // the edited object, from the tool's selectors
+        }
+        for (LandPart &p : m_land_parts)
+            if (p.dirty && p.obj_idx < int(model.objects.size()) && p.vol_idx < int(model.objects[p.obj_idx]->volumes.size())) {
+                p.dirty = false;
+                model.objects[p.obj_idx]->volumes[p.vol_idx]->supported_facets.set(*p.selector);
+                wxGetApp().obj_list()->update_info_items(size_t(p.obj_idx));
+            }
+    }
+    wxGetApp().plater()->set_plater_dirty(true);
+    m_parent.post_event(SimpleEvent(EVT_GLCANVAS_SCHEDULE_BACKGROUND_PROCESS));
+    m_land_surface_dirty = true;
+}
+
+size_t GLGizmoFdmSupports::land_key() const
+{
+    size_t                 key   = m_shadow_key;
+    const PartPlate       *plate = wxGetApp().plater()->get_partplate_list().get_curr_plate();
+    const Model           &model = wxGetApp().model();
+    for (int obj_idx = 0; plate != nullptr && obj_idx < int(model.objects.size()); ++obj_idx) {
+        const ModelObject *mo = model.objects[obj_idx];
+        bool               on = false;
+        for (int inst_idx = 0; !on && inst_idx < int(mo->instances.size()); ++inst_idx)
+            on = const_cast<PartPlate *>(plate)->contain_instance(obj_idx, inst_idx);
+        if (!on)
+            continue;
+        for (const ModelVolume *mv : mo->volumes) {
+            boost::hash_combine(key, mv->id().id);
+            boost::hash_combine(key, mv->supported_facets.timestamp());
+        }
+    }
+    return key;
 }
 
 void GLGizmoFdmSupports::plate_bucket(const Vec2d &p, uint8_t value)
@@ -643,12 +822,18 @@ void GLGizmoFdmSupports::plate_bucket(const Vec2d &p, uint8_t value)
                     }
                 }
         }
+        // the paint goes onto the objects' triangles there (the plate keeps nothing)
+        std::vector<uint8_t> marked(m_plate.cells.size(), 0);
+        for (int c : region)
+            marked[c] = 1;
         for (int c : holes)
-            m_plate.cells[c] = value;
-        m_plate_models_dirty = true;
-        m_land_surface_dirty = true;
+            marked[c] = 1;
+        land_set_facets_in_cells(marked, value == 0 ? EnforcerBlockerType::NONE : SUPPORT_LANDING_STATE);
+        land_commit();
         return;
     }
+    if (m_paint_target == PaintTarget::PlateLand)
+        return; // the bucket of "stand on objects" only fills objects
     const uint8_t from = m_plate.cells[seed];
     if (from == value)
         return;
@@ -705,12 +890,13 @@ bool GLGizmoFdmSupports::gizmo_event(SLAGizmoEventType action, const Vec2d &mous
         const uint8_t value = (action == SLAGizmoEventType::RightDown || shift_down) ? 0 : (m_paint_target == PaintTarget::PlateBlock ? 1 : m_paint_target == PaintTarget::PlateAllow ? 2 : 3);
         if (m_plate_brush == PlateBrush::Bucket) {
             plate_bucket(p, value);
-            plate_commit();
+            if (m_paint_target != PaintTarget::PlateLand)
+                plate_commit();
         } else {
             m_plate_stroke       = true;
             m_plate_stroke_value = value;
             m_plate_last         = p;
-            plate_stamp(p, value);
+            plate_stroke_stamp(p);
         }
         m_plate_hover = p;
         m_parent.set_as_dirty();
@@ -725,7 +911,7 @@ bool GLGizmoFdmSupports::gizmo_event(SLAGizmoEventType action, const Vec2d &mous
             const double step  = std::max(m_plate.cell, 0.25 * double(m_plate_brush_size));
             const int    steps = std::max(1, int(std::ceil((p - from).norm() / step)));
             for (int s = 1; s <= steps; ++s)
-                plate_stamp(from + (p - from) * (double(s) / steps), m_plate_stroke_value);
+                plate_stroke_stamp(from + (p - from) * (double(s) / steps));
             m_plate_last  = p;
             m_plate_hover = p;
             m_parent.set_as_dirty();
@@ -737,11 +923,25 @@ bool GLGizmoFdmSupports::gizmo_event(SLAGizmoEventType action, const Vec2d &mous
             return false;
         m_plate_stroke = false;
         m_plate_last.reset();
-        plate_commit();
+        if (m_paint_target == PaintTarget::PlateLand)
+            land_commit();
+        else
+            plate_commit();
         m_parent.set_as_dirty();
         return true;
     default: return false;
     }
+}
+
+// one dab of the brush: plate zones go into the plate's grid, "stand on objects" onto the surface of the object
+// under the brush (seen from above; the square brush paints a circle there)
+void GLGizmoFdmSupports::plate_stroke_stamp(const Vec2d &p)
+{
+    if (m_paint_target == PaintTarget::PlateLand)
+        land_paint_at(p, 0.5 * std::max(0.5, double(m_plate_brush_size)),
+                      m_plate_stroke_value == 0 ? EnforcerBlockerType::NONE : SUPPORT_LANDING_STATE);
+    else
+        plate_stamp(p, m_plate_stroke_value);
 }
 
 void GLGizmoFdmSupports::render_plate_zones() const
@@ -758,24 +958,58 @@ void GLGizmoFdmSupports::render_plate_zones() const
             init_flat_model(m_plate_models[idx], plate_areas(uint8_t(idx + 1)));
         m_land_surface_dirty = true;
     }
-    // "stand on objects" on the objects' real surfaces; while painting at most a few times per second (big models)
-    if (m_land_surface_dirty &&
+    // "stand on objects": the paint on the objects' surfaces (undo, other tools and moving objects change it too);
+    // while painting at most a few times per second (big models)
+    if (plate_mode())
+        if (const size_t key = land_key(); key != m_land_render_key) {
+            m_land_render_key    = key;
+            m_land_surface_dirty = true;
+        }
+    if (plate_mode() && m_land_surface_dirty &&
         (!m_plate_stroke || std::chrono::steady_clock::now() - m_land_surface_built > std::chrono::milliseconds(150))) {
         m_land_surface_dirty = false;
         m_land_surface_built = std::chrono::steady_clock::now();
         m_land_surface_model.reset();
+        m_land_area = 0.;
         GLModel::Geometry geo;
         geo.format = {GLModel::PrimitiveType::Triangles, GLModel::Geometry::EVertexLayout::P3N3};
         unsigned int vertices = 0;
-        const Vec3f  lift(0.f, 0.f, 0.03f);
-        for (const UpTriangle &t : m_up_triangles) {
-            if (t.cell >= m_plate.cells.size() || m_plate.cells[t.cell] != 3)
-                continue;
-            geo.add_vertex(Vec3f(t.a + lift), Vec3f(Vec3f::UnitZ()));
-            geo.add_vertex(Vec3f(t.b + lift), Vec3f(Vec3f::UnitZ()));
-            geo.add_vertex(Vec3f(t.c + lift), Vec3f(Vec3f::UnitZ()));
-            geo.add_triangle(vertices, vertices + 1, vertices + 2);
-            vertices += 3;
+        const Model &model = wxGetApp().model();
+        for (int obj_idx = 0; obj_idx < int(model.objects.size()); ++obj_idx) {
+            const ModelObject *mo = model.objects[obj_idx];
+            for (int vol_idx = 0; vol_idx < int(mo->volumes.size()); ++vol_idx) {
+                const ModelVolume *mv = mo->volumes[vol_idx];
+                if (!mv->is_model_part())
+                    continue;
+                // being painted: what the selector holds now; else the object's paint, when there is any
+                indexed_triangle_set its;
+                if (const TriangleSelector *sel = land_selector(obj_idx, vol_idx, false))
+                    its = sel->get_facets(SUPPORT_LANDING_STATE);
+                else if (!mv->supported_facets.empty() && mv->supported_facets.has_facets(*mv, SUPPORT_LANDING_STATE))
+                    its = mv->supported_facets.get_facets(*mv, SUPPORT_LANDING_STATE);
+                if (its.indices.empty())
+                    continue;
+                for (int inst_idx = 0; inst_idx < int(mo->instances.size()); ++inst_idx) {
+                    if (!const_cast<PartPlate *>(plate)->contain_instance(obj_idx, inst_idx))
+                        continue;
+                    const Transform3d trafo = mo->instances[inst_idx]->get_matrix() * mv->get_matrix();
+                    for (const stl_triangle_vertex_indices &f : its.indices) {
+                        Vec3f p[3];
+                        for (int c = 0; c < 3; ++c)
+                            p[c] = (trafo * its.vertices[f[c]].cast<double>()).cast<float>() + Vec3f(0.f, 0.f, 0.03f);
+                        Vec3f n = (p[1] - p[0]).cross(p[2] - p[0]);
+                        const float len = n.norm();
+                        if (len <= 0.f)
+                            continue;
+                        m_land_area += 0.5 * std::max(0.f, n.z());
+                        n /= len;
+                        for (int c = 0; c < 3; ++c)
+                            geo.add_vertex(p[c], n);
+                        geo.add_triangle(vertices, vertices + 1, vertices + 2);
+                        vertices += 3;
+                    }
+                }
+            }
         }
         if (vertices > 0)
             m_land_surface_model.init_from(std::move(geo));
@@ -804,12 +1038,10 @@ void GLGizmoFdmSupports::render_plate_zones() const
                 color[3] *= 0.4f; // the footprint of "stand on objects": the surfaces below show where it applies
             render_glmodel(m_plate_models[idx], color, camera.get_view_matrix() * plate_trafo, camera.get_projection_matrix());
         }
-    // the object surfaces supports may stand on
-    if (m_land_surface_model.is_initialized()) {
-        const Transform3d surface_trafo = Geometry::assemble_transform(Vec3d(plate->get_origin().x(), plate->get_origin().y(), 0.));
-        render_glmodel(m_land_surface_model, {1.f, 0.85f, 0.05f, plate_mode() ? 0.9f : 0.5f}, camera.get_view_matrix() * surface_trafo,
-                       camera.get_projection_matrix());
-    }
+    // the object surfaces supports stand on (world coordinates); outside the plate tools the edited object shows its
+    // own paint and the other objects are hidden
+    if (plate_mode() && m_land_surface_model.is_initialized())
+        render_glmodel(m_land_surface_model, {1.f, 0.85f, 0.05f, 0.9f}, camera.get_view_matrix(), camera.get_projection_matrix());
 
     // the supports of the last slice, see-through (grey when the plate changed since)
     if (plate_mode() && m_show_supports && m_support_walls_model.is_initialized()) {
@@ -862,10 +1094,10 @@ void GLGizmoFdmSupports::render_plate_panel(float label_width, float slider_widt
     } else if (m_paint_target == PaintTarget::PlateAllow) {
         m_imgui->text(_L("Paint where supports may start on the plate; nowhere else."));
     } else {
-        m_imgui->text(_L("Paint over an object: supports that can reach it stand on it"));
+        m_imgui->text(_L("Paint the top of an object: supports that can reach it stand on it"));
         m_imgui->text(_L("instead of going to the plate, even when supports are limited"));
-        m_imgui->text(_L("to the build plate. The paint stays on the objects: what is left"));
-        m_imgui->text(_L("on the bare plate (object deleted or moved) is removed."));
+        m_imgui->text(_L("to the build plate. The paint is part of the object: it moves,"));
+        m_imgui->text(_L("turns and is saved with it."));
     }
     m_imgui->text(_L("Applies to all tree supports on this plate (organic, hybrid and tree)."));
     ImGui::Separator();
@@ -931,15 +1163,14 @@ void GLGizmoFdmSupports::render_plate_panel(float label_width, float slider_widt
     m_imgui->text(_L("Left mouse: paint.  Right mouse / Shift: erase.  Ctrl + wheel: size."));
     ImGui::Separator();
     // what is there now
-    int blocked = 0, allowed = 0, standing = 0;
+    int blocked = 0, allowed = 0;
     for (uint8_t c : m_plate.cells) {
         blocked += c == 1;
         allowed += c == 2;
-        standing += c == 3;
     }
     const double cell_area = m_plate.cell * m_plate.cell;
     m_imgui->text(wxString::Format(_L("Blocked: %.0f mm²   Allowed only: %.0f mm²   On objects: %.0f mm²"), blocked * cell_area,
-                                   allowed * cell_area, standing * cell_area));
+                                   allowed * cell_area, m_land_area));
     if (allowed > 0)
         m_imgui->text(_L("Allowed areas exist: supports start only inside the green areas."));
     if (m_imgui->button(_L("Clear plate zones"))) {
