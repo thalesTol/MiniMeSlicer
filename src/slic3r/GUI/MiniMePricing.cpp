@@ -231,6 +231,62 @@ void save(const json &data)
         throw Error("cannot write " + path.string() + ": " + ec.message());
 }
 
+std::vector<int> used_plates()
+{
+    PartPlateList   &pl = wxGetApp().plater()->get_partplate_list();
+    std::vector<int> out;
+    for (int i = 0; i < pl.get_plate_count(); ++i)
+        if (!pl.get_plate(i)->get_obj_and_inst_set().empty())
+            out.push_back(i);
+    return out;
+}
+
+bool plate_sliced(int plate)
+{
+    PartPlateList &pl = wxGetApp().plater()->get_partplate_list();
+    if (plate < 0 || plate >= pl.get_plate_count())
+        return false;
+    PartPlate            *pp  = pl.get_plate(plate);
+    GCodeProcessorResult *res = pp->get_slice_result();
+    return res != nullptr && pp->is_slice_result_valid() && res->print_statistics.modes[0].time > 0.f;
+}
+
+json plates_usage(const json &data, const std::vector<int> &plates)
+{
+    if (plates.empty())
+        throw Error("no plate has objects on it");
+    std::string missing;
+    for (int i : plates)
+        if (!plate_sliced(i))
+            missing += (missing.empty() ? "" : ", ") + std::to_string(i + 1);
+    if (!missing.empty())
+        throw Error("plate(s) " + missing + " (counting from 1) are not sliced, or changed since: slice them first");
+    json   per_plate = json::array();
+    json   filaments = json::array();
+    double seconds = 0., grams = 0.;
+    std::string project;
+    for (int i : plates) {
+        const json u = plate_usage(data, i);
+        project      = u["project"].get<std::string>();
+        seconds += u["seconds"].get<double>();
+        grams += u["grams"].get<double>();
+        per_plate.push_back({{"plate", u["plate"]}, {"seconds", u["seconds"]}, {"hours", u["hours"]}, {"grams", u["grams"]}});
+        // the same MiniMe filament on several plates is one line
+        for (const json &f : u["filaments"]) {
+            auto it = std::find_if(filaments.begin(), filaments.end(), [&](const json &g) { return g["slot"] == f["slot"]; });
+            if (it == filaments.end()) {
+                filaments.push_back(f);
+                continue;
+            }
+            (*it)["grams"]       = r2((*it)["grams"].get<double>() + f["grams"].get<double>());
+            (*it)["purge_grams"] = r2((*it)["purge_grams"].get<double>() + f["purge_grams"].get<double>());
+        }
+    }
+    std::sort(filaments.begin(), filaments.end(), [](const json &a, const json &b) { return a["slot"].get<int>() < b["slot"].get<int>(); });
+    return {{"plate", -1}, {"all", true}, {"plates", per_plate}, {"project", project}, {"seconds", r2(seconds)},
+            {"hours", seconds / 3600.}, {"grams", r2(grams)}, {"filaments", filaments}};
+}
+
 json plate_usage(const json &data, int plate)
 {
     Plater        *p  = wxGetApp().plater();
@@ -612,8 +668,20 @@ public:
             Plater *p          = wxGetApp().plater();
             state["slicing"]   = p->is_background_process_slicing();
             state["plate"]     = p->get_partplate_list().get_curr_plate_index() + 1;
+            state["all"]       = m_all;
             try {
-                const json usage = plate_usage(data);
+                json usage;
+                if (m_all) {
+                    const std::vector<int> plates = used_plates();
+                    json unsliced = json::array();
+                    for (int i : plates)
+                        if (!plate_sliced(i))
+                            unsliced.push_back(i + 1);
+                    state["used_plates"] = plates.size();
+                    state["unsliced"]    = unsliced;
+                    usage                = plates_usage(data, plates);
+                } else
+                    usage = plate_usage(data);
                 state["usage"]   = usage;
                 json ov          = json::object();
                 if (!m_sell_price.empty())
@@ -633,12 +701,17 @@ private:
     {
         if (!IsShown())
             return;
-        Plater    *p     = wxGetApp().plater();
-        PartPlate *plate = p->get_partplate_list().get_curr_plate();
-        std::string sig  = std::to_string(p->get_partplate_list().get_curr_plate_index()) + (plate->is_slice_result_valid() ? "v" : "x") +
-                          (p->is_background_process_slicing() ? "s" : "");
-        if (GCodeProcessorResult *res = plate->get_slice_result())
-            sig += std::to_string(res->print_statistics.modes[0].time);
+        Plater        *p  = wxGetApp().plater();
+        PartPlateList &pl = p->get_partplate_list();
+        std::string    sig = std::to_string(pl.get_curr_plate_index()) + (m_all ? "a" : "") + (p->is_background_process_slicing() ? "s" : "");
+        for (int i = 0; i < pl.get_plate_count(); ++i) {
+            if (!m_all && i != pl.get_curr_plate_index())
+                continue;
+            PartPlate *plate = pl.get_plate(i);
+            sig += "|" + std::to_string(plate->get_obj_and_inst_set().size()) + (plate->is_slice_result_valid() ? "v" : "x");
+            if (GCodeProcessorResult *res = plate->get_slice_result())
+                sig += std::to_string(res->print_statistics.modes[0].time);
+        }
         sig += std::to_string(wxGetApp().preset_bundle->filament_presets.size());
         if (sig != m_signature) {
             m_signature = sig;
@@ -668,9 +741,15 @@ private:
                 WebView::RunScript(m_browser, wxString::FromUTF8("window.mm && window.mm.recv(" + err.dump() + ");"));
             }
             send_state();
+        } else if (cmd == "scope") {
+            m_all = msg.value("all", false);
+            m_signature.clear();
+            send_state();
         } else if (cmd == "slice") {
             Plater *p = wxGetApp().plater();
-            if (!p->get_partplate_list().get_curr_plate()->get_obj_and_inst_set().empty())
+            if (m_all)
+                wxPostEvent(p, SimpleEvent(EVT_GLTOOLBAR_SLICE_ALL));
+            else if (!p->get_partplate_list().get_curr_plate()->get_obj_and_inst_set().empty())
                 wxPostEvent(p, SimpleEvent(EVT_GLTOOLBAR_SLICE_PLATE));
         } else if (cmd == "find_prices") {
             ask_claude_for_prices(msg.value("id", std::string()));
@@ -691,6 +770,7 @@ private:
 
     wxWebView  *m_browser{nullptr};
     bool        m_ready{false};
+    bool        m_all{false};
     wxTimer     m_timer;
     std::string m_signature;
     std::string m_sell_price;

@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 // SliceOfMe: what to charge for a print. The same calculation as the user's pricing artifact ("Precificação"):
 //   production = machine cost per hour x hours + filament cost (+ losses %)
@@ -31,6 +32,12 @@ void save(const json &data);
 // the sliced plate's hours and filaments with their prices (plate < 0: the current one); throws Error when the plate
 // has no valid slice
 json plate_usage(const json &data, int plate = -1);
+// plates (0-based) with objects on them
+std::vector<int> used_plates();
+// whether a plate has an up-to-date slice result
+bool plate_sliced(int plate);
+// the time and filament of several plates added up, as one product (each plate must be sliced)
+json plates_usage(const json &data, const std::vector<int> &plates);
 
 // the whole calculation. 'usage' as plate_usage gives it; 'overrides' may change any config value for this calculation
 // only, give 'hours', per filament 'prices' ({"1": price per kg}) and a 'sell_price' to judge

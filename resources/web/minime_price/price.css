@@ -124,6 +124,9 @@ textarea { resize: vertical; font-family: "Cascadia Code", Consolas, monospace; 
 .joined select { width: 70px; flex: none; border-radius: 0 8px 8px 0; border-left: 0; }
 .calc-preview { min-height: 32px; display: flex; align-items: center; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+.scope-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.seg.scope { flex: 0 1 340px; }
+#plates-wrap { margin-top: 10px; }
 .seg { display: flex; gap: 4px; background: var(--tool); padding: 3px; border-radius: 10px; flex-wrap: wrap; }
 .seg button { flex: 1 1 90px; border: 0; background: transparent; padding: 7px 10px; border-radius: 8px; cursor: pointer; color: var(--muted); }
 .seg button:hover { color: var(--text); }

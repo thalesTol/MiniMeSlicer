@@ -61,8 +61,9 @@ const char *CHAT_PROMPT =
     "something is done unless a tool confirmed it; if a step failed or you cannot do it, say so plainly.\n"
     "- The minime server's instructions list everything the tools can and cannot do; follow them. Measure with section instead of "
     "estimating from pictures. Subtract shapes with negative parts (add_part type=negative). Recolor or erase paint with "
-    "paint_color. Copy objects with duplicate_object, parts with copy_parts, flip with mirror. For prices use price. Address "
-    "objects by name. Make shapes with MiniMe's tools instead of writing scripts or files.\n"
+    "paint_color. Copy objects with duplicate_object, parts with copy_parts, flip with mirror (also reversed text). Other layer "
+    "heights or settings for part of an object's height: height_range. For prices use price (plate \"all\" for a product of "
+    "several plates). Address objects by name. Make shapes with MiniMe's tools instead of writing scripts or files.\n"
     "- Colors only on the outer layers (fewer filament changes): set the object's interior_filament and interior_skin_layers "
     "with set_settings (object). Everything deeper inside then prints with that filament, over paint and parts.\n"
     "- If MiniMe lacks something the user needs, say exactly what is missing so it can be added.\n"
@@ -573,6 +574,8 @@ void ChatPanel::start_claude(const std::string &resume_id, const std::string &cw
         // started from inside another Claude Code (while developing), it must not think it is nested in it
         bp::wenvironment env = boost::this_process::wenvironment();
         env.erase(L"CLAUDECODE");
+        // MiniMe's tools are loaded up front, so Claude sees every tool and its options instead of searching for them
+        env[L"ENABLE_TOOL_SEARCH"] = L"false";
         run->child = bp::child(claude, args, bp::start_dir(cwd), bp::std_out > run->out, bp::std_err > run->err,
                                bp::std_in < run->in, env, bp::limit_handles
 #ifdef _WIN32

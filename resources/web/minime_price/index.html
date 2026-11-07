@@ -24,6 +24,13 @@
   <main class="scroll">
     <!-- ======================= calcular ======================= -->
     <section id="tab-calc" class="tabpage" role="tabpanel">
+      <div class="scope-row">
+        <div class="seg scope" role="radiogroup" aria-label="O que calcular" id="scope">
+          <button role="radio" data-all="0">Esta placa</button>
+          <button role="radio" data-all="1">Todas as placas</button>
+        </div>
+        <span class="muted small" id="scope-note"></span>
+      </div>
       <div id="not-sliced" class="card notice hidden">
         <div>
           <div class="notice-title" id="not-sliced-title">Fatie a placa para calcular</div>
@@ -36,13 +43,19 @@
         <div class="col">
           <div class="card">
             <div class="card-head">
-              <h2>Placa <span id="plate-no"></span></h2>
+              <h2 id="plate-title">Placa</h2>
               <span class="pill" id="plate-time"></span>
             </div>
             <div class="facts">
               <div><span class="k">Projeto</span><span class="v" id="plate-project"></span></div>
               <div><span class="k">Tempo de impressão</span><span class="v" id="plate-hours"></span></div>
               <div><span class="k">Filamento total</span><span class="v" id="plate-grams"></span></div>
+            </div>
+            <div class="table-wrap hidden" id="plates-wrap">
+              <table class="table" id="plates-table">
+                <thead><tr><th>Placa</th><th class="num">Tempo</th><th class="num">Filamento</th></tr></thead>
+                <tbody></tbody>
+              </table>
             </div>
           </div>
 

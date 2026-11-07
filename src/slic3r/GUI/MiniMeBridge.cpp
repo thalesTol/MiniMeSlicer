@@ -2076,7 +2076,17 @@ json tool_duplicate_object(const json &args)
         ModelObject   *mo      = model.objects[obj_idx];
         PartPlateList &plates  = p->get_partplate_list();
         const int      src_pi  = plate_of_instance(obj_idx, 0);
-        const int      pi      = args.contains("plate") && !args["plate"].is_null() ? plate_arg(args) : src_pi;
+        // the next plate number makes a new, empty plate for the copy
+        const bool new_plate = args.contains("plate") && args["plate"].is_number_integer() && args["plate"].get<int>() == plates.get_plate_count();
+        if (new_plate && !p->can_add_plate())
+            throw ToolError("MiniMe cannot add another plate now (it is slicing, or has the most plates it can)");
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: copy " + mo->name);
+        if (new_plate) {
+            plates.create_plate();
+            plates.update_plate_trans(plates.get_plate_count());
+        }
+        const int      pi      = new_plate ? plates.get_plate_count() - 1 : args.contains("plate") && !args["plate"].is_null() ? plate_arg(args) : src_pi;
         const BoundingBoxf3 bb = mo->instance_bounding_box(0);
         Vec2d target;
         if (args.contains("center_on_plate_mm")) {
@@ -2084,15 +2094,19 @@ json tool_duplicate_object(const json &args)
             if (!c.is_array() || c.size() != 2)
                 throw ToolError("'center_on_plate_mm' is [x, y] on the plate");
             target = plate_origin(pi) + Vec2d(c[0].get<double>(), c[1].get<double>());
+        } else if (plates.get_plate(pi)->get_obj_and_inst_set().empty()) {
+            // an empty plate: its middle
+            const Vec3d c = plates.get_plate(pi)->get_build_volume().center();
+            target        = Vec2d(c.x(), c.y());
         } else {
-            // the nearest free spot on that plate
+            // the nearest free spot on that plate (MiniMe searches the current plate)
+            if (pi != plates.get_curr_plate_index())
+                p->select_plate(pi);
             const Vec3d start = pi == src_pi ? bb.center() : plates.get_plate(pi)->get_build_volume().center();
             const Vec2f cell  = p->canvas3D()->get_nearest_empty_cell(Vec2f(float(start.x()), float(start.y())),
                                                                       Vec2f(float(bb.size().x() + 1.), float(bb.size().y() + 1.)));
             target = cell.cast<double>();
         }
-        close_gizmo();
-        Plater::TakeSnapshot snapshot(p, "Claude: copy " + mo->name);
         ModelObject *dst = model.add_object(*mo);
         for (ModelVolume *mv : dst->volumes)
             if (mv->is_model_part())
@@ -2212,18 +2226,175 @@ json tool_copy_parts(const json &args)
 
 json tool_price(const json &args)
 {
-    return on_gui([args]() -> json {
-        json       data  = Pricing::load();
-        const int  plate = args.contains("plate") && !args["plate"].is_null() ? plate_arg(args) : -1;
-        const json usage = Pricing::plate_usage(data, plate);
-        json       ov    = args;
+    const bool all = args.contains("plate") && args["plate"].is_string() && lower(args["plate"].get<std::string>()) == "all";
+    if (args.contains("plate") && args["plate"].is_string() && !all)
+        throw ToolError("'plate' is a plate index or \"all\"");
+    // the plates to price, and those that need slicing first
+    const json want = on_gui([args, all]() -> json {
+        json plates = json::array(), todo = json::array();
+        if (all)
+            for (int i : Pricing::used_plates())
+                plates.push_back(i);
+        else
+            plates.push_back(plate_arg(args));
+        for (const json &i : plates)
+            if (!Pricing::plate_sliced(i.get<int>()))
+                todo.push_back(i);
+        return {{"plates", plates}, {"todo", todo}, {"current", plater()->get_partplate_list().get_curr_plate_index()}};
+    });
+    if (want["plates"].empty())
+        throw ToolError("no plate has objects on it");
+    for (const json &i : want["todo"])
+        tool_slice({{"plate", i}, {"timeout_seconds", num(args, "timeout_seconds", 600)}});
+    return on_gui([args, all, want]() -> json {
+        Plater *p = plater();
+        if (all && !want["todo"].empty() && p->get_partplate_list().get_curr_plate_index() != want["current"].get<int>())
+            p->select_plate(want["current"].get<int>());
+        json                   data   = Pricing::load();
+        const std::vector<int> plates = want["plates"].get<std::vector<int>>();
+        const json             usage  = all ? Pricing::plates_usage(data, plates) : Pricing::plate_usage(data, plates.front());
+        json                   ov     = args;
         ov.erase("plate");
+        ov.erase("timeout_seconds");
         json j = Pricing::compute(data, usage, ov);
-        j["plate"]   = usage["plate"].get<int>() - 1;
-        j["project"] = usage["project"];
+        if (all) {
+            json per_plate = json::array();
+            for (const json &u : usage["plates"])
+                per_plate.push_back({{"plate", u["plate"].get<int>() - 1}, {"print_time", format_time(u["seconds"].get<double>())}, {"grams", u["grams"]}});
+            j["plate"]  = "all";
+            j["plates"] = per_plate;
+        } else
+            j["plate"] = plates.front();
+        j["project"]    = usage["project"];
         j["print_time"] = format_time(usage["seconds"].get<double>());
-        j["note"] = "money in R$; margins are R$ per print hour; scenario prices already include the channel fee";
+        if (!want["todo"].empty())
+            j["sliced_now"] = want["todo"];
+        j["note"] = std::string("money in R$; margins are R$ per print hour; scenario prices already include the channel fee") +
+                    (all ? "; all plates are one product: time and filament added up, packaging and shipping counted once" : "");
         return j;
+    });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// height ranges: other settings (layer height, infill, walls...) for a band of an object's height
+
+json tool_height_range(const json &args)
+{
+    return on_gui([args]() -> json {
+        Plater                   *p       = plater();
+        const int                 obj_idx = find_object(args);
+        ModelObject              *mo      = p->model().objects[obj_idx];
+        PresetBundle             *pb      = wxGetApp().preset_bundle;
+        const DynamicPrintConfig &proc    = pb->prints.get_edited_preset().config;
+        const DynamicPrintConfig &printer = pb->printers.get_edited_preset().config;
+        const std::string         action  = lower(str(args, "action", "set"));
+        auto                     &ranges  = mo->layer_config_ranges;
+        const BoundingBoxf3       bb      = mo->instance_bounding_box(0);
+        const double              height  = bb.max.z() - bb.min.z();
+        auto mm = [](double v) {
+            std::ostringstream o;
+            o << r2(v);
+            return o.str();
+        };
+        auto same = [](const t_layer_height_range &a, double from, double to) {
+            return std::abs(a.first - from) < 0.011 && std::abs(a.second - to) < 0.011;
+        };
+        if (action != "set" && action != "delete" && action != "clear")
+            throw ToolError("'action' is set, delete or clear");
+        if (action == "clear" && ranges.empty())
+            throw ToolError("'" + mo->name + "' has no height ranges");
+
+        double from = 0., to = 0.;
+        DynamicPrintConfig changes;
+        if (action != "clear") {
+            from = num(args, "from_mm", -1.);
+            to   = num(args, "to_mm", -1.);
+            if (from < 0. || to <= from)
+                throw ToolError("give from_mm and to_mm (heights above the plate, from < to); the object is " + mm(height) + " mm tall");
+        }
+        if (action == "set") {
+            if (from >= height)
+                throw ToolError("from_mm is above the object (it is " + mm(height) + " mm tall)");
+            to = std::min(to, height);
+            for (const auto &[r, cfg] : ranges)
+                if (!same(r, from, to) && r.first < to - 1e-4 && from < r.second - 1e-4)
+                    throw ToolError("it overlaps the height range " + mm(r.first) + "-" + mm(r.second) + " mm; change or delete that one first");
+            ConfigSubstitutionContext ctx(ForwardCompatibilitySubstitutionRule::Disable);
+            json values = args.contains("values") && args["values"].is_object() ? args["values"] : json::object();
+            if (args.contains("layer_height_mm"))
+                values["layer_height"] = args["layer_height_mm"];
+            if (values.empty())
+                throw ToolError("give layer_height_mm and/or 'values' (process settings for this band, e.g. {\"sparse_infill_density\": \"5%\"})");
+            for (const auto &[key, value] : values.items()) {
+                if (print_config_def.get(key) == nullptr)
+                    throw ToolError("unknown setting '" + key + "' (find_settings finds the right key)");
+                if (!proc.has(key))
+                    throw ToolError("'" + key + "' is not a process setting");
+                try {
+                    changes.set_deserialize(key, value_text(value), ctx);
+                } catch (const std::exception &e) {
+                    throw ToolError("bad value for '" + key + "': " + e.what());
+                }
+            }
+            if (changes.has("layer_height")) {
+                const double lh   = changes.opt_float("layer_height");
+                const double lmin = printer.opt_float_nullable("min_layer_height", 0);
+                double       lmax = printer.opt_float_nullable("max_layer_height", 0);
+                if (lmax < EPSILON)
+                    lmax = 0.75 * printer.opt_float_nullable("nozzle_diameter", 0);
+                if (lh < lmin - 1e-6 || lh > lmax + 1e-6)
+                    throw ToolError("this printer prints layers from " + mm(lmin) + " to " + mm(lmax) + " mm");
+            }
+        }
+        std::map<t_layer_height_range, ModelConfig>::iterator found = ranges.end();
+        if (action != "clear")
+            found = std::find_if(ranges.begin(), ranges.end(), [&](const auto &r) { return same(r.first, from, to); });
+        if (action == "delete" && found == ranges.end())
+            throw ToolError("'" + mo->name + "' has no height range " + mm(from) + "-" + mm(to) + " mm (get_scene lists them)");
+
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: height ranges of " + mo->name);
+        json result;
+        if (action == "clear") {
+            ranges.clear();
+            result["done"] = "all height ranges of '" + mo->name + "' removed";
+        } else if (action == "delete") {
+            ranges.erase(found);
+            result["done"] = "height range removed";
+        } else {
+            const bool           fresh = found == ranges.end();
+            t_layer_height_range key   = fresh ? t_layer_height_range{from, to} : found->first;
+            ModelConfig         &cfg   = ranges[key];
+            if (fresh)
+                cfg.assign_config(wxGetApp().obj_list()->get_default_layer_config(obj_idx));
+            for (const std::string &k : changes.keys())
+                cfg.set_key_value(k, changes.option(k)->clone());
+            result["done"] = fresh ? "height range added" : "height range changed";
+        }
+        // the object list shows the ranges under the object
+        ObjectList *ol = wxGetApp().obj_list();
+        if (wxDataViewItem obj_item = ol->GetModel()->GetItemById(obj_idx); obj_item.IsOk()) {
+            if (wxDataViewItem root = ol->GetModel()->GetLayerRootItem(obj_item); root.IsOk())
+                ol->GetModel()->Delete(root);
+            if (!ranges.empty())
+                ol->add_layer_root_item(obj_item);
+        }
+        p->changed_object(obj_idx);
+        p->set_plater_dirty(true);
+
+        json list = json::array();
+        for (const auto &[r, cfg] : ranges) {
+            json jr = {{"z_mm", json::array({r2(r.first), r2(r.second)})}};
+            for (const std::string &k : cfg.keys())
+                if (k != "extruder")
+                    jr[k] = cfg.opt_serialize(k);
+            list.push_back(jr);
+        }
+        result["object"]        = mo->name;
+        result["height_ranges"] = list;
+        result["note"] = "heights are above the plate; slice and use layers to check the layer heights. Objects printed together "
+                         "keep their filament changes on the same layers only with the same ranges: give them the same ones.";
+        return result;
     });
 }
 
@@ -2436,7 +2607,7 @@ const std::vector<Tool> &tools()
             "Copies an object with all its parts, filaments, paint and settings (one undo step), onto the same plate or another one "
             "(plate index), at a place or the nearest free spot. Use it to try a new version without losing the current one.",
             R"J({"type": "object", "properties": {"object": $OBJ,
-                "plate": {"type": "integer", "description": "plate index for the copy; default the original's plate"},
+                "plate": {"type": "integer", "description": "plate index for the copy; the next number (the plate count) adds a new plate; default the original's plate"},
                 "center_on_plate_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y] on that plate; default the nearest free spot"},
                 "name": {"type": "string"}}, "required": ["object"]})J",
             tool_duplicate_object);
@@ -2512,10 +2683,12 @@ const std::vector<Tool> &tools()
             "tower, x the price per kg from the user's filament list) + losses %, + packaging + shipping; then for the low / medium / "
             "high (and custom) profit margins in R$ per print hour the price, profit and total cost, with the channel fee (% of the "
             "price or a fixed R$) included. Also the break-even price (no profit) and, with sell_price, whether that price is worth it "
-            "(net profit, profit per hour, verdict). Slice first. Any setting given here changes only this calculation; the user's "
-            "saved settings change with the pricing tool. The user also has a Price window (the Price button at the top).",
+            "(net profit, profit per hour, verdict). Plates that are not sliced (or changed) are sliced first. plate=\"all\" prices "
+            "every plate with objects as one product (time and filament added up, packaging once) and lists each plate. Any setting "
+            "given here changes only this calculation; the user's saved settings change with the pricing tool. The user also has a "
+            "Price window (the Price button at the top).",
             R"J({"type": "object", "properties": {
-                "plate": {"type": "integer", "description": "plate index as get_scene lists it; default the current one"},
+                "plate": {"type": ["integer", "string"], "description": "plate index as get_scene lists it, or \"all\"; default the current one"},
                 "sell_price": {"type": "number", "description": "a price to judge, in R$"},
                 "scenario": {"type": "string", "enum": ["baixa", "media", "alta", "personalizada"]},
                 "custom_margin": {"type": "number", "description": "R$ per print hour for scenario personalizada; 0 = no profit"},
@@ -2542,6 +2715,17 @@ const std::vector<Tool> &tools()
                 "slot": {"type": "integer", "description": "assign: the MiniMe filament number"},
                 "price_kg": {"type": "number", "description": "assign: a price per kg instead of a list filament"}}, "required": ["action"]})J",
             tool_pricing);
+        add("height_range",
+            "Different process settings for a band of an object's height (MiniMe's height range modifier, one undo step): e.g. "
+            "thicker layers (layer_height_mm) in a hidden body and thin ones where the details and color changes are, or less "
+            "infill low down. action=set adds or changes the range from_mm-to_mm, delete removes it, clear removes all. Heights are "
+            "above the plate. Ranges may not overlap. get_scene lists them.",
+            R"J({"type": "object", "properties": {"object": $OBJ,
+                "action": {"type": "string", "enum": ["set", "delete", "clear"]},
+                "from_mm": {"type": "number"}, "to_mm": {"type": "number"},
+                "layer_height_mm": {"type": "number", "description": "layer height in this band"},
+                "values": {"type": "object", "description": "other process settings for this band, e.g. {'sparse_infill_density': '5%', 'wall_loops': 2}"}}, "required": ["object"]})J",
+            tool_height_range);
         add("repair_object", "Repairs an object's mesh errors (open edges, flipped faces), as Fix model does. get_scene shows mesh errors per part.",
             R"J({"type": "object", "properties": {"object": $OBJ}, "required": ["object"]})J", tool_repair);
         return l;
@@ -2583,8 +2767,11 @@ const char *INSTRUCTIONS =
     "mode=clear. Typical: erase or recolor paint on side walls (facing=side) so colors stay on the faces.\n"
     "- Supports: support settings, paint_supports (enforce / block / stand_here on surfaces by rule), support_zone (no-support and "
     "supports-only-here areas on the plate), support_report after slicing.\n"
-    "- Price: price gives what to charge for a sliced plate with the user's own costs and profit margins (R$), the break-even "
-    "price and whether a given price is worth it; pricing reads or (when the user asks) changes their saved costs and filament "
+    "- Height ranges: height_range gives a band of an object's height its own layer height or other settings (thick layers in a "
+    "hidden body, thin ones at the details). Objects printed side by side need the same ranges to change filament on the same layers.\n"
+    "- Price: price gives what to charge for a plate (it slices first when needed), or with plate=\"all\" for a product made of "
+    "every plate, with the user's own costs and profit margins (R$), the break-even price and whether a given price is worth "
+    "it; pricing reads or (when the user asks) changes their saved costs and filament "
     "list. When you compare versions, give the price difference too.\n"
     "\n"
     "HOW TO WORK\n"
@@ -2593,12 +2780,15 @@ const char *INSTRUCTIONS =
     "- If a tool result says the user changed things since your last call, call get_scene before going on.\n"
     "- Before telling the user to do something by hand or that MiniMe cannot do it, check this list: most edits have a tool.\n"
     "- render_view leaves MiniMe's popups out; zoom_box_on_plate_mm looks closely at one area.\n"
+    "- Prefer settings for one object (set_settings with object, or height_range for a band of its height) over changing the "
+    "whole process preset, and say which one you changed. Ask before changing the process preset for every object.\n"
     "\n"
     "WHAT YOU CANNOT DO (say so plainly; suggest the user's tool or the modeling program)\n"
     "- Angled, curved or shaped cuts and cut connectors (the user's Cut tool does them).\n"
     "- Brush-painting by hand, or making painted lines thicker, thinner or even: paint_color works on whole triangles by rule.\n"
     "- Turning painted areas or raised details into separate parts by their shape (only flat cuts and outline slabs).\n"
-    "- Editing the mesh itself beyond adding / subtracting / copying / mirroring parts (no smoothing, sculpting, writing text).\n"
+    "- Editing the mesh itself beyond adding / subtracting / copying / mirroring parts (no smoothing, sculpting, writing text). "
+    "Reversed text is fixed with mirror on its part; changing the words needs the user's text tool.\n"
     "- Printing, sending to a printer, or opening and saving project files.";
 
 // ---------------------------------------------------------------------------------------------------------------------

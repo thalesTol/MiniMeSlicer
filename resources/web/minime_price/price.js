@@ -97,6 +97,12 @@
     post({ cmd: "refresh", sell_price: sellPrice });
   }, 350));
   $("btn-slice").addEventListener("click", () => { post({ cmd: "slice" }); $("btn-slice").disabled = true; });
+  document.querySelectorAll("#scope button").forEach((b) => b.addEventListener("click", () => {
+    post({ cmd: "scope", all: b.dataset.all === "1", sell_price: sellPrice });
+  }));
+  function plateNames(list) {
+    return list.length <= 1 ? String(list[0] || "") : list.slice(0, -1).join(", ") + " e " + list[list.length - 1];
+  }
   $("btn-artifact").addEventListener("click", () => {
     const url = S && S.config ? S.config.artifact_url : "";
     if (url) post({ cmd: "open_url", url: url });
@@ -215,17 +221,35 @@
 
   function renderCalc() {
     const u = S.usage;
+    document.querySelectorAll("#scope button").forEach((b) => b.setAttribute("aria-checked", (b.dataset.all === "1") === !!S.all));
+    $("scope-note").textContent = S.all ? "Um produto feito de várias placas: tempo e filamento somados; embalagem e frete contam uma vez." : "";
     $("not-sliced").classList.toggle("hidden", !!u);
     $("calc-body").classList.toggle("hidden", !u);
     if (!u) {
-      $("not-sliced-title").textContent = S.slicing ? "Fatiando a placa…" : "Fatie a placa " + (S.plate || "") + " para calcular";
-      $("not-sliced-text").textContent = S.slicing ? "O preço aparece assim que terminar." :
-        "O tempo de impressão e o peso de cada filamento vêm da placa fatiada (ela mudou desde a última vez, ou ainda não foi fatiada).";
-      $("btn-slice").disabled = !!S.slicing;
+      const missing = S.unsliced || [];
+      if (S.all && S.used_plates === 0) {
+        $("not-sliced-title").textContent = "Nenhuma placa tem objetos";
+        $("not-sliced-text").textContent = "Coloque objetos nas placas para calcular.";
+      } else if (S.all) {
+        $("not-sliced-title").textContent = S.slicing ? "Fatiando as placas…" :
+          (missing.length === 1 ? "Fatie a placa " + missing[0] : "Fatie as placas " + plateNames(missing)) + " para calcular";
+        $("not-sliced-text").textContent = S.slicing ? "O preço aparece quando todas terminarem." :
+          "O preço de todas as placas soma o tempo e o filamento de cada uma, e só sai com todas fatiadas.";
+      } else {
+        $("not-sliced-title").textContent = S.slicing ? "Fatiando a placa…" : "Fatie a placa " + (S.plate || "") + " para calcular";
+        $("not-sliced-text").textContent = S.slicing ? "O preço aparece assim que terminar." :
+          "O tempo de impressão e o peso de cada filamento vêm da placa fatiada (ela mudou desde a última vez, ou ainda não foi fatiada).";
+      }
+      $("btn-slice").textContent = S.all ? "Fatiar todas" : "Fatiar placa";
+      $("btn-slice").disabled = !!S.slicing || (S.all && S.used_plates === 0);
       return;
     }
     $("btn-slice").disabled = false;
-    $("plate-no").textContent = u.plate;
+    const plates = u.plates || [];
+    $("plate-title").textContent = u.all ? (plates.length === 1 ? "Placa " + plates[0].plate : "Placas " + plateNames(plates.map((x) => x.plate))) : "Placa " + u.plate;
+    $("plates-wrap").classList.toggle("hidden", !(u.all && plates.length > 1));
+    $("plates-table").querySelector("tbody").innerHTML = plates.map((x) =>
+      "<tr><td>Placa " + esc(x.plate) + '</td><td class="num">' + esc(hoursText(x.hours)) + '</td><td class="num">' + esc(num(x.grams, 1)) + " g</td></tr>").join("");
     $("plate-time").textContent = hoursText(u.hours);
     $("plate-project").textContent = u.project || "—";
     $("plate-hours").textContent = hoursText(u.hours) + " (" + num(u.hours, 2) + " h)";
@@ -250,7 +274,7 @@
   function summaryText() {
     const r = S.result, u = S.usage, c = r.costs;
     const lines = [];
-    lines.push("Produto: " + (u.project || "(sem nome)"));
+    lines.push("Produto: " + (u.project || "(sem nome)") + (u.all && u.plates && u.plates.length > 1 ? " (" + u.plates.length + " placas)" : ""));
     lines.push("Tempo de impressão: " + hoursShort(r.hours) + " (" + num(r.hours, 2) + " h)");
     lines.push("Filamentos (" + num(r.grams, 1) + " g):");
     r.filaments.forEach((f) => {
@@ -381,8 +405,9 @@
   function renderStatus() {
     const st = $("status");
     if (S.error) st.textContent = "Erro: " + S.error;
-    else if (S.usage) st.textContent = "Placa " + S.usage.plate + " fatiada · " + hoursText(S.usage.hours) + " · " + num(S.usage.grams, 1) + " g";
-    else if (S.slicing) st.textContent = "Fatiando a placa " + (S.plate || "") + "…";
+    else if (S.usage) st.textContent = (S.usage.all ? "Todas as placas" : "Placa " + S.usage.plate + " fatiada") + " · " + hoursText(S.usage.hours) + " · " + num(S.usage.grams, 1) + " g";
+    else if (S.slicing) st.textContent = S.all ? "Fatiando as placas…" : "Fatiando a placa " + (S.plate || "") + "…";
+    else if (S.all) st.textContent = (S.unsliced || []).length ? "Placas não fatiadas: " + plateNames(S.unsliced) : "Nenhuma placa com objetos";
     else st.textContent = "Placa " + (S.plate || "") + " não fatiada";
   }
 
