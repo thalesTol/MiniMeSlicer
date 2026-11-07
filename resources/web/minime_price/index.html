@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preço</title>
+<link rel="stylesheet" href="price.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <img class="logo" src="../../images/BambuStudio_128px.png" alt="">
+    <div class="title">
+      <div class="name">Preço da impressão</div>
+      <div class="status" id="status" role="status" aria-live="polite">Carregando…</div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Seções">
+      <button class="tab active" role="tab" aria-selected="true" data-tab="calc">Calcular</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="fil">Filamentos</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="cfg">Custos e margens</button>
+    </nav>
+  </header>
+
+  <main class="scroll">
+    <!-- ======================= calcular ======================= -->
+    <section id="tab-calc" class="tabpage" role="tabpanel">
+      <div id="not-sliced" class="card notice hidden">
+        <div>
+          <div class="notice-title" id="not-sliced-title">Fatie a placa para calcular</div>
+          <div class="muted" id="not-sliced-text">O tempo de impressão e o peso de cada filamento vêm da placa fatiada.</div>
+        </div>
+        <button class="btn primary" id="btn-slice">Fatiar placa</button>
+      </div>
+
+      <div id="calc-body" class="grid hidden">
+        <div class="col">
+          <div class="card">
+            <div class="card-head">
+              <h2>Placa <span id="plate-no"></span></h2>
+              <span class="pill" id="plate-time"></span>
+            </div>
+            <div class="facts">
+              <div><span class="k">Projeto</span><span class="v" id="plate-project"></span></div>
+              <div><span class="k">Tempo de impressão</span><span class="v" id="plate-hours"></span></div>
+              <div><span class="k">Filamento total</span><span class="v" id="plate-grams"></span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Filamentos usados</h2><span class="hint">inclui purga e torre</span></div>
+            <div id="fil-rows" class="fil-rows"></div>
+            <div class="warn hidden" id="price-warn"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Venda</h2></div>
+            <div class="form-grid">
+              <label class="field"><span>Embalagem (R$)</span><input id="in-packaging" inputmode="decimal" data-cfg="packaging"></label>
+              <label class="field"><span>Frete (R$) <em>opcional</em></span><input id="in-shipping" inputmode="decimal" data-cfg="shipping"></label>
+              <div class="field">
+                <span id="fee-label">Taxa do canal de venda <em>opcional</em></span>
+                <div class="joined" role="group" aria-labelledby="fee-label">
+                  <input id="in-fee" inputmode="decimal" data-cfg="fee_value" aria-label="Valor da taxa">
+                  <select id="in-fee-type" aria-label="Tipo da taxa"><option value="pct">%</option><option value="brl">R$</option></select>
+                </div>
+              </div>
+              <label class="field"><span>Perdas e falhas (%) <em>opcional</em></span><input id="in-waste" inputmode="decimal" data-cfg="waste_pct"></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Cenário de lucro</h2></div>
+            <div class="seg" role="radiogroup" aria-label="Cenário de lucro" id="scenario">
+              <button role="radio" data-s="baixa">Baixa</button>
+              <button role="radio" data-s="media">Média</button>
+              <button role="radio" data-s="alta">Alta</button>
+              <button role="radio" data-s="personalizada">Personalizada</button>
+            </div>
+            <label class="field custom hidden" id="custom-field">
+              <span>Margem personalizada (R$ por hora) <em>0 = sem lucro, só os custos</em></span>
+              <input id="in-custom" inputmode="decimal" data-cfg="custom_margin">
+            </label>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card hero" aria-live="polite">
+            <div class="hero-label" id="hero-label">Preço sugerido</div>
+            <div class="hero-price" id="hero-price">—</div>
+            <div class="hero-sub" id="hero-sub"></div>
+            <div class="hero-min" id="hero-min"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Cenários</h2></div>
+            <div class="table-wrap">
+              <table class="table" id="scen-table">
+                <thead><tr><th>Cenário</th><th class="num">Margem</th><th class="num">Lucro</th><th class="num">Custo total</th><th class="num">Preço</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Vale a pena?</h2></div>
+            <label class="field"><span>Quanto você vai cobrar (R$)</span><input id="in-sell" inputmode="decimal" placeholder="ex.: 45,00"></label>
+            <div id="eval" class="eval hidden" aria-live="polite">
+              <div class="verdict" id="verdict"></div>
+              <div class="facts">
+                <div><span class="k">Taxa do canal</span><span class="v" id="ev-fee"></span></div>
+                <div><span class="k">Lucro líquido</span><span class="v" id="ev-net"></span></div>
+                <div><span class="k">Lucro por hora de impressão</span><span class="v" id="ev-hour"></span></div>
+                <div><span class="k">Lucro no preço</span><span class="v" id="ev-pct"></span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>De onde vem o custo</h2></div>
+            <div class="facts" id="breakdown"></div>
+          </div>
+
+          <div class="row-actions end">
+            <button class="btn" id="btn-copy">Copiar resumo</button>
+            <button class="btn" id="btn-artifact">Abrir meu artefato de preços</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= filamentos ======================= -->
+    <section id="tab-fil" class="tabpage hidden" role="tabpanel">
+      <div class="card">
+        <div class="card-head">
+          <h2>Seus filamentos</h2>
+          <div class="row-actions" style="margin:0">
+            <button class="btn" id="btn-find-prices" title="O Claude procura o preço de hoje de cada filamento em lojas brasileiras e atualiza a lista">Buscar preços atuais</button>
+            <button class="btn primary" id="btn-new-fil">Novo filamento</button>
+          </div>
+        </div>
+        <p class="muted small">O preço por kg de cada filamento vem do preço pago e do peso da bobina. Na aba Calcular, cada filamento da placa
+          usa o filamento que você escolher aqui (ou um da mesma marca e tipo, automaticamente).</p>
+        <form id="fil-form" class="subcard hidden" autocomplete="off">
+          <div class="form-grid">
+            <label class="field"><span>Marca</span><input id="ff-brand" placeholder="ex.: STLFLIX"></label>
+            <label class="field"><span>Tipo</span><input id="ff-type" list="tipos" placeholder="ex.: PLA Basic"></label>
+            <label class="field"><span>Cor</span><input id="ff-color" placeholder="ex.: Preto"></label>
+            <label class="field"><span>Peso da bobina (kg)</span><input id="ff-kg" inputmode="decimal" value="1"></label>
+            <label class="field"><span>Preço pago (R$)</span><input id="ff-paid" inputmode="decimal"></label>
+            <div class="field"><span>Preço calculado</span><div class="calc-preview" id="ff-preview">—</div></div>
+          </div>
+          <div class="row-actions">
+            <button type="submit" class="btn primary" id="ff-save">Salvar filamento</button>
+            <button type="button" class="btn" id="ff-cancel">Cancelar</button>
+          </div>
+        </form>
+        <datalist id="tipos"></datalist>
+        <div id="fil-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Importar uma lista</h2></div>
+        <p class="muted small">Cole uma linha por filamento: <code>marca; tipo; cor; peso da bobina em kg; preço pago</code>.
+          Também aceita a lista em JSON do seu artefato (marca, tipo, cor, pesoBobinaKg, precoPago). Filamentos com a mesma marca, tipo e cor
+          são atualizados.</p>
+        <textarea id="import-text" rows="5" placeholder="STLFLIX; PLA Basic; Preto; 1; 89,90&#10;Voolt3D; PETG; Branco; 1; 99,90"></textarea>
+        <div class="row-actions"><button class="btn primary" id="btn-import">Importar</button><span class="muted small" id="import-note"></span></div>
+      </div>
+    </section>
+
+    <!-- ======================= custos ======================= -->
+    <section id="tab-cfg" class="tabpage hidden" role="tabpanel">
+      <div class="card">
+        <div class="card-head"><h2>Custo da impressora</h2></div>
+        <label class="field narrow"><span>Custo da máquina por hora (R$)</span><input inputmode="decimal" data-cfg="machine_per_hour"></label>
+        <p class="muted small">Some a depreciação (preço da impressora ÷ horas de vida útil), a energia (kW × preço do kWh) e a manutenção
+          (bicos, placas, peças) por hora de impressão.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Margens de lucro (R$ por hora de impressão)</h2></div>
+        <div class="form-grid three">
+          <label class="field"><span>Baixa</span><input inputmode="decimal" data-cfg="margin_low"></label>
+          <label class="field"><span>Média</span><input inputmode="decimal" data-cfg="margin_mid"></label>
+          <label class="field"><span>Alta</span><input inputmode="decimal" data-cfg="margin_high"></label>
+        </div>
+        <p class="muted small">O lucro de cada cenário é a margem × as horas de impressão. Para cobrar só os custos, escolha Personalizada com 0.
+          O "Vale a pena?" compara o lucro por hora com estas margens.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Seu artefato de preços</h2></div>
+        <label class="field"><span>Link do artefato (claude.ai)</span><input id="in-artifact" data-cfg="artifact_url" data-text="1" placeholder="https://claude.ai/artifact/…"></label>
+        <p class="muted small">O botão "Abrir meu artefato de preços" abre este link. "Copiar resumo" copia o tempo, os filamentos e os preços
+          para colar lá.</p>
+      </div>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+<script src="price.js"></script>
+</body>
+</html>

@@ -419,6 +419,8 @@
     els.send.title = b ? "Stop (Esc)" : "Send (Enter)";
     els.send.setAttribute("aria-label", b ? "Stop" : "Send");
     if (!b) { showThinking(false); finishStreaming(); }
+    // a message from another MiniMe window waits for Claude to finish
+    if (!b && state.queued) { const t = state.queued; state.queued = null; setTimeout(() => send(t), 0); }
     updateSendEnabled();
     refreshStatus();
   }
@@ -863,6 +865,7 @@
           case "transcript": showTranscript(msg); break;
           case "attachment": addAttachment({ media_type: msg.media_type, data: msg.data, name: msg.name }); break;
           case "error": setBusy(false); notice(msg.text, "error"); break;
+          case "ask": if (state.busy) { state.queued = msg.text; notice("Claude is busy: your request goes next."); } else send(msg.text); break;
           case "focus": if (els.gate.classList.contains("hidden")) els.input.focus(); break;
         }
       } catch (e) {

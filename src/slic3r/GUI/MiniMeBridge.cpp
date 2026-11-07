@@ -7,6 +7,7 @@
 #include "GLCanvas3D.hpp"
 #include "GLToolbar.hpp"
 #include "GUI_ObjectList.hpp"
+#include "MiniMePricing.hpp"
 #include "ObjectDataViewModel.hpp"
 #include "Tab.hpp"
 #include "Gizmos/GLGizmosManager.hpp"
@@ -28,6 +29,8 @@
 #include "libslic3r/Tesselate.hpp"
 #include "libslic3r/TriangleMeshSlicer.hpp"
 #include "libslic3r/CustomGCode.hpp"
+#include "libslic3r/CutUtils.hpp"
+#include "libslic3r/Geometry.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
@@ -639,6 +642,30 @@ json tool_delete(const json &args)
         const int    obj_idx = find_object(args);
         ModelObject *mo      = p->model().objects[obj_idx];
         close_gizmo();
+        if (args.contains("parts") && args["parts"].is_array() && !args["parts"].empty()) {
+            // several parts, highest index first so that the others keep theirs
+            std::vector<int> idxs;
+            for (const json &e : args["parts"]) {
+                const int vi = find_part(mo, json{{"part", e}});
+                if (std::find(idxs.begin(), idxs.end(), vi) == idxs.end())
+                    idxs.push_back(vi);
+            }
+            std::sort(idxs.rbegin(), idxs.rend());
+            int solid_left = 0;
+            for (int vi = 0; vi < int(mo->volumes.size()); ++vi)
+                if (mo->volumes[vi]->is_model_part() && std::find(idxs.begin(), idxs.end(), vi) == idxs.end())
+                    ++solid_left;
+            if (solid_left == 0)
+                throw ToolError("that would delete every solid part; delete the object instead");
+            Plater::TakeSnapshot snapshot(p, "Claude: delete parts of " + mo->name);
+            json names = json::array();
+            for (int vi : idxs) {
+                names.push_back(mo->volumes[vi]->name);
+                wxGetApp().obj_list()->delete_from_model_and_list(itVolume, obj_idx, vi);
+            }
+            p->set_plater_dirty(true);
+            return {{"deleted_parts", names}, {"object", mo->name}, {"parts", parts_json(obj_idx, mo, plate_of_instance(obj_idx, 0))}};
+        }
         if (args.contains("part") && !args["part"].is_null()) {
             const int vol_idx = find_part(mo, args);
             const int parts   = int(std::count_if(mo->volumes.begin(), mo->volumes.end(), [](const ModelVolume *v) { return v->is_model_part(); }));
@@ -734,13 +761,14 @@ ExPolygons object_outline(const ModelObject *mo, double z, int only_part)
     return union_ex(all);
 }
 
-json tool_add_part(const json &args)
+// one add_part (on the GUI thread)
+json add_part_gui(const json &args)
 {
     const std::string shape = lower(str(args, "shape", "box"));
     const std::string type  = lower(str(args, "type", "part"));
     if (type != "part" && type != "modifier" && type != "negative")
         throw ToolError("'type' is part, modifier or negative");
-    return on_gui([args, shape, type]() -> json {
+    {
         Plater      *p       = plater();
         const int    obj_idx = find_object(args);
         ModelObject *mo      = p->model().objects[obj_idx];
@@ -846,6 +874,37 @@ json tool_add_part(const json &args)
         p->changed_object(obj_idx);
         p->set_plater_dirty(true);
         return {{"added", made}, {"object", mo->name}, {"part_index", int(mo->volumes.size()) - 1}, {"parts", parts_json(obj_idx, mo, pi)}};
+    }
+}
+
+json tool_add_part(const json &args)
+{
+    if (!args.contains("parts"))
+        return on_gui([args]() -> json { return add_part_gui(args); });
+    if (!args["parts"].is_array() || args["parts"].empty())
+        throw ToolError("'parts' is a list of parts, each with the same fields as one add_part");
+    // several parts in one undo step: each item's fields over the shared ones
+    return on_gui([args]() -> json {
+        Plater *p = plater();
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: add parts");
+        json added = json::array(), last;
+        for (const json &item : args["parts"]) {
+            if (!item.is_object())
+                throw ToolError("each item of 'parts' is an object like one add_part");
+            json one = args;
+            one.erase("parts");
+            for (auto &[k, v] : item.items())
+                one[k] = v;
+            try {
+                last = add_part_gui(one);
+            } catch (const std::exception &e) {
+                throw ToolError("parts[" + std::to_string(added.size()) + "]: " + e.what() +
+                                (added.empty() ? "" : " (the parts before it were added; one undo removes them all)"));
+            }
+            added.push_back({{"added", last["added"]}, {"object", last["object"]}, {"part_index", last["part_index"]}});
+        }
+        return {{"added", added}, {"parts", last["parts"]}};
     });
 }
 
@@ -1031,7 +1090,16 @@ json tool_render_view(const json &args)
             throw ToolError("no 3D view");
         if (view != "keep")
             p->select_view(view);
-        if (fit == "plate")
+        if (args.contains("zoom_box_on_plate_mm") && args["zoom_box_on_plate_mm"].is_array() && args["zoom_box_on_plate_mm"].size() == 4) {
+            // a close look at one area: [x_min, y_min, x_max, y_max] on the current plate, over the objects' height
+            const json  &b = args["zoom_box_on_plate_mm"];
+            const Vec2d  o = plate_origin(p->get_partplate_list().get_curr_plate_index());
+            double       top = 1.;
+            for (const ModelObject *mo : p->model().objects)
+                top = std::max(top, mo->instance_bounding_box(0).max.z());
+            p->get_camera().zoom_to_box(BoundingBoxf3(Vec3d(o.x() + b[0].get<double>(), o.y() + b[1].get<double>(), 0.),
+                                                      Vec3d(o.x() + b[2].get<double>(), o.y() + b[3].get<double>(), top)));
+        } else if (fit == "plate")
             canvas->zoom_to_plate(-1);
         else if (fit == "objects") {
             if (p->is_preview_shown())
@@ -1052,7 +1120,8 @@ json tool_render_view(const json &args)
     };
     auto promise = std::make_shared<std::promise<Frame>>();
     auto frame_f = promise->get_future();
-    on_gui([promise]() -> json {
+    const bool clean = !flag(args, "show_popups", false);
+    on_gui([promise, clean]() -> json {
         GLCanvas3D *canvas = plater()->get_current_canvas3D();
         if (canvas == nullptr)
             throw ToolError("no 3D view");
@@ -1061,7 +1130,7 @@ json tool_render_view(const json &args)
                 promise->set_value(Frame{w, h, std::move(rgba)});
             } catch (...) {
             }
-        });
+        }, clean);
         canvas->set_as_dirty();
         canvas->render();
         return {};
@@ -1100,7 +1169,8 @@ json tool_render_view(const json &args)
         return {{"screen", p->is_preview_shown() ? "preview" : "3d"},
                 {"sliced", p->get_partplate_list().get_curr_plate()->is_slice_result_valid()}};
     });
-    std::string note = "MiniMe " + state["screen"].get<std::string>() + " view, camera '" + view + "', " + std::to_string(ow) + "x" + std::to_string(oh) + " px.";
+    std::string note = "MiniMe " + state["screen"].get<std::string>() + " view, camera '" + view + "', " + std::to_string(ow) + "x" + std::to_string(oh) + " px" +
+                       (clean ? ", without MiniMe's notification popups (show_popups=true shows them)." : ".");
     if (state["screen"] == "preview" && !state["sliced"].get<bool>())
         note += " The plate is not sliced, so the preview shows no toolpaths: call slice first.";
     return {{"content", json::array({{{"type", "image"}, {"data", base64(bytes)}, {"mimeType", "image/png"}}, {{"type", "text"}, {"text", note}}})}};
@@ -1642,16 +1712,34 @@ json tool_cut_object(const json &args)
                                               only_if(flip && !to_parts, ModelObjectCutAttribute::FlipUpper) |
                                               only_if(to_parts, ModelObjectCutAttribute::CutToParts) |
                                               only_if(true, ModelObjectCutAttribute::InvalidateCutInfo);
+        (void) plane;
         close_gizmo();
         const std::string name = mo->name;
+        const std::vector<const ModelObject *> before(p->model().objects.begin(), p->model().objects.end());
         Plater::TakeSnapshot snapshot(p, "Claude: cut " + name);
-        p->cut(size_t(obj_idx), size_t(inst_idx), plane, attributes);
+        // the Cut tool's own code: it keeps color and support paint on the pieces (the older ModelObject::cut drops it)
+        const Vec3d       inst_off   = mo->instances[inst_idx]->get_offset();
+        const Transform3d cut_matrix = Geometry::translation_transform(Vec3d(c.x(), c.y(), z) - inst_off);
+        Cut               cut(mo, inst_idx, cut_matrix, attributes);
+        cut.set_offset_for_two_part = !to_parts;
+        const ModelObjectPtrs &new_objects = cut.perform_with_plane();
+        if (cut.was_canceled() || new_objects.empty())
+            throw ToolError("the cut made nothing (nothing changed)");
+        p->apply_cut_object_to_model(size_t(obj_idx), new_objects);
         p->set_plater_dirty(true);
         json made = json::array();
         Model &model = p->model();
         for (size_t i = 0; i < model.objects.size(); ++i)
             made.push_back({{"index", i}, {"name", model.objects[i]->name}});
-        json j = {{"cut", name}, {"at_height_mm", r2(z)}, {"objects_now", made}};
+        json pieces = json::array();
+        for (size_t i = 0; i < model.objects.size(); ++i)
+            if (std::find(before.begin(), before.end(), model.objects[i]) == before.end()) {
+                const BoundingBoxf3 pb = model.objects[i]->instance_bounding_box(0);
+                pieces.push_back({{"index", i}, {"name", model.objects[i]->name}, {"plate", plate_of_instance(int(i), 0)},
+                                  {"size_mm", xyz(pb.size())}, {"parts", model.objects[i]->volumes.size()}});
+            }
+        json j = {{"cut", name}, {"at_height_mm", r2(z)}, {"pieces", pieces}, {"objects_now", made},
+                  {"warning", "object indices changed: address objects by name from now on"}};
         if (to_parts) {
             const int last = int(model.objects.size()) - 1;
             int       idx  = std::min(obj_idx, last);
@@ -1662,9 +1750,10 @@ json tool_cut_object(const json &args)
             j["parts"]  = parts_json(idx, model.objects[idx], plate_of_instance(idx, 0));
             j["note"]   = "the pieces are parts of one object, in place";
         } else
-            j["note"] = "the pieces are separate objects and may overlap; move them apart with transform_object (or arrange in MiniMe)";
+            j["note"] = "the pieces are separate objects, set apart on the plate";
+        j["paint"] = "color and support paint stay on the pieces";
         return j;
-    });
+    }, 300000);
 }
 
 json tool_add_model(const json &args)
@@ -1719,6 +1808,489 @@ json tool_undo(const json &args)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// color paint and cross-sections
+
+// paint (or erase) color by a rule, or swap one painted filament for another
+json tool_paint_color(const json &args)
+{
+    const std::string mode = lower(str(args, "mode", "set"));
+    if (mode != "set" && mode != "replace" && mode != "clear")
+        throw ToolError("'mode' is set, replace or clear");
+    const std::string facing = lower(str(args, "facing", "any"));
+    if (facing != "up" && facing != "down" && facing != "side" && facing != "any")
+        throw ToolError("'facing' is up, down, side or any");
+    const double within = num(args, "within_deg", facing == "down" ? 30. : 15.);
+    const double z_min  = num(args, "z_min_mm", -1e9), z_max = num(args, "z_max_mm", 1e9);
+    std::optional<std::array<double, 4>> box;
+    if (args.contains("box_on_plate_mm")) {
+        const json &b = args["box_on_plate_mm"];
+        if (!b.is_array() || b.size() != 4)
+            throw ToolError("'box_on_plate_mm' is [x_min, y_min, x_max, y_max]");
+        box = std::array<double, 4>{b[0].get<double>(), b[1].get<double>(), b[2].get<double>(), b[3].get<double>()};
+    }
+    return on_gui([=]() -> json {
+        Plater      *p        = plater();
+        const int    obj_idx  = find_object(args);
+        ModelObject *mo       = p->model().objects[obj_idx];
+        const int    inst_idx = std::clamp(int(num(args, "instance", 0)), 0, int(mo->instances.size()) - 1);
+        const int    only     = args.contains("part") && !args["part"].is_null() ? find_part(mo, args) : -1;
+        const Vec2d  o        = plate_origin(plate_of_instance(obj_idx, inst_idx));
+        int filament = 0, from = 0;
+        if (mode == "set")
+            filament = check_filament(int(num(args, "filament", -1)), true);
+        if (mode == "replace") {
+            from     = check_filament(int(num(args, "from_filament", -1)), false);
+            filament = check_filament(int(num(args, "filament", -1)), true);
+        }
+        const double cos_within = std::cos(within * M_PI / 180.), sin_within = std::sin(within * M_PI / 180.);
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: color paint on " + mo->name);
+        size_t facets = 0;
+        double area   = 0.;
+        for (size_t vi = 0; vi < mo->volumes.size(); ++vi) {
+            ModelVolume *mv = mo->volumes[vi];
+            if (!mv->is_model_part() || (only >= 0 && int(vi) != only))
+                continue;
+            TriangleSelector selector(mv->mesh());
+            selector.deserialize(mv->mmu_segmentation_facets.get_data(), true);
+            if (mode == "clear") {
+                selector.reset();
+            } else if (mode == "replace") {
+                // loading with "delete filament 'from'" puts 'to' in its place and lowers the numbers above 'from' by one;
+                // shifting them back up restores them (and 'to', given one lower when it is above 'from')
+                const int to = filament > from ? filament - 1 : filament;
+                selector.deserialize(selector.serialize(), true, EnforcerBlockerType::ExtruderMax, EnforcerBlockerType(from), EnforcerBlockerType(to));
+                selector.shift_states_above(EnforcerBlockerType(from), 1);
+            } else {
+                const indexed_triangle_set &its    = mv->mesh().its;
+                const Transform3d           trafo  = mo->instances[inst_idx]->get_matrix() * mv->get_matrix();
+                const Matrix3d              normal = trafo.linear().inverse().transpose();
+                for (int f = 0; f < int(its.indices.size()); ++f) {
+                    const Vec3f fa = its.vertices[its.indices[f](0)], fb = its.vertices[its.indices[f](1)], fc = its.vertices[its.indices[f](2)];
+                    const Vec3d a = trafo * fa.cast<double>(), b = trafo * fb.cast<double>(), c = trafo * fc.cast<double>();
+                    Vec3d       n = normal * (fb - fa).cross(fc - fa).cast<double>();
+                    const double len = n.norm();
+                    if (len <= 0.)
+                        continue;
+                    n /= len;
+                    if ((facing == "up" && n.z() < cos_within) || (facing == "down" && -n.z() < cos_within) ||
+                        (facing == "side" && std::abs(n.z()) > sin_within))
+                        continue;
+                    const Vec3d center = (a + b + c) / 3.;
+                    if (center.z() < z_min || center.z() > z_max)
+                        continue;
+                    if (box) {
+                        const double x = center.x() - o.x(), y = center.y() - o.y();
+                        if (x < (*box)[0] || x > (*box)[2] || y < (*box)[1] || y > (*box)[3])
+                            continue;
+                    }
+                    selector.set_facet(f, EnforcerBlockerType(filament));
+                    ++facets;
+                    area += 0.5 * (b - a).cross(c - a).norm();
+                }
+            }
+            mv->mmu_segmentation_facets.set(selector);
+        }
+        p->changed_object(obj_idx);
+        wxGetApp().obj_list()->update_info_items(size_t(obj_idx));
+        p->set_plater_dirty(true);
+        p->schedule_background_process();
+        json j = {{"object", mo->name}, {"mode", mode}, {"parts", parts_json(obj_idx, mo, plate_of_instance(obj_idx, 0))}};
+        if (mode == "set") {
+            j["triangles"] = facets;
+            j["area_mm2"]  = r2(area);
+            if (facets == 0)
+                j["note"] = "nothing matched: loosen facing / within_deg / z / box";
+        }
+        return j;
+    });
+}
+
+// where a line crosses the outlines: the stretches of the line inside material
+json line_intervals(const ExPolygons &polys, bool along_first, double at)
+{
+    std::vector<double> hits;
+    auto edges = [&](const Polygon &poly) {
+        const size_t n = poly.points.size();
+        for (size_t i = 0; i < n; ++i) {
+            const Vec2d a = unscale(poly.points[i]), b = unscale(poly.points[(i + 1) % n]);
+            // the line is "second coordinate = at" (along the first axis) or the other way round
+            const double a_fix = along_first ? a.y() : a.x(), b_fix = along_first ? b.y() : b.x();
+            const double a_run = along_first ? a.x() : a.y(), b_run = along_first ? b.x() : b.y();
+            if ((a_fix <= at && b_fix > at) || (b_fix <= at && a_fix > at))
+                hits.push_back(a_run + (at - a_fix) / (b_fix - a_fix) * (b_run - a_run));
+        }
+    };
+    for (const ExPolygon &ex : polys) {
+        edges(ex.contour);
+        for (const Polygon &h : ex.holes)
+            edges(h);
+    }
+    std::sort(hits.begin(), hits.end());
+    json out = json::array();
+    for (size_t i = 0; i + 1 < hits.size(); i += 2)
+        out.push_back({{"from", r2(hits[i])}, {"to", r2(hits[i + 1])}, {"length", r2(hits[i + 1] - hits[i])}});
+    return out;
+}
+
+// a cross-section of an object: the outline where a plane cuts it, to measure slots, walls, lips and heights
+json tool_section(const json &args)
+{
+    const std::string plane = lower(str(args, "plane", "z"));
+    if (plane != "z" && plane != "x" && plane != "y")
+        throw ToolError("'plane' is z (horizontal, at a height), x (vertical, at an x on the plate) or y (vertical, at a y)");
+    if (!args.contains("at_mm"))
+        throw ToolError("give 'at_mm', where the plane is: a height for z, a plate x for x, a plate y for y");
+    const double at        = num(args, "at_mm", 0.);
+    double       tolerance = std::max(0.01, num(args, "detail_mm", 0.05));
+    return on_gui([=]() mutable -> json {
+        Plater      *p        = plater();
+        const int    obj_idx  = find_object(args);
+        ModelObject *mo       = p->model().objects[obj_idx];
+        const int    only     = args.contains("part") && !args["part"].is_null() ? find_part(mo, args) : -1;
+        const int    pi       = plate_of_instance(obj_idx, 0);
+        const Vec2d  o        = plate_origin(pi);
+        // plate coordinates, turned so that the plane is horizontal: x -> (y, z) at x; y -> (z, x) at y (both keep the
+        // mesh's orientation)
+        ExPolygons all;
+        for (size_t vi = 0; vi < mo->volumes.size(); ++vi) {
+            const ModelVolume *mv = mo->volumes[vi];
+            if (!mv->is_model_part() || (only >= 0 && int(vi) != only))
+                continue;
+            indexed_triangle_set its = mv->mesh().its;
+            const Transform3d    t   = mo->instances.front()->get_matrix() * mv->get_matrix();
+            for (Vec3f &v : its.vertices) {
+                const Vec3d w = t * v.cast<double>() - Vec3d(o.x(), o.y(), 0.);
+                v = plane == "z" ? w.cast<float>() : plane == "x" ? Vec3f(float(w.y()), float(w.z()), float(w.x())) :
+                                                                    Vec3f(float(w.z()), float(w.x()), float(w.y()));
+            }
+            const std::vector<ExPolygons> cut = slice_mesh_ex(its, std::vector<float>{float(at)});
+            if (!cut.empty())
+                append(all, cut.front());
+        }
+        all = union_ex(all);
+        if (all.empty())
+            throw ToolError("the plane does not cross the object there");
+        // back to (first axis, second axis) as named below
+        if (plane == "y")
+            for (ExPolygon &ex : all) {
+                auto swap = [](Polygon &poly) {
+                    for (Point &pt : poly.points)
+                        std::swap(pt.x(), pt.y());
+                    poly.reverse();
+                };
+                swap(ex.contour);
+                for (Polygon &h : ex.holes)
+                    swap(h);
+            }
+        const std::array<const char *, 2> axes = plane == "z" ? std::array<const char *, 2>{"x", "y"} :
+                                                 plane == "x" ? std::array<const char *, 2>{"y", "z"} : std::array<const char *, 2>{"x", "z"};
+        // fewer points until it is a readable size
+        ExPolygons simple;
+        size_t     points = 0;
+        for (int round = 0; round < 6; ++round, tolerance *= 2.) {
+            simple.clear();
+            for (const ExPolygon &ex : all)
+                append(simple, ex.simplify(scaled(tolerance)));
+            points = 0;
+            for (const ExPolygon &ex : simple) {
+                points += ex.contour.points.size();
+                for (const Polygon &h : ex.holes)
+                    points += h.points.size();
+            }
+            if (points <= 1500)
+                break;
+        }
+        auto pts = [](const Polygon &poly) {
+            json a = json::array();
+            for (const Point &pt : poly.points)
+                a.push_back(json::array({r2(unscale<double>(pt.x())), r2(unscale<double>(pt.y()))}));
+            return a;
+        };
+        json shapes = json::array();
+        for (const ExPolygon &ex : simple) {
+            const BoundingBox bb = get_extents(ex);
+            json s = {{"area_mm2", r2(ex.area() * SCALING_FACTOR * SCALING_FACTOR)},
+                      {"min", json::array({r2(unscale<double>(bb.min.x())), r2(unscale<double>(bb.min.y()))})},
+                      {"max", json::array({r2(unscale<double>(bb.max.x())), r2(unscale<double>(bb.max.y()))})},
+                      {"outline", pts(ex.contour)}};
+            if (!ex.holes.empty()) {
+                json holes = json::array();
+                for (const Polygon &h : ex.holes)
+                    holes.push_back(pts(h));
+                s["holes"] = holes;
+            }
+            shapes.push_back(s);
+        }
+        json j = {{"object", mo->name}, {"plane", plane}, {"at_mm", r2(at)}, {"axes", json::array({axes[0], axes[1]})},
+                  {"detail_mm", r2(tolerance)}, {"shapes", shapes},
+                  {"note", std::string("points are [") + axes[0] + ", " + axes[1] + "] in mm, plate coordinates (z = height)"}};
+        // optional measuring lines across the section
+        if (args.contains("lines") && args["lines"].is_array()) {
+            json measured = json::array();
+            for (const json &l : args["lines"]) {
+                const std::string axis = l.is_object() ? lower(l.value("along", "")) : "";
+                if (!l.is_object() || (axis != axes[0] && axis != axes[1]) || !l.contains("at") || !l["at"].is_number())
+                    throw ToolError(std::string("each line is {\"along\": \"") + axes[0] + "\" or \"" + axes[1] + "\", \"at\": number}");
+                const bool along_first = axis == axes[0];
+                measured.push_back({{"along", axis}, {"at", r2(l["at"].get<double>())},
+                                    {"inside_material", line_intervals(all, along_first, l["at"].get<double>())}});
+            }
+            j["lines"] = measured;
+        }
+        return j;
+    });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// copies and mirrors
+
+Axis axis_arg(const std::string &a)
+{
+    const std::string s = lower(a);
+    if (s == "x")
+        return X;
+    if (s == "y")
+        return Y;
+    if (s == "z")
+        return Z;
+    throw ToolError("'axis' is x, y or z");
+}
+
+// mirror across the plane axis = w (world coordinates)
+Transform3d mirror_across(Axis axis, double w)
+{
+    Vec3d at = Vec3d::Zero();
+    at[axis] = w;
+    Transform3d s = Transform3d::Identity();
+    s(int(axis), int(axis)) = -1.;
+    return Geometry::translation_transform(at) * s * Geometry::translation_transform(-at);
+}
+
+json tool_duplicate_object(const json &args)
+{
+    return on_gui([args]() -> json {
+        Plater        *p       = plater();
+        Model         &model   = p->model();
+        const int      obj_idx = find_object(args);
+        ModelObject   *mo      = model.objects[obj_idx];
+        PartPlateList &plates  = p->get_partplate_list();
+        const int      src_pi  = plate_of_instance(obj_idx, 0);
+        const int      pi      = args.contains("plate") && !args["plate"].is_null() ? plate_arg(args) : src_pi;
+        const BoundingBoxf3 bb = mo->instance_bounding_box(0);
+        Vec2d target;
+        if (args.contains("center_on_plate_mm")) {
+            const json &c = args["center_on_plate_mm"];
+            if (!c.is_array() || c.size() != 2)
+                throw ToolError("'center_on_plate_mm' is [x, y] on the plate");
+            target = plate_origin(pi) + Vec2d(c[0].get<double>(), c[1].get<double>());
+        } else {
+            // the nearest free spot on that plate
+            const Vec3d start = pi == src_pi ? bb.center() : plates.get_plate(pi)->get_build_volume().center();
+            const Vec2f cell  = p->canvas3D()->get_nearest_empty_cell(Vec2f(float(start.x()), float(start.y())),
+                                                                      Vec2f(float(bb.size().x() + 1.), float(bb.size().y() + 1.)));
+            target = cell.cast<double>();
+        }
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: copy " + mo->name);
+        ModelObject *dst = model.add_object(*mo);
+        for (ModelVolume *mv : dst->volumes)
+            if (mv->is_model_part())
+                mv->ensure_part_guid(true);
+        dst->name = str(args, "name", mo->name + " copy");
+        const Vec3d d(target.x() - bb.center().x(), target.y() - bb.center().y(), 0.);
+        for (ModelInstance *inst : dst->instances)
+            inst->set_offset(inst->get_offset() + d);
+        model.set_assembly_pos(dst);
+        const size_t new_idx = model.objects.size() - 1;
+        wxGetApp().obj_list()->paste_objects_into_list({new_idx});
+        p->set_plater_dirty(true);
+        const BoundingBoxf3 nb  = dst->instance_bounding_box(0);
+        const int           npi = plate_of_instance(int(new_idx), 0);
+        const Vec2d         o   = plate_origin(npi);
+        return {{"copied", mo->name}, {"new_object", {{"index", new_idx}, {"name", dst->name}}}, {"plate", npi},
+                {"center_on_plate_mm", xy(Vec2d(nb.center().x() - o.x(), nb.center().y() - o.y()))}, {"size_mm", xyz(nb.size())},
+                {"note", "the copy has every part, filament, paint and setting of the original; address objects by name"}};
+    });
+}
+
+json tool_mirror(const json &args)
+{
+    const Axis axis = axis_arg(str(args, "axis", ""));
+    return on_gui([args, axis]() -> json {
+        Plater      *p       = plater();
+        const int    obj_idx = find_object(args);
+        ModelObject *mo      = p->model().objects[obj_idx];
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: mirror " + mo->name);
+        std::string what;
+        if (args.contains("part") && !args["part"].is_null()) {
+            // one part, in place: across the plane through its own middle
+            const int         vi   = find_part(mo, args);
+            ModelVolume      *mv   = mo->volumes[vi];
+            const Transform3d inst = mo->instances.front()->get_matrix();
+            const Vec3d       c    = part_box(mo, mv).center();
+            mv->set_transformation(Geometry::Transformation(Transform3d(inst.inverse() * mirror_across(axis, c[axis]) * inst * mv->get_matrix())));
+            what = "part '" + mv->name + "'";
+        } else {
+            for (size_t i = 0; i < mo->instances.size(); ++i) {
+                ModelInstance *inst = mo->instances[i];
+                const Vec3d    c    = mo->instance_bounding_box(i).center();
+                inst->set_transformation(Geometry::Transformation(Transform3d(mirror_across(axis, c[axis]) * inst->get_matrix())));
+            }
+            what = "object";
+        }
+        mo->invalidate_bounding_box();
+        mo->ensure_on_bed(false);
+        p->changed_object(obj_idx);
+        wxGetApp().obj_list()->update_info_items(size_t(obj_idx));
+        p->set_plater_dirty(true);
+        return {{"mirrored", what}, {"object", mo->name}, {"axis", std::string(1, "xyz"[int(axis)])},
+                {"parts", parts_json(obj_idx, mo, plate_of_instance(obj_idx, 0))}};
+    });
+}
+
+json tool_copy_parts(const json &args)
+{
+    if (!args.contains("parts") || !args["parts"].is_array() || args["parts"].empty())
+        throw ToolError("give 'parts', the parts to copy (index or name)");
+    return on_gui([args]() -> json {
+        Plater      *p     = plater();
+        Model       &model = p->model();
+        const int    a     = find_object(args);
+        const int    b     = args.contains("to_object") && !args["to_object"].is_null() ? find_object(args, "to_object") : a;
+        ModelObject *A = model.objects[a], *B = model.objects[b];
+        std::vector<ModelVolume *> src;
+        for (const json &e : args["parts"]) {
+            ModelVolume *v = A->volumes[find_part(A, json{{"part", e}})];
+            if (std::find(src.begin(), src.end(), v) == src.end())
+                src.push_back(v);
+        }
+        // the change, in plate (world) coordinates
+        Transform3d t = Transform3d::Identity();
+        if (args.contains("mirror") && !args["mirror"].is_null()) {
+            const json &m = args["mirror"];
+            if (!m.is_object() || !m.contains("at_mm") || !m["at_mm"].is_number())
+                throw ToolError("'mirror' is {\"axis\": \"x\" | \"y\" | \"z\", \"at_mm\": the plate coordinate (or height) of the mirror plane}");
+            const Axis   axis = axis_arg(m.value("axis", ""));
+            const Vec2d  o    = plate_origin(plate_of_instance(a, 0));
+            const double at   = m["at_mm"].get<double>();
+            t = mirror_across(axis, axis == X ? o.x() + at : axis == Y ? o.y() + at : at);
+        }
+        if (args.contains("move_by_mm")) {
+            const json &mv = args["move_by_mm"];
+            if (!mv.is_array() || mv.size() < 2)
+                throw ToolError("'move_by_mm' is [x, y] or [x, y, z]");
+            t = Geometry::translation_transform(Vec3d(mv[0].get<double>(), mv[1].get<double>(), mv.size() > 2 ? mv[2].get<double>() : 0.)) * t;
+        }
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: copy parts to " + B->name);
+        const Transform3d ia = A->instances.front()->get_matrix();
+        const Transform3d ib = B->instances.front()->get_matrix().inverse();
+        json made = json::array();
+        for (ModelVolume *sv : src) {
+            const Transform3d m  = ib * t * ia * sv->get_matrix();
+            ModelVolume      *nv = B->add_volume(*sv);
+            if (nv->is_model_part())
+                nv->ensure_part_guid(true);
+            nv->set_transformation(Geometry::Transformation(m));
+            nv->name = sv->name + (a == b ? " copy" : "");
+            made.push_back({{"part_index", int(B->volumes.size()) - 1}, {"name", nv->name}, {"from", sv->name}});
+        }
+        B->invalidate_bounding_box();
+        B->ensure_on_bed(false);
+        wxGetApp().obj_list()->add_volumes_to_object_in_list(size_t(b));
+        p->changed_object(b);
+        p->set_plater_dirty(true);
+        return {{"copied", made}, {"to_object", B->name}, {"parts", parts_json(b, B, plate_of_instance(b, 0))},
+                {"note", "copies keep type, filament, paint and settings; check them with get_scene or section"}};
+    });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// pricing: the same calculation as the user's pricing artifact, from the sliced plate
+
+json tool_price(const json &args)
+{
+    return on_gui([args]() -> json {
+        json       data  = Pricing::load();
+        const int  plate = args.contains("plate") && !args["plate"].is_null() ? plate_arg(args) : -1;
+        const json usage = Pricing::plate_usage(data, plate);
+        json       ov    = args;
+        ov.erase("plate");
+        json j = Pricing::compute(data, usage, ov);
+        j["plate"]   = usage["plate"].get<int>() - 1;
+        j["project"] = usage["project"];
+        j["print_time"] = format_time(usage["seconds"].get<double>());
+        j["note"] = "money in R$; margins are R$ per print hour; scenario prices already include the channel fee";
+        return j;
+    });
+}
+
+json tool_pricing(const json &args)
+{
+    return on_gui([args]() -> json {
+        json              data   = Pricing::load();
+        const std::string action = lower(str(args, "action", "get"));
+        json              out    = json::object();
+        if (action != "get") {
+            out = Pricing::apply_change(data, args);
+            Pricing::refresh_window();
+        }
+        json filaments = json::array();
+        for (json f : data["filaments"]) {
+            const double kg = f.value("spool_kg", 0.);
+            f["price_kg"]   = kg > 0. ? r2(f.value("paid", 0.) / kg) : 0.;
+            filaments.push_back(f);
+        }
+        out["config"]    = data["config"];
+        out["filaments"] = filaments;
+        // which list filament each MiniMe filament uses
+        json slots = json::array();
+        PresetBundle *pb = wxGetApp().preset_bundle;
+        for (size_t i = 0; i < pb->filament_presets.size(); ++i) {
+            const std::string key = Pricing::slot_key(int(i) + 1);
+            json s = {{"filament", int(i) + 1}, {"preset", pb->filament_presets[i]}};
+            if (data["slots"].contains(key))
+                s["assigned"] = data["slots"][key];
+            slots.push_back(s);
+        }
+        out["minime_filaments"] = slots;
+        return out;
+    });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// what the user did in MiniMe between Claude's calls (undo steps that are not Claude's)
+
+size_t s_seen_time   = 0;
+size_t s_seen_active = 0;
+bool   s_seen        = false;
+
+json user_changes()
+{
+    json out = json::array();
+    if (!s_seen)
+        return out;
+    const UndoRedo::Stack &st = plater()->undo_redo_stack_main();
+    for (const UndoRedo::Snapshot &snap : st.snapshots())
+        if (snap.timestamp > s_seen_time && !snap.name.empty() && snap.name.rfind("Claude", 0) != 0 && snap.name.rfind("Internal", 0) != 0)
+            out.push_back(snap.name);
+    if (out.empty() && st.active_snapshot_time() != s_seen_active)
+        out.push_back("undo or redo");
+    return out;
+}
+
+void mark_seen()
+{
+    const UndoRedo::Stack &st = plater()->undo_redo_stack_main();
+    for (const UndoRedo::Snapshot &snap : st.snapshots())
+        s_seen_time = std::max(s_seen_time, snap.timestamp);
+    s_seen_active = st.active_snapshot_time();
+    s_seen        = true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // the tool list
 
 struct Tool
@@ -1750,7 +2322,9 @@ const std::vector<Tool> &tools()
                 "view": {"type": "string", "enum": ["iso", "top", "bottom", "front", "rear", "left", "right", "keep"], "description": "camera direction; keep = as the user left it"},
                 "screen": {"type": "string", "enum": ["3d", "preview", "keep"], "description": "3d = the models; preview = the sliced result"},
                 "fit": {"type": "string", "enum": ["plate", "objects", "keep"]},
-                "max_width": {"type": "integer", "description": "image width limit in pixels, default 1280"}}})J",
+                "max_width": {"type": "integer", "description": "image width limit in pixels, default 1280"},
+                "zoom_box_on_plate_mm": {"type": "array", "items": {"type": "number"}, "description": "[x_min, y_min, x_max, y_max]: a close look at that area of the current plate"},
+                "show_popups": {"type": "boolean", "description": "include MiniMe's notification popups (default false: they are left out so they cover nothing)"}}})J",
             tool_render_view);
         add("slice",
             "Slices the current plate (as the Slice button does), waits for it and returns print time, support print time, filament, "
@@ -1812,8 +2386,9 @@ const std::vector<Tool> &tools()
                 "plate": {"type": "integer"}}, "required": ["zone"]})J",
             tool_support_zone);
         add("cut_object",
-            "Cuts an object with a flat horizontal cut at a height (one undo step). With result=parts_in_place the pieces stay in place as "
-            "parts of the same object (to replace or recolor a layer band). For angled, curved or shaped cuts and connectors the user uses the Cut tool.",
+            "Cuts an object with a flat horizontal cut at a height (one undo step). Color and support paint stay on the pieces. With "
+            "result=parts_in_place the pieces stay in place as parts of the same object (to give a layer band its own filament). Only "
+            "flat horizontal cuts: for angled, curved or shaped cuts and connectors the user uses the Cut tool.",
             R"J({"type": "object", "properties": {
                 "object": $OBJ,
                 "height_mm": {"type": "number", "description": "height above the plate"},
@@ -1853,12 +2428,39 @@ const std::vector<Tool> &tools()
                 "move_by_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y] or [x, y, z]"},
                 "size_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y, z] new size; 0 keeps that size"}}, "required": ["object", "part"]})J",
             tool_move_part);
-        add("delete", "Deletes an object, or with 'part' one part of it (one undo step).",
-            R"J({"type": "object", "properties": {"object": $OBJ, "part": {"type": ["integer", "string"]}}, "required": ["object"]})J", tool_delete);
+        add("delete", "Deletes an object, or with 'part' one part of it, or with 'parts' several parts at once (one undo step). Object "
+            "indices change after an object is deleted: address objects by name.",
+            R"J({"type": "object", "properties": {"object": $OBJ, "part": {"type": ["integer", "string"]},
+                "parts": {"type": "array", "items": {"type": ["integer", "string"]}, "description": "several parts (index or name)"}}, "required": ["object"]})J", tool_delete);
+        add("duplicate_object",
+            "Copies an object with all its parts, filaments, paint and settings (one undo step), onto the same plate or another one "
+            "(plate index), at a place or the nearest free spot. Use it to try a new version without losing the current one.",
+            R"J({"type": "object", "properties": {"object": $OBJ,
+                "plate": {"type": "integer", "description": "plate index for the copy; default the original's plate"},
+                "center_on_plate_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y] on that plate; default the nearest free spot"},
+                "name": {"type": "string"}}, "required": ["object"]})J",
+            tool_duplicate_object);
+        add("mirror",
+            "Mirrors an object, or one part of it in place (e.g. reversed text), along a plate axis (one undo step). x flips left-right, "
+            "y front-back, z upside down.",
+            R"J({"type": "object", "properties": {"object": $OBJ, "part": {"type": ["integer", "string"], "description": "only this part; leave out for the whole object"},
+                "axis": {"type": "string", "enum": ["x", "y", "z"]}}, "required": ["object", "axis"]})J",
+            tool_mirror);
+        add("copy_parts",
+            "Copies parts (solid, negative or modifier, with filament, paint and settings) within an object or into another object "
+            "(one undo step), optionally mirrored across a plane and/or moved. Use it to make one side match the other: e.g. "
+            "mirror across z at the middle height, or across y at a plate y, then move_by_mm.",
+            R"J({"type": "object", "properties": {"object": $OBJ,
+                "parts": {"type": "array", "items": {"type": ["integer", "string"]}, "description": "parts of 'object' to copy (index or name)"},
+                "to_object": {"type": ["integer", "string"], "description": "the object to put the copies in; default the same object"},
+                "mirror": {"type": "object", "description": "{'axis': 'x'|'y'|'z', 'at_mm': plate x / plate y / height of the mirror plane}"},
+                "move_by_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y] or [x, y, z], after the mirror"}}, "required": ["object", "parts"]})J",
+            tool_copy_parts);
         add("add_part",
             "Adds a part (or a modifier or a negative part) to an object at an exact place (one undo step): a box, a rounded box, a "
             "cylinder, a slab with the outline of an object or part at a height (optionally inset), or an .stl/.obj file. Give it a "
-            "filament. Use this to make a core, a plate or a backing in another color instead of writing files.",
+            "filament. Use this to make a core, a plate or a backing in another color instead of writing files. With 'parts', adds "
+            "several in one undo step (e.g. boxes, pins and their holes).",
             R"J({"type": "object", "properties": {"object": $OBJ,
                 "shape": {"type": "string", "enum": ["box", "rounded_box", "cylinder", "outline", "file"]},
                 "type": {"type": "string", "enum": ["part", "modifier", "negative"]},
@@ -1873,8 +2475,73 @@ const std::vector<Tool> &tools()
                 "center_on_plate_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y]; default the object's middle (outline: where it is)"},
                 "bottom_z_mm": {"type": "number", "description": "height of its bottom, default 0"},
                 "filament": {"type": "integer"},
-                "name": {"type": "string"}}, "required": ["object", "shape"]})J",
+                "name": {"type": "string"},
+                "parts": {"type": "array", "items": {"type": "object"}, "description": "several parts in one undo step: each item has the fields of one part; fields given outside 'parts' apply to all"}}, "required": ["object"]})J",
             tool_add_part);
+        add("paint_color",
+            "Color paint on an object's surface (one undo step). mode=set paints whole triangles chosen by a rule (which way they face, "
+            "height range, box on the plate, one part) with a filament, or erases paint with filament 0 (the part then prints in its own "
+            "filament there). mode=replace swaps every triangle painted with from_filament for filament (0 erases it), keeping the "
+            "painted shapes exactly. mode=clear removes all color paint. get_scene shows painted filaments per part and their heights.",
+            R"J({"type": "object", "properties": {"object": $OBJ,
+                "mode": {"type": "string", "enum": ["set", "replace", "clear"]},
+                "filament": {"type": "integer", "description": "filament to paint with; 0 erases"},
+                "from_filament": {"type": "integer", "description": "replace: the painted filament to swap"},
+                "part": {"type": ["integer", "string"], "description": "only this part"},
+                "facing": {"type": "string", "enum": ["up", "down", "side", "any"], "description": "set: up = top faces, down = bottoms, side = walls"},
+                "within_deg": {"type": "number", "description": "set: how far from straight up/down (or from vertical for side) a face may tilt"},
+                "z_min_mm": {"type": "number"},
+                "z_max_mm": {"type": "number"},
+                "box_on_plate_mm": {"type": "array", "items": {"type": "number"}, "description": "[x_min, y_min, x_max, y_max]"}}, "required": ["object", "mode"]})J",
+            tool_paint_color);
+        add("section",
+            "Measures an object: the outline where a plane cuts it, with exact coordinates. plane=z cuts at a height (a layer seen from "
+            "above); plane=x or y cuts vertically at that plate coordinate (a side profile: slot widths, lip heights, wall thickness, "
+            "angles). 'lines' measures across the section: where a straight line runs through material (gaps between them are slots "
+            "or holes).",
+            R"J({"type": "object", "properties": {"object": $OBJ,
+                "plane": {"type": "string", "enum": ["z", "x", "y"]},
+                "at_mm": {"type": "number", "description": "height for z; plate x for x; plate y for y"},
+                "part": {"type": ["integer", "string"], "description": "only this part"},
+                "detail_mm": {"type": "number", "description": "how much the outline may be simplified, default 0.05"},
+                "lines": {"type": "array", "items": {"type": "object"}, "description": "e.g. [{'along': 'y', 'at': 12}] = the line z=12 running along y"}}, "required": ["object", "plane", "at_mm"]})J",
+            tool_section);
+        add("price",
+            "What to charge for the sliced plate, with the user's own pricing (the same calculation as their pricing artifact): "
+            "machine cost per hour x print hours + filament cost (grams of every filament from the slice, including purge and prime "
+            "tower, x the price per kg from the user's filament list) + losses %, + packaging + shipping; then for the low / medium / "
+            "high (and custom) profit margins in R$ per print hour the price, profit and total cost, with the channel fee (% of the "
+            "price or a fixed R$) included. Also the break-even price (no profit) and, with sell_price, whether that price is worth it "
+            "(net profit, profit per hour, verdict). Slice first. Any setting given here changes only this calculation; the user's "
+            "saved settings change with the pricing tool. The user also has a Price window (the Price button at the top).",
+            R"J({"type": "object", "properties": {
+                "plate": {"type": "integer", "description": "plate index as get_scene lists it; default the current one"},
+                "sell_price": {"type": "number", "description": "a price to judge, in R$"},
+                "scenario": {"type": "string", "enum": ["baixa", "media", "alta", "personalizada"]},
+                "custom_margin": {"type": "number", "description": "R$ per print hour for scenario personalizada; 0 = no profit"},
+                "machine_per_hour": {"type": "number"}, "packaging": {"type": "number"}, "shipping": {"type": "number"},
+                "fee_type": {"type": "string", "enum": ["pct", "brl"]}, "fee_value": {"type": "number"},
+                "waste_pct": {"type": "number", "description": "losses and failed prints, % of the production cost"},
+                "hours": {"type": "number", "description": "use these hours instead of the sliced print time"},
+                "prices": {"type": "object", "description": "price per kg for this calculation, by MiniMe filament number, e.g. {'1': 95}"}}})J",
+            tool_price);
+        add("pricing",
+            "The user's saved pricing data (shared with the Price window): settings, their filament list (brand, type, colour, spool "
+            "kg, price paid -> price per kg) and which list filament each MiniMe filament uses. action=get reads it; set_config saves "
+            "settings (machine_per_hour, margin_low, margin_mid, margin_high in R$ per print hour, packaging, shipping, fee_type, "
+            "fee_value, scenario, custom_margin, waste_pct, artifact_url); save_filament adds or (with id) changes one filament; "
+            "import_filaments adds many (same brand+type+colour updates); delete_filament; assign ties a MiniMe filament number (slot) "
+            "to a list filament (filament=id) or a price per kg (price_kg), or back to automatic (neither). Change saved data only when "
+            "the user asks.",
+            R"J({"type": "object", "properties": {
+                "action": {"type": "string", "enum": ["get", "set_config", "save_filament", "import_filaments", "delete_filament", "assign"]},
+                "values": {"type": "object", "description": "set_config: the settings to save"},
+                "filament": {"type": ["object", "string"], "description": "save_filament: {id?, brand, type, color, spool_kg, paid}; assign: a list filament id"},
+                "filaments": {"type": "array", "items": {"type": "object"}, "description": "import_filaments: [{brand, type, color, spool_kg, paid}]"},
+                "id": {"type": "string", "description": "delete_filament: its id"},
+                "slot": {"type": "integer", "description": "assign: the MiniMe filament number"},
+                "price_kg": {"type": "number", "description": "assign: a price per kg instead of a list filament"}}, "required": ["action"]})J",
+            tool_pricing);
         add("repair_object", "Repairs an object's mesh errors (open edges, flipped faces), as Fix model does. get_scene shows mesh errors per part.",
             R"J({"type": "object", "properties": {"object": $OBJ}, "required": ["object"]})J", tool_repair);
         return l;
@@ -1883,16 +2550,56 @@ const std::vector<Tool> &tools()
 }
 
 const char *INSTRUCTIONS =
-    "MiniMe Slicer (a Bambu Studio fork for FDM 3D printing) is open on the user's computer. Its tools let you look at the plate, slice, "
-    "and change objects, supports and settings. Start with get_scene. Lengths are millimetres; x/y on a plate are measured from its "
-    "front left corner, z is the height above the plate. Each change is one undo step in MiniMe.\n"
-    "Work from data, not pictures: get_scene gives every part with its filament, height range, paint and mesh errors; after slice, "
-    "layers gives the filaments of every layer and the number of filament changes. After every change call get_scene (or slice + "
-    "layers) and check the numbers before you say it worked; never say something is done that a tool did not confirm. Use "
-    "render_view only to show the user or for things the data cannot tell.\n"
-    "To keep colors on the outer layers only (fewer filament changes), set the object's interior_filament (set_settings with object) "
-    "and interior_skin_layers. Parts: assemble_objects, move_part, add_part (box, rounded box, cylinder, outline slab), delete, "
-    "set_filament, cut_object with result=parts_in_place. You cannot print or send to a printer.";
+    "MiniMe Slicer (a Bambu Studio fork for FDM 3D printing) is open on the user's computer. These tools work on it. Lengths are "
+    "millimetres; x/y on a plate are measured from its front left corner, z is the height above the plate. Each change is one undo "
+    "step (undo tool, or Ctrl+Z for the user). You cannot print or send to a printer.\n"
+    "\n"
+    "WORK FROM DATA. get_scene first. After every change read the result back (get_scene, section, or slice + layers) and check the "
+    "numbers before you say it worked; never say something is done that a tool did not confirm. render_view is for showing the user, "
+    "or for what no number tells.\n"
+    "\n"
+    "WHAT YOU CAN DO\n"
+    "- Look: get_scene (filaments; plates; objects; every part with type, filament, box and z range, painted filaments with their "
+    "heights, mesh errors, setting overrides; height ranges). section measures the model itself: the outline where a horizontal "
+    "(z) or vertical (x / y) plane cuts it, with 'lines' giving the material along a line - use it for slot widths, lip heights, wall "
+    "thickness, angles, how flat a face is. render_view shows the 3D view or the sliced preview.\n"
+    "- Slice and check: slice (time, grams, warnings, supports); layers (filaments of every layer in print order, filament changes).\n"
+    "- Settings: find_settings, get_settings, set_settings (whole project, or one object's overrides). Inside filament: set the "
+    "object's interior_filament and interior_skin_layers - everything deeper than that many layers below top / above bottom "
+    "surfaces prints in one filament, over paint and parts, so colors stay on the outer layers (fewer filament changes).\n"
+    "- Objects: transform_object (move, turn, scale, move to another plate; objects always stand on the plate), duplicate_object "
+    "(a full copy, on any plate: keep the current version and try a new one on the copy), mirror (an object or one part), "
+    "add_model (.stl/.obj), delete, assemble_objects (join objects into one, keeping places), select_plate, repair_object.\n"
+    "- Parts inside an object: move_part (any height; resize), set_filament, delete, add_part: box, rounded box, cylinder, a slab "
+    "with the outline of an object or part at a height (inset or grown), or a file, as a part (adds material, with its own filament), "
+    "a negative part (SUBTRACTS its shape: holes, slots, cable cuts, flattening a face) or a modifier (other settings inside it). "
+    "add_part with 'parts' adds many in one undo step; delete with 'parts' removes many. copy_parts copies parts within an object "
+    "or into another one, mirrored and/or moved: use it to make two sides match exactly. Glue-together pieces: negative cylinders "
+    "as holes in both faces and loose pins as a separate small object (pins stand up on the plate, no supports).\n"
+    "- Cut: cut_object, a flat horizontal cut at a height; paint stays on the pieces; result=parts_in_place keeps the pieces in place "
+    "as parts of one object (e.g. a top band in another filament).\n"
+    "- Color paint: paint_color - mode=set paints whole triangles chosen by facing (up / down / side), height, box, part with a "
+    "filament (0 erases); mode=replace swaps one painted filament for another everywhere, keeping the painted shapes exactly; "
+    "mode=clear. Typical: erase or recolor paint on side walls (facing=side) so colors stay on the faces.\n"
+    "- Supports: support settings, paint_supports (enforce / block / stand_here on surfaces by rule), support_zone (no-support and "
+    "supports-only-here areas on the plate), support_report after slicing.\n"
+    "- Price: price gives what to charge for a sliced plate with the user's own costs and profit margins (R$), the break-even "
+    "price and whether a given price is worth it; pricing reads or (when the user asks) changes their saved costs and filament "
+    "list. When you compare versions, give the price difference too.\n"
+    "\n"
+    "HOW TO WORK\n"
+    "- Indices of objects change after cut, delete and duplicate: address objects by name, and read the names a tool returns.\n"
+    "- Before a change meant to save time, filament or money, slice the current state first so you can compare before and after.\n"
+    "- If a tool result says the user changed things since your last call, call get_scene before going on.\n"
+    "- Before telling the user to do something by hand or that MiniMe cannot do it, check this list: most edits have a tool.\n"
+    "- render_view leaves MiniMe's popups out; zoom_box_on_plate_mm looks closely at one area.\n"
+    "\n"
+    "WHAT YOU CANNOT DO (say so plainly; suggest the user's tool or the modeling program)\n"
+    "- Angled, curved or shaped cuts and cut connectors (the user's Cut tool does them).\n"
+    "- Brush-painting by hand, or making painted lines thicker, thinner or even: paint_color works on whole triangles by rule.\n"
+    "- Turning painted areas or raised details into separate parts by their shape (only flat cuts and outline slabs).\n"
+    "- Editing the mesh itself beyond adding / subtracting / copying / mirroring parts (no smoothing, sculpting, writing text).\n"
+    "- Printing, sending to a printer, or opening and saving project files.";
 
 // ---------------------------------------------------------------------------------------------------------------------
 // MCP (JSON-RPC 2.0 over HTTP POST, plain JSON answers)
@@ -1938,14 +2645,41 @@ json handle_rpc(const json &msg)
             try {
                 std::lock_guard<std::mutex> lock(s_tool_mutex);
                 BOOST_LOG_TRIVIAL(info) << "Claude bridge: " << name << " " << args.dump();
-                json out = t.run(args);
-                if (out.is_object() && out.contains("content"))
-                    result = out;
-                else
-                    result = {{"content", json::array({{{"type", "text"}, {"text", out.dump(1)}}})}};
-                result["isError"] = false;
+                json changed = json::array();
+                try {
+                    changed = on_gui([]() -> json { return user_changes(); });
+                } catch (...) {
+                }
+                struct Seen
+                {
+                    ~Seen()
+                    {
+                        try {
+                            on_gui([]() -> json { mark_seen(); return {}; });
+                        } catch (...) {
+                        }
+                    }
+                } seen;
+                try {
+                    json out = t.run(args);
+                    if (out.is_object() && out.contains("content"))
+                        result = out;
+                    else
+                        result = {{"content", json::array({{{"type", "text"}, {"text", out.dump(1)}}})}};
+                    result["isError"] = false;
+                } catch (const std::exception &e) {
+                    BOOST_LOG_TRIVIAL(info) << "Claude bridge: " << name << " failed: " << e.what();
+                    result = {{"content", json::array({{{"type", "text"}, {"text", e.what()}}})}, {"isError", true}};
+                }
+                if (!changed.empty()) {
+                    std::string list;
+                    for (const json &c : changed)
+                        list += (list.empty() ? "" : ", ") + c.get<std::string>();
+                    result["content"].push_back({{"type", "text"},
+                                                 {"text", "Note: the user changed things in MiniMe since your last call (" + list +
+                                                              "). Earlier numbers and indices may be out of date: look again (get_scene) before relying on them."}});
+                }
             } catch (const std::exception &e) {
-                BOOST_LOG_TRIVIAL(info) << "Claude bridge: " << name << " failed: " << e.what();
                 result = {{"content", json::array({{{"type", "text"}, {"text", e.what()}}})}, {"isError", true}};
             }
             return {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}};

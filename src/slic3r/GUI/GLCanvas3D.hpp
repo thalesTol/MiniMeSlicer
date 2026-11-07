@@ -1281,8 +1281,10 @@ public:
 
     // SliceOfMe: hands the next rendered frame over (RGBA, bottom row first), for the Claude tool bridge
     using FrameGrab = std::function<void(int width, int height, std::vector<uint8_t> &&rgba)>;
-    void grab_next_frame(FrameGrab grab) { m_frame_grab = std::move(grab); }
+    // clean = without notifications and tips (for Claude's pictures)
+    void grab_next_frame(FrameGrab grab, bool clean = false) { m_frame_grab = std::move(grab); m_frame_grab_clean = clean; }
     FrameGrab m_frame_grab;
+    bool      m_frame_grab_clean{false};
 
     void schedule_extra_frame(int miliseconds);
 

@@ -3091,13 +3091,14 @@ void GLCanvas3D::render(bool only_init)
         bottom_margin = SLIDER_BOTTOM_MARGIN;
     }
     // In the assembly view, suppress notification toasts while exporting (PDF / video)
-    const bool suppress_notifications = m_canvas_type == ECanvasType::CanvasAssembleView
-        && m_assembly_steps && m_assembly_steps->is_play_or_export_mode();
+    const bool suppress_notifications = (m_canvas_type == ECanvasType::CanvasAssembleView
+        && m_assembly_steps && m_assembly_steps->is_play_or_export_mode()) || (m_frame_grab && m_frame_grab_clean);
     if (!suppress_notifications)
         wxGetApp().plater()->get_notification_manager()->render_notifications(*this, get_overlay_window_width(), bottom_margin, right_margin);
     if (m_canvas_type != ECanvasType::CanvasAssembleView) {
         const Size& cnv_size = get_canvas_size();
-        wxGetApp().plater()->get_dailytips()->render(cnv_size.get_width(), cnv_size.get_height());
+        if (!(m_frame_grab && m_frame_grab_clean))
+            wxGetApp().plater()->get_dailytips()->render(cnv_size.get_width(), cnv_size.get_height());
     }
 
     wxGetApp().imgui()->render();

@@ -29,6 +29,8 @@ public:
     // makes the page the first time the panel is shown
     void on_show();
     void focus_input();
+    // sends a message to Claude as if the user typed it (e.g. from the Price window)
+    void ask(const std::string &text);
     void sys_color_changed();
     // a line Claude Code wrote (from its reader thread, through the GUI thread)
     void on_claude_lines(int run_id, std::vector<std::string> &&lines);

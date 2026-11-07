@@ -1252,6 +1252,13 @@ void MainFrame::show_chat(bool show)
         m_topbar->update_chat_button(show);
 }
 
+void MainFrame::ask_chat(const std::string &text)
+{
+    show_chat(true);
+    if (m_chat != nullptr)
+        m_chat->ask(text);
+}
+
 void MainFrame::resize_chat_to(int sash_x)
 {
     if (!is_chat_shown())

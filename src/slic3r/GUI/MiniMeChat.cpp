@@ -59,8 +59,10 @@ const char *CHAT_PROMPT =
     "not tell, say you do not know rather than guess. Use render_view to show the user something, not to find things out.\n"
     "- After every change, read the result back (get_scene, or slice + layers) and check it before you say it worked. Never say "
     "something is done unless a tool confirmed it; if a step failed or you cannot do it, say so plainly.\n"
-    "- Make shapes with MiniMe's tools (add_part: box, rounded box, cylinder, a slab with an object's outline; cut_object with "
-    "result=parts_in_place; assemble_objects; move_part; set_filament; delete) instead of writing scripts or files.\n"
+    "- The minime server's instructions list everything the tools can and cannot do; follow them. Measure with section instead of "
+    "estimating from pictures. Subtract shapes with negative parts (add_part type=negative). Recolor or erase paint with "
+    "paint_color. Copy objects with duplicate_object, parts with copy_parts, flip with mirror. For prices use price. Address "
+    "objects by name. Make shapes with MiniMe's tools instead of writing scripts or files.\n"
     "- Colors only on the outer layers (fewer filament changes): set the object's interior_filament and interior_skin_layers "
     "with set_settings (object). Everything deeper inside then prints with that filament, over paint and parts.\n"
     "- If MiniMe lacks something the user needs, say exactly what is missing so it can be added.\n"
@@ -419,6 +421,12 @@ void ChatPanel::on_show()
 
 void ChatPanel::on_page_loaded(wxWebViewEvent &) {}
 
+void ChatPanel::ask(const std::string &text)
+{
+    on_show();
+    send_to_page(json({{"kind", "ask"}, {"text", text}}).dump());
+}
+
 void ChatPanel::focus_input()
 {
     if (m_browser != nullptr) {
@@ -544,7 +552,7 @@ void ChatPanel::start_claude(const std::string &resume_id, const std::string &cw
                                       L"--mcp-config", mcp.wstring(),
                                       L"--strict-mcp-config",
                                       L"--append-system-prompt", boost::nowide::widen(CHAT_PROMPT),
-                                      L"--allowedTools", L"mcp__minime", L"Read", L"Glob", L"Grep", L"WebSearch", L"TodoWrite"};
+                                      L"--allowedTools", L"mcp__minime", L"Read", L"Glob", L"Grep", L"WebSearch", L"WebFetch", L"TodoWrite"};
     if (!m_model.empty()) {
         args.push_back(L"--model");
         args.push_back(boost::nowide::widen(m_model));

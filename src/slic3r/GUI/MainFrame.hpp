@@ -274,6 +274,8 @@ public:
     void        update_title();
     // SliceOfMe: the Claude chat docked at the right
     void        show_chat(bool show);
+    // opens the chat and sends Claude a message
+    void        ask_chat(const std::string &text);
     void        toggle_chat() { show_chat(!is_chat_shown()); }
     bool        is_chat_shown() const;
     void        resize_chat_to(int sash_x);

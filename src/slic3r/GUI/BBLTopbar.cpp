@@ -8,6 +8,7 @@
 #include "wxExtensions.hpp"
 #include "Plater.hpp"
 #include "MainFrame.hpp"
+#include "MiniMePricing.hpp"
 #include "WebViewDialog.hpp"
 #include "PartPlate.hpp"
 #include "ReleaseNote.hpp"
@@ -35,6 +36,7 @@ enum CUSTOM_ID
     ID_PUBLISH,
     ID_CALIB,
     ID_CLAUDE_CHAT,
+    ID_PRICE,
     ID_TOOL_BAR = 3200,
     ID_AMS_NOTEBOOK,
 };
@@ -280,6 +282,11 @@ void BBLTopbar::Init(wxFrame* parent)
     wxBitmap chat_bitmap = create_scaled_bitmap("topbar_claude", nullptr, TOPBAR_ICON_SIZE);
     m_chat_item          = this->AddTool(ID_CLAUDE_CHAT, _L("Claude"), chat_bitmap, wxEmptyString, wxITEM_CHECK);
     m_chat_item->SetShortHelp(_L("Talk with Claude about this plate") + " (" + ctrl + "Shift+J)");
+    this->AddSpacer(FromDIP(4));
+
+    // SliceOfMe: what to charge for the sliced plate
+    wxAuiToolBarItem *price_item = this->AddTool(ID_PRICE, _L("Price"), create_scaled_bitmap("topbar_price", nullptr, TOPBAR_ICON_SIZE));
+    price_item->SetShortHelp(_L("What to charge for this plate: costs, profit margins and whether a price is worth it"));
     this->AddSpacer(FromDIP(10));
 
     m_publish_bitmap = create_scaled_bitmap("topbar_publish", nullptr, TOPBAR_ICON_SIZE);
@@ -330,6 +337,7 @@ void BBLTopbar::Init(wxFrame* parent)
         if (MainFrame *frame = dynamic_cast<MainFrame *>(m_frame))
             frame->toggle_chat();
     }, ID_CLAUDE_CHAT);
+    this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, [](wxAuiToolBarEvent &) { Slic3r::GUI::Pricing::show_window(); }, ID_PRICE);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnIconize, this, wxID_ICONIZE_FRAME);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnFullScreen, this, wxID_MAXIMIZE_FRAME);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnCloseFrame, this, wxID_CLOSE_FRAME);
