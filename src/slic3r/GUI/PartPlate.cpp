@@ -1175,6 +1175,9 @@ std::vector<int> PartPlate::get_extruders(bool conside_custom_gcode) const
 			std::vector<int> volume_extruders = mv->get_extruders();
 			plate_extruders.insert(plate_extruders.end(), volume_extruders.begin(), volume_extruders.end());
 		}
+		// SliceOfMe: the inside filament
+		if (const ConfigOption *interior = mo->config.option("interior_filament"); interior != nullptr ? interior->getInt() > 0 : glb_config.has("interior_filament") && glb_config.opt_int("interior_filament") > 0)
+			plate_extruders.push_back(interior != nullptr ? interior->getInt() : glb_config.opt_int("interior_filament"));
 
 		// layer range
         for (auto layer_range : mo->layer_config_ranges) {
@@ -1324,6 +1327,9 @@ std::vector<int> PartPlate::get_extruders_under_cli(bool conside_custom_gcode, D
                 std::vector<int> volume_extruders = mv->get_extruders();
                 plate_extruders.insert(plate_extruders.end(), volume_extruders.begin(), volume_extruders.end());
             }
+            // SliceOfMe: the inside filament
+            if (const ConfigOption *interior = object->config.option("interior_filament"); interior != nullptr ? interior->getInt() > 0 : full_config.has("interior_filament") && full_config.opt_int("interior_filament") > 0)
+                plate_extruders.push_back(interior != nullptr ? interior->getInt() : full_config.opt_int("interior_filament"));
 
             // layer range
             for (auto layer_range : object->layer_config_ranges) {

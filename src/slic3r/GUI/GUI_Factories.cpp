@@ -96,6 +96,9 @@ std::map<std::string, std::vector<SimpleSettingData>>  SettingsFactory::OBJECT_C
                     {"support_object_first_layer_gap","",28}
                             }},
     { L("Speed"), {{"support_speed", "",12}, {"support_interface_speed", "",13}
+                    }},
+    // SliceOfMe: one filament for the inside, colors only on the outer layers
+    { L("Strength"), {{"interior_filament", "",40}, {"interior_skin_layers", "",41}
                     }}
 };
 

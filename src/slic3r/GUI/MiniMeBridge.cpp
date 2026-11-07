@@ -7,6 +7,7 @@
 #include "GLCanvas3D.hpp"
 #include "GLToolbar.hpp"
 #include "GUI_ObjectList.hpp"
+#include "ObjectDataViewModel.hpp"
 #include "Tab.hpp"
 #include "Gizmos/GLGizmosManager.hpp"
 #include "slic3r/Utils/UndoRedo.hpp"
@@ -23,6 +24,10 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Support/SupportSurroundings.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
+#include "libslic3r/GCode/ToolOrdering.hpp"
+#include "libslic3r/Tesselate.hpp"
+#include "libslic3r/TriangleMeshSlicer.hpp"
+#include "libslic3r/CustomGCode.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
@@ -283,6 +288,584 @@ double area_mm2(const ExPolygons &areas)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// parts, filaments and layers: exact data and edits, so Claude does not have to guess from pictures
+
+int filament_count() { return int(wxGetApp().preset_bundle->filament_presets.size()); }
+
+int check_filament(int f, bool allow_zero)
+{
+    const int n = filament_count();
+    if (f < (allow_zero ? 0 : 1) || f > n)
+        throw ToolError("filament must be " + std::string(allow_zero ? "0 (the object's own) or " : "") + "1.." + std::to_string(n) +
+                        " (get_scene lists the filaments)");
+    return f;
+}
+
+// the filaments of the project: number (1-based, as MiniMe shows them), preset, colour, type
+json filaments_json()
+{
+    PresetBundle            *pb   = wxGetApp().preset_bundle;
+    const DynamicPrintConfig full = pb->full_config();
+    const auto *colours = full.option<ConfigOptionStrings>("filament_colour");
+    const auto *types   = full.option<ConfigOptionStrings>("filament_type");
+    json out = json::array();
+    for (size_t i = 0; i < pb->filament_presets.size(); ++i)
+        out.push_back({{"filament", i + 1},
+                       {"preset", pb->filament_presets[i]},
+                       {"colour", colours != nullptr && i < colours->values.size() ? colours->values[i] : ""},
+                       {"type", types != nullptr && i < types->values.size() ? types->values[i] : ""}});
+    return out;
+}
+
+int object_filament(const ModelObject *mo)
+{
+    const ConfigOption *opt = mo->config.option("extruder");
+    return opt != nullptr && opt->getInt() > 0 ? opt->getInt() : 1;
+}
+
+// the filament a part prints with where it is not painted
+int part_filament(const ModelObject *mo, const ModelVolume *mv)
+{
+    const ConfigOption *opt = mv->config.option("extruder");
+    return opt != nullptr && opt->getInt() > 0 ? opt->getInt() : object_filament(mo);
+}
+
+const char *volume_type_name(const ModelVolume *mv)
+{
+    return mv->is_model_part() ? "part" :
+           mv->is_negative_volume() ? "negative" :
+           mv->is_modifier() ? "modifier" :
+           mv->is_support_enforcer() ? "support_enforcer" :
+           mv->is_support_blocker() ? "support_blocker" : "other";
+}
+
+// a part where it is on the plate (instance 0)
+BoundingBoxf3 part_box(const ModelObject *mo, const ModelVolume *mv, int inst_idx = 0)
+{
+    return mv->mesh().transformed_bounding_box(mo->instances[inst_idx]->get_matrix() * mv->get_matrix());
+}
+
+// a part of an object by index or name
+int find_part(const ModelObject *mo, const json &args, const char *key = "part")
+{
+    if (!args.contains(key) || args[key].is_null())
+        throw ToolError("say which part (its index or name, as get_scene lists them under the object's parts)");
+    const json &v = args[key];
+    if (v.is_number_integer()) {
+        const int idx = v.get<int>();
+        if (idx < 0 || idx >= int(mo->volumes.size()))
+            throw ToolError("the object has parts 0.." + std::to_string(int(mo->volumes.size()) - 1));
+        return idx;
+    }
+    if (v.is_string()) {
+        const std::string name = v.get<std::string>();
+        for (size_t i = 0; i < mo->volumes.size(); ++i)
+            if (mo->volumes[i]->name == name)
+                return int(i);
+        int found = -1, count = 0;
+        for (size_t i = 0; i < mo->volumes.size(); ++i)
+            if (lower(mo->volumes[i]->name).find(lower(name)) != std::string::npos) {
+                found = int(i);
+                ++count;
+            }
+        if (count == 1)
+            return found;
+        throw ToolError(count == 0 ? "the object has no part called '" + name + "'" : "several parts match '" + name + "', use the index");
+    }
+    throw ToolError("'part' must be an index or a name");
+}
+
+json box_on_plate(const BoundingBoxf3 &bb, int plate_idx)
+{
+    const Vec2d o = plate_origin(plate_idx);
+    return {{"min", xyz(Vec3d(bb.min.x() - o.x(), bb.min.y() - o.y(), bb.min.z()))},
+            {"max", xyz(Vec3d(bb.max.x() - o.x(), bb.max.y() - o.y(), bb.max.z()))},
+            {"z_mm", json::array({r2(bb.min.z()), r2(bb.max.z())})}};
+}
+
+// which filaments are painted on a part, and between which heights
+json painted_json(const ModelObject *mo, const ModelVolume *mv)
+{
+    json out = json::array();
+    if (mv->mmu_segmentation_facets.empty())
+        return out;
+    const Transform3d trafo = mo->instances.front()->get_matrix() * mv->get_matrix();
+    for (int f = 1; f <= filament_count(); ++f) {
+        const indexed_triangle_set facets = mv->mmu_segmentation_facets.get_facets(*mv, EnforcerBlockerType(f));
+        if (facets.indices.empty())
+            continue;
+        double zmin = DBL_MAX, zmax = -DBL_MAX;
+        for (const Vec3f &v : facets.vertices) {
+            const double z = (trafo * v.cast<double>()).z();
+            zmin = std::min(zmin, z);
+            zmax = std::max(zmax, z);
+        }
+        out.push_back({{"filament", f}, {"triangles", facets.indices.size()}, {"z_mm", json::array({r2(zmin), r2(zmax)})}});
+    }
+    return out;
+}
+
+// the parts of an object with what Claude needs to plan: type, filament, where they are, paint, mesh errors
+json parts_json(int obj_idx, const ModelObject *mo, int plate_idx)
+{
+    json parts = json::array();
+    for (size_t vi = 0; vi < mo->volumes.size(); ++vi) {
+        const ModelVolume *mv = mo->volumes[vi];
+        json jp;
+        jp["index"]  = vi;
+        jp["name"]   = mv->name;
+        jp["type"]   = volume_type_name(mv);
+        if (mv->is_model_part() || mv->is_modifier()) {
+            jp["filament"] = part_filament(mo, mv);
+            if (!mv->config.has("extruder") || mv->config.option("extruder")->getInt() <= 0)
+                jp["filament_from"] = "object";
+        }
+        jp["box_on_plate_mm"] = box_on_plate(part_box(mo, mv), plate_idx);
+        jp["size_mm"]         = xyz(part_box(mo, mv).size());
+        if (mv->is_model_part()) {
+            const json painted = painted_json(mo, mv);
+            if (!painted.empty())
+                jp["painted_filaments"] = painted;
+        }
+        MeshIssueCounts issues;
+        wxGetApp().obj_list()->get_mesh_errors_info(obj_idx, int(vi), nullptr, &issues);
+        if (issues.open_edges > 0 || issues.non_manifold_edges > 0 || issues.non_manifold_vertices > 0 || issues.has_reversed_faces)
+            jp["mesh_errors"] = {{"open_edges", issues.open_edges}, {"non_manifold_edges", issues.non_manifold_edges},
+                                 {"non_manifold_vertices", issues.non_manifold_vertices}, {"reversed_faces", issues.has_reversed_faces}};
+        json overrides = json::object();
+        for (const std::string &key : mv->config.keys())
+            if (key != "extruder")
+                overrides[key] = mv->config.opt_serialize(key);
+        if (!overrides.empty())
+            jp["setting_overrides"] = overrides;
+        parts.push_back(jp);
+    }
+    return parts;
+}
+
+json tool_layers(const json &args)
+{
+    const int max_rows = std::clamp(int(num(args, "max_rows", 80)), 5, 1000);
+    return on_gui([max_rows]() -> json {
+        Plater    *p     = plater();
+        PartPlate *plate = p->get_partplate_list().get_curr_plate();
+        Print     *print = plate->fff_print();
+        if (print == nullptr || !plate->is_slice_result_valid())
+            throw ToolError("the current plate is not sliced (or the slice is outdated): call slice first");
+        const ToolOrdering &order = print->tool_ordering();
+        struct Run
+        {
+            int                       first, last;
+            double                    z0, z1;
+            std::vector<unsigned int> filaments;
+        };
+        std::vector<Run>   runs;
+        std::map<int, int> layers_of;
+        json               custom = json::array();
+        int                layer_no = 0, changes = 0, current = -1;
+        for (const LayerTools &lt : order.layer_tools()) {
+            if (lt.extruders.empty())
+                continue;
+            ++layer_no;
+            std::vector<unsigned int> fil;
+            for (unsigned int e : lt.extruders) {
+                if (current >= 0 && int(e) != current)
+                    ++changes;
+                current = int(e);
+                fil.push_back(e + 1);
+                ++layers_of[int(e) + 1];
+            }
+            if (lt.custom_gcode != nullptr)
+                custom.push_back({{"layer", layer_no}, {"z_mm", r2(lt.print_z)}, {"type", int(lt.custom_gcode->type)}, {"filament", lt.custom_gcode->extruder}});
+            if (!runs.empty() && runs.back().filaments == fil && runs.back().last == layer_no - 1) {
+                runs.back().last = layer_no;
+                runs.back().z1   = lt.print_z;
+            } else
+                runs.push_back({layer_no, layer_no, lt.print_z, lt.print_z, fil});
+        }
+        json rows = json::array();
+        for (const Run &r : runs) {
+            if (int(rows.size()) >= max_rows) {
+                rows.push_back({{"note", "more rows left out; call again with a higher max_rows"}});
+                break;
+            }
+            rows.push_back({{"layers", r.first == r.last ? std::to_string(r.first) : std::to_string(r.first) + "-" + std::to_string(r.last)},
+                            {"top_z_mm", r.first == r.last ? json(r2(r.z1)) : json::array({r2(r.z0), r2(r.z1)})},
+                            {"filaments_in_print_order", r.filaments}});
+        }
+        json per = json::object();
+        for (const auto &[f, n] : layers_of)
+            per[std::to_string(f)] = n;
+        json j;
+        j["layers"]                   = layer_no;
+        j["filament_changes"]         = changes;
+        j["layers_per_filament"]      = per;
+        j["layer_rows"]               = rows;
+        if (!custom.empty())
+            j["custom_gcodes"] = custom;
+        j["note"] = "Each row is a run of layers with the same filaments in the same print order; every switch between two "
+                    "filaments is one filament change (purge). Filament numbers are MiniMe's (1-based).";
+        return j;
+    });
+}
+
+json tool_set_filament(const json &args)
+{
+    if (!args.contains("filament"))
+        throw ToolError("give 'filament', the filament number (get_scene lists them)");
+    return on_gui([args]() -> json {
+        Plater      *p       = plater();
+        const int    obj_idx = find_object(args);
+        ModelObject *mo      = p->model().objects[obj_idx];
+        const bool   is_part = args.contains("part") && !args["part"].is_null();
+        const int    f       = check_filament(int(num(args, "filament", 1)), is_part);
+        close_gizmo();
+        json reset = json::array();
+        std::vector<ObjectVolumeID> ids;
+        if (is_part) {
+            const int vol_idx = find_part(mo, args);
+            ModelVolume *mv   = mo->volumes[vol_idx];
+            if (!mv->is_model_part() && !mv->is_modifier())
+                throw ToolError("only parts and modifiers have a filament");
+            ids.push_back({mo, mv});
+        } else {
+            for (const ModelVolume *mv : mo->volumes)
+                if (mv->is_model_part() && mv->config.has("extruder") && mv->config.option("extruder")->getInt() > 0 && mo->volumes.size() > 1)
+                    reset.push_back(mv->name);
+            ids.push_back({mo, nullptr});
+        }
+        ObjectList *list = wxGetApp().obj_list();
+        list->select_items(ids);
+        list->set_extruder_for_selected_items(f);
+        p->set_plater_dirty(true);
+        json j = {{"object", mo->name}, {"parts", parts_json(obj_idx, mo, plate_of_instance(obj_idx, 0))}};
+        if (!reset.empty())
+            j["note"] = "setting the object's filament also set these parts to it: " + reset.dump();
+        return j;
+    });
+}
+
+json tool_assemble(const json &args)
+{
+    if (!args.contains("objects") || !args["objects"].is_array() || args["objects"].size() < 2)
+        throw ToolError("give 'objects', a list of at least two objects (index or name)");
+    return on_gui([args]() -> json {
+        Plater             *p = plater();
+        std::vector<size_t> idxs;
+        for (const json &o : args["objects"]) {
+            const int idx = find_object(json{{"object", o}});
+            if (std::find(idxs.begin(), idxs.end(), size_t(idx)) == idxs.end())
+                idxs.push_back(size_t(idx));
+        }
+        if (idxs.size() < 2)
+            throw ToolError("give at least two different objects");
+        close_gizmo();
+        const size_t before = p->model().objects.size();
+        wxGetApp().obj_list()->merge_objects(idxs);
+        Model &model = p->model();
+        if (model.objects.size() != before - idxs.size() + 1)
+            throw ToolError("MiniMe did not assemble them (are they on the same plate?)");
+        // the assembled object is the one with the most parts
+        int best = 0;
+        for (size_t i = 0; i < model.objects.size(); ++i)
+            if (model.objects[i]->volumes.size() > model.objects[best]->volumes.size())
+                best = int(i);
+        const ModelObject *mo = model.objects[best];
+        return {{"assembled_object", best}, {"name", mo->name}, {"parts", parts_json(best, mo, plate_of_instance(best, 0))},
+                {"note", "the parts kept their places; parts can now sit at any height inside the object (move_part)"}};
+    });
+}
+
+json tool_move_part(const json &args)
+{
+    return on_gui([args]() -> json {
+        Plater      *p       = plater();
+        const int    obj_idx = find_object(args);
+        ModelObject *mo      = p->model().objects[obj_idx];
+        const int    vol_idx = find_part(mo, args);
+        ModelVolume *mv      = mo->volumes[vol_idx];
+        if (mo->volumes.size() < 2)
+            throw ToolError("the object has a single part; move the object with transform_object");
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: move part " + mv->name);
+        const ModelInstance *inst = mo->instances.front();
+        const int            pi   = plate_of_instance(obj_idx, 0);
+        if (args.contains("size_mm")) {
+            const json &s = args["size_mm"];
+            if (!s.is_array() || s.size() != 3)
+                throw ToolError("'size_mm' is [x, y, z]; 0 keeps that size");
+            const Vec3d now = part_box(mo, mv).size();
+            Vec3d       f(1., 1., 1.);
+            for (int a = 0; a < 3; ++a)
+                if (s[a].get<double>() > 0. && now[a] > 1e-6)
+                    f[a] = s[a].get<double>() / now[a];
+            mv->set_scaling_factor(mv->get_scaling_factor().cwiseProduct(f));
+        }
+        const BoundingBoxf3 bb = part_box(mo, mv);
+        Vec3d               d  = Vec3d::Zero();
+        if (args.contains("bottom_z_mm"))
+            d.z() = num(args, "bottom_z_mm", 0.) - bb.min.z();
+        if (args.contains("center_on_plate_mm")) {
+            const json &c = args["center_on_plate_mm"];
+            if (!c.is_array() || c.size() != 2)
+                throw ToolError("'center_on_plate_mm' is [x, y] on the plate");
+            const Vec2d o = plate_origin(pi);
+            d.x()         = o.x() + c[0].get<double>() - bb.center().x();
+            d.y()         = o.y() + c[1].get<double>() - bb.center().y();
+        }
+        if (args.contains("move_by_mm")) {
+            const json &m = args["move_by_mm"];
+            if (!m.is_array() || m.size() < 2)
+                throw ToolError("'move_by_mm' is [x, y] or [x, y, z]");
+            d += Vec3d(m[0].get<double>(), m[1].get<double>(), m.size() > 2 ? m[2].get<double>() : 0.);
+        }
+        // from plate to object coordinates
+        const Vec3d d_obj = inst->get_matrix(true).inverse() * d;
+        mv->set_offset(mv->get_offset() + d_obj);
+        mo->invalidate_bounding_box();
+        mo->ensure_on_bed(false);
+        p->changed_object(obj_idx);
+        wxGetApp().obj_list()->update_info_items(size_t(obj_idx));
+        p->set_plater_dirty(true);
+        return {{"object", mo->name}, {"parts", parts_json(obj_idx, mo, pi)},
+                {"note", "the object as a whole always stands on the plate: its lowest part is at z 0"}};
+    });
+}
+
+json tool_delete(const json &args)
+{
+    return on_gui([args]() -> json {
+        Plater      *p       = plater();
+        const int    obj_idx = find_object(args);
+        ModelObject *mo      = p->model().objects[obj_idx];
+        close_gizmo();
+        if (args.contains("part") && !args["part"].is_null()) {
+            const int vol_idx = find_part(mo, args);
+            const int parts   = int(std::count_if(mo->volumes.begin(), mo->volumes.end(), [](const ModelVolume *v) { return v->is_model_part(); }));
+            if (mo->volumes[vol_idx]->is_model_part() && parts < 2)
+                throw ToolError("that is the object's only part; delete the object instead");
+            const std::string name = mo->volumes[vol_idx]->name;
+            wxGetApp().obj_list()->delete_from_model_and_list(itVolume, obj_idx, vol_idx);
+            p->set_plater_dirty(true);
+            return {{"deleted_part", name}, {"object", mo->name}, {"parts", parts_json(obj_idx, mo, plate_of_instance(obj_idx, 0))}};
+        }
+        const std::string name = mo->name;
+        wxGetApp().obj_list()->delete_from_model_and_list(itObject, obj_idx, -1);
+        p->set_plater_dirty(true);
+        json left = json::array();
+        for (size_t i = 0; i < p->model().objects.size(); ++i)
+            left.push_back({{"index", i}, {"name", p->model().objects[i]->name}});
+        return {{"deleted_object", name}, {"objects_now", left}};
+    });
+}
+
+// a solid from outlines: bottom at z0, top at z1 (unscaled mm, plate world coordinates)
+indexed_triangle_set extrude_outlines(const ExPolygons &outlines, double z0, double z1)
+{
+    indexed_triangle_set its;
+    auto add_tri = [&its](const Vec3d &a, const Vec3d &b, const Vec3d &c) {
+        const int i = int(its.vertices.size());
+        its.vertices.emplace_back(a.cast<float>());
+        its.vertices.emplace_back(b.cast<float>());
+        its.vertices.emplace_back(c.cast<float>());
+        its.indices.emplace_back(i, i + 1, i + 2);
+    };
+    const std::vector<Vec3d> top    = triangulate_expolygons_3d(outlines, z1, NORMALS_UP);
+    const std::vector<Vec3d> bottom = triangulate_expolygons_3d(outlines, z0, !NORMALS_UP);
+    for (size_t i = 0; i + 2 < top.size(); i += 3)
+        add_tri(top[i], top[i + 1], top[i + 2]);
+    for (size_t i = 0; i + 2 < bottom.size(); i += 3)
+        add_tri(bottom[i], bottom[i + 1], bottom[i + 2]);
+    auto walls = [&](const Polygon &poly) {
+        const size_t n = poly.points.size();
+        for (size_t i = 0; i < n; ++i) {
+            const Vec2d a = unscale(poly.points[i]), b = unscale(poly.points[(i + 1) % n]);
+            add_tri(Vec3d(a.x(), a.y(), z0), Vec3d(b.x(), b.y(), z0), Vec3d(b.x(), b.y(), z1));
+            add_tri(Vec3d(a.x(), a.y(), z0), Vec3d(b.x(), b.y(), z1), Vec3d(a.x(), a.y(), z1));
+        }
+    };
+    for (const ExPolygon &ex : outlines) {
+        walls(ex.contour);
+        for (const Polygon &hole : ex.holes)
+            walls(hole);
+    }
+    its_merge_vertices(its);
+    return its;
+}
+
+ExPolygon rounded_rect(double w, double h, double r, double cx, double cy)
+{
+    r = std::clamp(r, 0., std::min(w, h) / 2. - 0.01);
+    Polygon     poly;
+    const int   seg = r > 0. ? std::max(4, int(std::ceil(r * 2.))) : 0;
+    const Vec2d corners[4] = {{cx + w / 2 - r, cy - h / 2 + r}, {cx + w / 2 - r, cy + h / 2 - r}, {cx - w / 2 + r, cy + h / 2 - r}, {cx - w / 2 + r, cy - h / 2 + r}};
+    for (int c = 0; c < 4; ++c) {
+        const double a0 = -M_PI / 2. + c * M_PI / 2.;
+        if (seg == 0)
+            poly.points.emplace_back(scaled(corners[c].x() + (c == 0 || c == 1 ? r : -r)), scaled(corners[c].y() + (c == 1 || c == 2 ? r : -r)));
+        for (int i = 0; i <= seg && seg > 0; ++i) {
+            const double a = a0 + (M_PI / 2.) * i / seg;
+            poly.points.emplace_back(scaled(corners[c].x() + r * std::cos(a)), scaled(corners[c].y() + r * std::sin(a)));
+        }
+    }
+    if (r <= 0.) {
+        poly.points = {Point(scaled(cx - w / 2), scaled(cy - h / 2)), Point(scaled(cx + w / 2), scaled(cy - h / 2)),
+                       Point(scaled(cx + w / 2), scaled(cy + h / 2)), Point(scaled(cx - w / 2), scaled(cy + h / 2))};
+    }
+    return ExPolygon(poly);
+}
+
+// the outline of an object's parts at a height, in plate world coordinates
+ExPolygons object_outline(const ModelObject *mo, double z, int only_part)
+{
+    ExPolygons all;
+    for (size_t vi = 0; vi < mo->volumes.size(); ++vi) {
+        const ModelVolume *mv = mo->volumes[vi];
+        if (!mv->is_model_part() || (only_part >= 0 && int(vi) != only_part))
+            continue;
+        indexed_triangle_set its = mv->mesh().its;
+        const Transform3f    t   = (mo->instances.front()->get_matrix() * mv->get_matrix()).cast<float>();
+        for (Vec3f &v : its.vertices)
+            v = t * v;
+        const std::vector<ExPolygons> cut = slice_mesh_ex(its, std::vector<float>{float(z)});
+        if (!cut.empty())
+            append(all, cut.front());
+    }
+    return union_ex(all);
+}
+
+json tool_add_part(const json &args)
+{
+    const std::string shape = lower(str(args, "shape", "box"));
+    const std::string type  = lower(str(args, "type", "part"));
+    if (type != "part" && type != "modifier" && type != "negative")
+        throw ToolError("'type' is part, modifier or negative");
+    return on_gui([args, shape, type]() -> json {
+        Plater      *p       = plater();
+        const int    obj_idx = find_object(args);
+        ModelObject *mo      = p->model().objects[obj_idx];
+        const int    pi      = plate_of_instance(obj_idx, 0);
+        const Vec2d  o       = plate_origin(pi);
+        const BoundingBoxf3 obj_bb = mo->instance_bounding_box(0);
+        Vec2d center(obj_bb.center().x(), obj_bb.center().y());
+        if (args.contains("center_on_plate_mm")) {
+            const json &c = args["center_on_plate_mm"];
+            if (!c.is_array() || c.size() != 2)
+                throw ToolError("'center_on_plate_mm' is [x, y] on the plate");
+            center = Vec2d(o.x() + c[0].get<double>(), o.y() + c[1].get<double>());
+        }
+        const double z0 = num(args, "bottom_z_mm", 0.);
+        auto size_arg = [&](int n) {
+            if (!args.contains("size_mm") || !args["size_mm"].is_array() || int(args["size_mm"].size()) != n)
+                throw ToolError(std::string("give 'size_mm' as ") + (n == 3 ? "[x, y, z]" : "[diameter, height]"));
+            std::vector<double> v;
+            for (const json &e : args["size_mm"])
+                v.push_back(e.get<double>());
+            for (double e : v)
+                if (e <= 0.)
+                    throw ToolError("sizes must be above 0");
+            return v;
+        };
+        indexed_triangle_set its;
+        std::string          made;
+        if (shape == "box" || shape == "rounded_box") {
+            const std::vector<double> s = size_arg(3);
+            const double r = shape == "rounded_box" ? num(args, "corner_radius_mm", 2.) : 0.;
+            its  = extrude_outlines({rounded_rect(s[0], s[1], r, center.x(), center.y())}, z0, z0 + s[2]);
+            made = shape + " " + std::to_string(r2(s[0])) + " x " + std::to_string(r2(s[1])) + " x " + std::to_string(r2(s[2])) + " mm";
+        } else if (shape == "cylinder") {
+            const std::vector<double> s = size_arg(2);
+            its = its_make_cylinder(s[0] / 2., s[1], 2. * M_PI / 120.);
+            for (Vec3f &v : its.vertices)
+                v += Vec3f(float(center.x()), float(center.y()), float(z0));
+            made = "cylinder d " + std::to_string(r2(s[0])) + " x " + std::to_string(r2(s[1])) + " mm";
+        } else if (shape == "outline") {
+            // the outline of an object (or one of its parts) at a height, made into a slab
+            const ModelObject *src = mo;
+            if (args.contains("outline_of") && !args["outline_of"].is_null())
+                src = p->model().objects[find_object(json{{"object", args["outline_of"]}})];
+            int src_part = -1;
+            if (args.contains("outline_part") && !args["outline_part"].is_null())
+                src_part = find_part(src, json{{"part", args["outline_part"]}});
+            // by default the middle of the part (or of the object)
+            const BoundingBoxf3 sbb = src_part >= 0 ? part_box(src, src->volumes[src_part]) : src->instance_bounding_box(0);
+            const double at   = num(args, "outline_at_z_mm", (sbb.min.z() + sbb.max.z()) / 2.);
+            const double h    = num(args, "height_mm", 0.);
+            const double inset = num(args, "inset_mm", 0.);
+            if (h <= 0.)
+                throw ToolError("give 'height_mm', the thickness of the slab");
+            ExPolygons outline = object_outline(src, at, src_part);
+            if (outline.empty())
+                throw ToolError("nothing of that object is at z " + std::to_string(r2(at)) + " mm");
+            if (inset != 0.)
+                outline = offset_ex(outline, float(scale_(-inset)));
+            if (outline.empty())
+                throw ToolError("the inset leaves nothing");
+            if (args.contains("center_on_plate_mm")) {
+                const BoundingBox b = get_extents(outline);
+                const Vec2d       c = unscale(b.center());
+                for (ExPolygon &ex : outline)
+                    ex.translate(Point(scaled(center.x() - c.x()), scaled(center.y() - c.y())));
+            }
+            its  = extrude_outlines(outline, z0, z0 + h);
+            made = "outline of '" + src->name + "' at z " + std::to_string(r2(at)) + " mm, inset " + std::to_string(r2(inset)) + " mm, " +
+                   std::to_string(r2(h)) + " mm thick";
+        } else if (shape == "file") {
+            const std::string path = str(args, "path", "");
+            const std::string ext  = lower(boost::filesystem::path(path).extension().string());
+            if (path.empty() || (ext != ".stl" && ext != ".obj") || !boost::filesystem::exists(path))
+                throw ToolError("give 'path', an existing .stl or .obj file");
+            Model loaded = Model::read_from_file(path, nullptr, nullptr, LoadStrategy::LoadModel);
+            TriangleMesh m = loaded.mesh();
+            const BoundingBoxf3 mb = m.bounding_box();
+            m.translate(float(center.x() - mb.center().x()), float(center.y() - mb.center().y()), float(z0 - mb.min.z()));
+            its  = m.its;
+            made = "from " + boost::filesystem::path(path).filename().string();
+        } else
+            throw ToolError("'shape' is box, rounded_box, cylinder, outline or file");
+        if (its.indices.empty())
+            throw ToolError("the shape came out empty");
+
+        close_gizmo();
+        Plater::TakeSnapshot snapshot(p, "Claude: add part to " + mo->name);
+        TriangleMesh mesh(std::move(its));
+        // from plate to object coordinates
+        mesh.transform(mo->instances.front()->get_matrix().inverse(), true);
+        const ModelVolumeType vtype = type == "modifier" ? ModelVolumeType::PARAMETER_MODIFIER :
+                                      type == "negative" ? ModelVolumeType::NEGATIVE_VOLUME : ModelVolumeType::MODEL_PART;
+        ModelVolume *mv = mo->add_volume(std::move(mesh), vtype);
+        mv->name        = str(args, "name", type == "part" ? "Claude part" : type == "modifier" ? "Claude modifier" : "Claude hole");
+        if (args.contains("filament") && type != "negative") {
+            const int f = check_filament(int(num(args, "filament", 1)), false);
+            mv->config.set_key_value("extruder", new ConfigOptionInt(f));
+        }
+        mo->invalidate_bounding_box();
+        if (vtype == ModelVolumeType::MODEL_PART)
+            mo->ensure_on_bed(false);
+        wxGetApp().obj_list()->add_volumes_to_object_in_list(size_t(obj_idx));
+        p->changed_object(obj_idx);
+        p->set_plater_dirty(true);
+        return {{"added", made}, {"object", mo->name}, {"part_index", int(mo->volumes.size()) - 1}, {"parts", parts_json(obj_idx, mo, pi)}};
+    });
+}
+
+json tool_repair(const json &args)
+{
+    return on_gui([args]() -> json {
+        Plater      *p       = plater();
+        const int    obj_idx = find_object(args);
+        ModelObject *mo      = p->model().objects[obj_idx];
+        close_gizmo();
+        ObjectList *list = wxGetApp().obj_list();
+        list->select_items(std::vector<ObjectVolumeID>{{mo, nullptr}});
+        list->fix_through_netfabb();
+        // the object may have been replaced
+        mo = p->model().objects[std::min(obj_idx, int(p->model().objects.size()) - 1)];
+        return {{"object", mo->name}, {"parts", parts_json(obj_idx, mo, plate_of_instance(obj_idx, 0))}};
+    }, 300000);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // tools
 
 json tool_get_scene(const json &)
@@ -299,7 +882,7 @@ json tool_get_scene(const json &)
         j["view"]          = p->is_preview_shown() ? "preview" : "3d";
         j["printer"]       = pb->printers.get_edited_preset().name;
         j["process"]       = pb->prints.get_edited_preset().name + (pb->prints.get_edited_preset().is_dirty ? " (modified, not saved)" : "");
-        j["filaments"]     = pb->filament_presets;
+        j["filaments"]     = filaments_json();
         if (const auto *area = full.option<ConfigOptionPoints>("printable_area"); area != nullptr && !area->values.empty()) {
             BoundingBoxf bb;
             for (const Vec2d &pt : area->values)
@@ -310,7 +893,8 @@ json tool_get_scene(const json &)
             j["printable_height_mm"] = full.opt_float("printable_height");
         json settings;
         for (const char *key : {"layer_height", "enable_support", "support_type", "support_style", "support_threshold_angle", "support_on_build_plate_only",
-                                "tree_support_branch_diameter", "wall_loops", "sparse_infill_density", "sparse_infill_pattern", "brim_type", "print_sequence"})
+                                "tree_support_branch_diameter", "wall_loops", "sparse_infill_density", "sparse_infill_pattern", "brim_type", "print_sequence",
+                                "top_shell_layers", "bottom_shell_layers", "interior_filament", "interior_skin_layers", "enable_prime_tower"})
             if (full.has(key))
                 settings[key] = full.opt_serialize(key);
         j["key_process_settings"] = settings;
@@ -338,6 +922,13 @@ json tool_get_scene(const json &)
             for (const auto &oi : plate->get_obj_and_inst_set())
                 objs.push_back(json::array({oi.first, oi.second}));
             jp["object_instances"] = objs;
+            // filament changes and other custom G-code at layer heights on this plate
+            if (auto it = p->model().plates_custom_gcodes.find(i); it != p->model().plates_custom_gcodes.end() && !it->second.gcodes.empty()) {
+                json cg = json::array();
+                for (const CustomGCode::Item &item : it->second.gcodes)
+                    cg.push_back({{"z_mm", r2(item.print_z)}, {"type", int(item.type)}, {"filament", item.extruder}});
+                jp["custom_gcodes_at_heights"] = cg;
+            }
             jplates.push_back(jp);
         }
         j["plates"] = jplates;
@@ -368,7 +959,7 @@ json tool_get_scene(const json &)
                 insts.push_back(ji);
             }
             jo["instances"] = insts;
-            json   parts    = json::array();
+            jo["filament"]  = object_filament(mo);
             size_t tris     = 0;
             bool   enf = false, blk = false, land = false, color = false;
             for (const ModelVolume *mv : mo->volumes) {
@@ -377,7 +968,7 @@ json tool_get_scene(const json &)
                                    mv->is_modifier() ? "modifier" :
                                    mv->is_support_enforcer() ? "support_enforcer" :
                                    mv->is_support_blocker() ? "support_blocker" : "other";
-                parts.push_back({{"name", mv->name}, {"type", type}});
+                (void) type;
                 tris += mv->mesh().its.indices.size();
                 if (mv->is_model_part() && !mv->supported_facets.empty()) {
                     enf  = enf || mv->supported_facets.has_facets(*mv, EnforcerBlockerType(1));
@@ -386,8 +977,18 @@ json tool_get_scene(const json &)
                 }
                 color = color || !mv->mmu_segmentation_facets.empty();
             }
-            jo["volumes"]   = parts;
+            jo["parts"]     = parts_json(int(oi), mo, plate_of_instance(int(oi), 0));
             jo["triangles"] = tris;
+            if (!mo->layer_config_ranges.empty()) {
+                json ranges = json::array();
+                for (const auto &[range, cfg] : mo->layer_config_ranges) {
+                    json jr = {{"z_mm", json::array({r2(range.first), r2(range.second)})}};
+                    for (const std::string &key : cfg.keys())
+                        jr[key == "extruder" ? "filament" : key] = cfg.opt_serialize(key);
+                    ranges.push_back(jr);
+                }
+                jo["height_ranges"] = ranges;
+            }
             jo["paint"]     = {{"support_enforce", enf}, {"support_block", blk}, {"supports_stand_here", land}, {"color", color}};
             json overrides  = json::object();
             for (const std::string &key : mo->config.keys())
@@ -397,6 +998,10 @@ json tool_get_scene(const json &)
         }
         j["objects"] = jobjs;
         j["coordinates"] = "mm; x/y on a plate are measured from that plate's front left corner (its origin), z is the height above the plate";
+        j["how_filaments_work"] = "A part prints with its own filament (or the object's) where it is not painted; painted triangles print "
+                                  "with the painted filament through the paint depth; an object's inside_filament (interior_filament setting) "
+                                  "overrides both deeper than interior_skin_layers below top / above bottom surfaces. Use the layers tool after "
+                                  "slicing to see which filaments each layer really prints.";
         return j;
     });
 }
@@ -694,7 +1299,8 @@ json tool_set_settings(const json &args)
             if (print_config_def.get(key) == nullptr)
                 throw ToolError("unknown setting '" + key + "' (find_settings finds the right key)");
             if (!proc.has(key))
-                throw ToolError("'" + key + "' is a printer or filament setting; only process settings can be changed here");
+                throw ToolError(key == "extruder" ? std::string("the filament of an object or part is set with the set_filament tool") :
+                                                    "'" + key + "' is a printer or filament setting; only process settings can be changed here");
             try {
                 changes.set_deserialize(key, value_text(value), ctx);
             } catch (const std::exception &e) {
@@ -1028,9 +1634,14 @@ json tool_cut_object(const json &args)
         const double l = std::max(bb.size().x(), bb.size().y()) + 10.;
         const std::array<Vec3d, 4> plane{Vec3d(c.x() - l, c.y() - l, z), Vec3d(c.x() + l, c.y() - l, z), Vec3d(c.x() + l, c.y() + l, z),
                                          Vec3d(c.x() - l, c.y() + l, z)};
+        const bool to_parts = lower(str(args, "result", "objects")) == "parts_in_place";
+        if (to_parts && keep != "both")
+            throw ToolError("result=parts_in_place keeps both pieces (delete one afterwards with delete)");
         ModelObjectCutAttributes attributes = only_if(keep != "lower", ModelObjectCutAttribute::KeepUpper) |
                                               only_if(keep != "upper", ModelObjectCutAttribute::KeepLower) |
-                                              only_if(flip, ModelObjectCutAttribute::FlipUpper) | only_if(true, ModelObjectCutAttribute::InvalidateCutInfo);
+                                              only_if(flip && !to_parts, ModelObjectCutAttribute::FlipUpper) |
+                                              only_if(to_parts, ModelObjectCutAttribute::CutToParts) |
+                                              only_if(true, ModelObjectCutAttribute::InvalidateCutInfo);
         close_gizmo();
         const std::string name = mo->name;
         Plater::TakeSnapshot snapshot(p, "Claude: cut " + name);
@@ -1040,8 +1651,19 @@ json tool_cut_object(const json &args)
         Model &model = p->model();
         for (size_t i = 0; i < model.objects.size(); ++i)
             made.push_back({{"index", i}, {"name", model.objects[i]->name}});
-        return {{"cut", name}, {"at_height_mm", r2(z)}, {"objects_now", made},
-                {"note", "the pieces may overlap; move them apart with transform_object (or arrange in MiniMe)"}};
+        json j = {{"cut", name}, {"at_height_mm", r2(z)}, {"objects_now", made}};
+        if (to_parts) {
+            const int last = int(model.objects.size()) - 1;
+            int       idx  = std::min(obj_idx, last);
+            for (int i = 0; i <= last; ++i)
+                if (model.objects[i]->name == name || model.objects[i]->volumes.size() > model.objects[idx]->volumes.size())
+                    idx = i;
+            j["object"] = idx;
+            j["parts"]  = parts_json(idx, model.objects[idx], plate_of_instance(idx, 0));
+            j["note"]   = "the pieces are parts of one object, in place";
+        } else
+            j["note"] = "the pieces are separate objects and may overlap; move them apart with transform_object (or arrange in MiniMe)";
+        return j;
     });
 }
 
@@ -1118,8 +1740,10 @@ const std::vector<Tool> &tools()
             l.push_back(Tool{name, description, json::parse(schema), std::move(run)});
         };
         add("get_scene",
-            "What is in MiniMe now: plates (with their support zones), objects with position, size, rotation, scale, paint and setting "
-            "overrides, the printer / process / filament presets and the main support settings. Call this first.",
+            "What is in MiniMe now: the filaments (number, colour, type), plates (support zones, filament changes at heights), objects "
+            "with position, size, rotation, scale, filament, setting overrides and height ranges, and every part of every object with its "
+            "type, filament, box and z range on the plate, painted filaments (with their z range) and mesh errors. Call this first, and "
+            "again after changes to check them.",
             R"J({"type": "object", "properties": {}})J", tool_get_scene);
         add("render_view", "A picture of MiniMe's 3D view or of the sliced preview (toolpaths, supports) as MiniMe draws it. Use it to check results.",
             R"J({"type": "object", "properties": {
@@ -1188,13 +1812,14 @@ const std::vector<Tool> &tools()
                 "plate": {"type": "integer"}}, "required": ["zone"]})J",
             tool_support_zone);
         add("cut_object",
-            "Cuts an object with a flat horizontal cut at a height (one undo step). For angled, curved or shaped cuts and connectors the "
-            "user uses the Cut tool.",
+            "Cuts an object with a flat horizontal cut at a height (one undo step). With result=parts_in_place the pieces stay in place as "
+            "parts of the same object (to replace or recolor a layer band). For angled, curved or shaped cuts and connectors the user uses the Cut tool.",
             R"J({"type": "object", "properties": {
                 "object": $OBJ,
                 "height_mm": {"type": "number", "description": "height above the plate"},
                 "keep": {"type": "string", "enum": ["both", "upper", "lower"]},
                 "flip_upper": {"type": "boolean", "description": "turn the upper part over so it stands on the cut face"},
+                "result": {"type": "string", "enum": ["objects", "parts_in_place"], "description": "objects (default) = separate objects set on the plate; parts_in_place = both pieces stay where they are, as parts of one object"},
                 "instance": {"type": "integer"}}, "required": ["object", "height_mm"]})J",
             tool_cut_object);
         add("add_model", "Adds the objects of an .stl or .obj file to the current plate (one undo step). It never replaces the project.",
@@ -1204,6 +1829,54 @@ const std::vector<Tool> &tools()
             tool_select_plate);
         add("undo", "Undoes (or with redo=true, redoes) the last steps in MiniMe, including the user's own.",
             R"J({"type": "object", "properties": {"steps": {"type": "integer"}, "redo": {"type": "boolean"}}})J", tool_undo);
+        add("layers",
+            "After slice: what the current plate prints layer by layer - the filaments of each layer in print order (runs of equal layers "
+            "grouped), the number of filament changes, layers per filament and filament changes at heights. Use it instead of pictures to "
+            "check colors per layer and to count filament changes.",
+            R"J({"type": "object", "properties": {"max_rows": {"type": "integer", "description": "most rows to return, default 80"}}})J", tool_layers);
+        add("set_filament",
+            "Sets the filament of an object or of one part (one undo step). Setting the object's filament also sets its parts to it; set "
+            "parts after that. A part with filament 0 follows the object. Painted areas keep their paint.",
+            R"J({"type": "object", "properties": {"object": $OBJ, "part": {"type": ["integer", "string"], "description": "part index or name (get_scene lists them); leave out for the whole object"},
+                "filament": {"type": "integer", "description": "filament number, 1-based as in MiniMe"}}, "required": ["object", "filament"]})J", tool_set_filament);
+        add("assemble_objects",
+            "Joins several objects into one object with several parts, keeping every part where it is (one undo step). Put the pieces in "
+            "place first (transform_object), then assemble; inside one object, parts can sit at any height (move_part).",
+            R"J({"type": "object", "properties": {"objects": {"type": "array", "items": {"type": ["integer", "string"]}, "description": "objects to join (index or name), at least two"}}, "required": ["objects"]})J",
+            tool_assemble);
+        add("move_part",
+            "Moves (or resizes) one part inside an object (one undo step): put its bottom at a height, its middle at a place on the plate, "
+            "or move it by an amount. The object as a whole stays on the plate.",
+            R"J({"type": "object", "properties": {"object": $OBJ, "part": {"type": ["integer", "string"]},
+                "bottom_z_mm": {"type": "number", "description": "height of the part's bottom above the plate"},
+                "center_on_plate_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y]"},
+                "move_by_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y] or [x, y, z]"},
+                "size_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y, z] new size; 0 keeps that size"}}, "required": ["object", "part"]})J",
+            tool_move_part);
+        add("delete", "Deletes an object, or with 'part' one part of it (one undo step).",
+            R"J({"type": "object", "properties": {"object": $OBJ, "part": {"type": ["integer", "string"]}}, "required": ["object"]})J", tool_delete);
+        add("add_part",
+            "Adds a part (or a modifier or a negative part) to an object at an exact place (one undo step): a box, a rounded box, a "
+            "cylinder, a slab with the outline of an object or part at a height (optionally inset), or an .stl/.obj file. Give it a "
+            "filament. Use this to make a core, a plate or a backing in another color instead of writing files.",
+            R"J({"type": "object", "properties": {"object": $OBJ,
+                "shape": {"type": "string", "enum": ["box", "rounded_box", "cylinder", "outline", "file"]},
+                "type": {"type": "string", "enum": ["part", "modifier", "negative"]},
+                "size_mm": {"type": "array", "items": {"type": "number"}, "description": "box/rounded_box: [x, y, z]; cylinder: [diameter, height]"},
+                "corner_radius_mm": {"type": "number", "description": "rounded_box corners"},
+                "outline_of": {"type": ["integer", "string"], "description": "outline: the object to take the outline from (default: this object)"},
+                "outline_part": {"type": ["integer", "string"], "description": "outline: only this part of it"},
+                "outline_at_z_mm": {"type": "number", "description": "outline: the height to take it at (default: the middle of the part, or of the object)"},
+                "inset_mm": {"type": "number", "description": "outline: shrink it by this much (negative grows it)"},
+                "height_mm": {"type": "number", "description": "outline: thickness of the slab"},
+                "path": {"type": "string", "description": "file: an .stl or .obj"},
+                "center_on_plate_mm": {"type": "array", "items": {"type": "number"}, "description": "[x, y]; default the object's middle (outline: where it is)"},
+                "bottom_z_mm": {"type": "number", "description": "height of its bottom, default 0"},
+                "filament": {"type": "integer"},
+                "name": {"type": "string"}}, "required": ["object", "shape"]})J",
+            tool_add_part);
+        add("repair_object", "Repairs an object's mesh errors (open edges, flipped faces), as Fix model does. get_scene shows mesh errors per part.",
+            R"J({"type": "object", "properties": {"object": $OBJ}, "required": ["object"]})J", tool_repair);
         return l;
     }();
     return list;
@@ -1212,8 +1885,14 @@ const std::vector<Tool> &tools()
 const char *INSTRUCTIONS =
     "MiniMe Slicer (a Bambu Studio fork for FDM 3D printing) is open on the user's computer. Its tools let you look at the plate, slice, "
     "and change objects, supports and settings. Start with get_scene. Lengths are millimetres; x/y on a plate are measured from its "
-    "front left corner, z is the height above the plate. Each change is one undo step in MiniMe. After changing supports or settings, "
-    "slice and look at the result (render_view with screen=preview) before saying it worked. You cannot print or send to a printer.";
+    "front left corner, z is the height above the plate. Each change is one undo step in MiniMe.\n"
+    "Work from data, not pictures: get_scene gives every part with its filament, height range, paint and mesh errors; after slice, "
+    "layers gives the filaments of every layer and the number of filament changes. After every change call get_scene (or slice + "
+    "layers) and check the numbers before you say it worked; never say something is done that a tool did not confirm. Use "
+    "render_view only to show the user or for things the data cannot tell.\n"
+    "To keep colors on the outer layers only (fewer filament changes), set the object's interior_filament (set_settings with object) "
+    "and interior_skin_layers. Parts: assemble_objects, move_part, add_part (box, rounded box, cylinder, outline slab), delete, "
+    "set_filament, cut_object with result=parts_in_place. You cannot print or send to a printer.";
 
 // ---------------------------------------------------------------------------------------------------------------------
 // MCP (JSON-RPC 2.0 over HTTP POST, plain JSON answers)

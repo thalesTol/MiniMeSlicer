@@ -4,6 +4,7 @@
 #include "Model.hpp"
 #include "PaintReproject.hpp"
 #include "TriangleMeshSlicer.hpp"
+#include "MeshSplitImpl.hpp"
 #include "TriangleSelector.hpp"
 #include "ObjectID.hpp"
 #include <boost/log/trivial.hpp>
@@ -92,6 +93,81 @@ static bool add_cut_volume(TriangleMesh &     mesh,
     return true;
 }
 
+// SliceOfMe: a part made of several separate bodies (a merged or assembled model, text made of many letters) is cut body by
+// body. Cut as one mesh, the outlines of bodies that overlap or touch merge into one cap, which then does not meet each body's
+// own walls: open edges, and "Fix model" after every cut. Each body cut on its own gets its own closed cap.
+// As cut_mesh() does, the result lists the faces that come from the source first (with their source face in *_src_faces) and
+// the cap faces after them.
+static void cut_mesh_by_body(const indexed_triangle_set &its, indexed_triangle_set &upper, indexed_triangle_set &lower,
+                             std::vector<int> *upper_src_faces, std::vector<int> *lower_src_faces,
+                             const std::function<void(int)> &progress, const std::function<bool()> &canceled)
+{
+    MeshAndShip bodies;
+    if (its.indices.size() > 4 && its_is_splittable(its))
+        bodies = its_split_and_save_relationship(its);
+    if (bodies.itses.size() < 2) {
+        cut_mesh(its, 0.0f, &upper, &lower, true, upper_src_faces, lower_src_faces, progress, canceled);
+        return;
+    }
+    struct Side
+    {
+        indexed_triangle_set *out;
+        std::vector<int>     *src;
+        std::vector<Vec3i>    shell, caps;
+    };
+    Side   sides[2] = {{&upper, upper_src_faces, {}, {}}, {&lower, lower_src_faces, {}, {}}};
+    size_t done = 0;
+    for (size_t b = 0; b < bodies.itses.size(); ++b) {
+        if (canceled())
+            return;
+        const indexed_triangle_set &body = bodies.itses[b];
+        const auto                 &ship = bodies.ships[b];
+        float zmin = std::numeric_limits<float>::max(), zmax = std::numeric_limits<float>::lowest();
+        for (const Vec3f &v : body.vertices) {
+            zmin = std::min(zmin, v.z());
+            zmax = std::max(zmax, v.z());
+        }
+        indexed_triangle_set part[2];
+        std::vector<int>     part_src[2];
+        constexpr float      eps = 1e-5f;
+        if (zmin >= -eps || zmax <= eps) {
+            // the plane does not cross this body: it goes whole to its side
+            const int side = zmin >= -eps ? 0 : 1;
+            part[side]     = body;
+            part_src[side].resize(body.indices.size());
+            for (size_t i = 0; i < body.indices.size(); ++i)
+                part_src[side][i] = int(i);
+        } else
+            cut_mesh(body, 0.0f, &part[0], &part[1], true, &part_src[0], &part_src[1], [](int) {}, canceled);
+        for (int side = 0; side < 2; ++side) {
+            Side &out = sides[side];
+            if (part[side].indices.empty())
+                continue;
+            const int offset = int(out.out->vertices.size());
+            out.out->vertices.insert(out.out->vertices.end(), part[side].vertices.begin(), part[side].vertices.end());
+            const size_t shell_faces = std::min(part_src[side].size(), part[side].indices.size());
+            for (size_t i = 0; i < part[side].indices.size(); ++i) {
+                const Vec3i f = part[side].indices[i] + Vec3i(offset, offset, offset);
+                if (i < shell_faces) {
+                    out.shell.push_back(f);
+                    if (out.src != nullptr) {
+                        const int  local = part_src[side][i];
+                        const auto it    = local >= 0 ? ship.find(local) : ship.end();
+                        out.src->push_back(it != ship.end() ? it->second : -1);
+                    }
+                } else
+                    out.caps.push_back(f);
+            }
+        }
+        done += body.indices.size();
+        progress(int(100. * double(done) / double(its.indices.size())));
+    }
+    for (Side &side : sides) {
+        side.out->indices = std::move(side.shell);
+        side.out->indices.insert(side.out->indices.end(), side.caps.begin(), side.caps.end());
+    }
+}
+
 // Returns false when the cut was canceled; the caller has to unwind.
 static bool process_volume_cut(ModelVolume *            volume,
                                const Transform3d &      instance_matrix,
@@ -125,9 +201,9 @@ static bool process_volume_cut(ModelVolume *            volume,
     // "Restoring ..." message in the shared progress callback, and a null message would stick.
     progress.report(0., CutStageCutting);
     const CutProgressRange slice_progress = progress.sub(0., 90.);
-    cut_mesh(mesh.its, 0.0f, &upper_its, &lower_its, true, upper_src_faces, lower_src_faces,
-             [&slice_progress](int percent) { slice_progress.report(percent, CutStageCutting); },
-             [&slice_progress]() { return slice_progress.canceled(); });
+    cut_mesh_by_body(mesh.its, upper_its, lower_its, upper_src_faces, lower_src_faces,
+                     [&slice_progress](int percent) { slice_progress.report(percent, CutStageCutting); },
+                     [&slice_progress]() { return slice_progress.canceled(); });
     if (progress.canceled())
         return false;
     if (attributes.has(ModelObjectCutAttribute::KeepUpper))

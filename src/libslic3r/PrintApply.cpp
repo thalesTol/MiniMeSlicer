@@ -1959,9 +1959,15 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             print_object_regions->ref_cnt_inc();
         }
         std::vector<unsigned int> painting_extruders;
+        // SliceOfMe: an inside filament (interior_filament) is applied like color paint
+        const bool interior_filament_on = [this, &print_object]() {
+            const ConfigOption *opt = print_object.model_object()->config.option("interior_filament");
+            return (opt != nullptr ? opt->getInt() : m_default_object_config.interior_filament.value) > 0;
+        }();
         if (const auto &volumes = print_object.model_object()->volumes;
             num_extruders  > 1 &&
-            std::find_if(volumes.begin(), volumes.end(), [](const ModelVolume *v) { return ! v->mmu_segmentation_facets.empty(); }) != volumes.end()) {
+            (interior_filament_on ||
+             std::find_if(volumes.begin(), volumes.end(), [](const ModelVolume *v) { return ! v->mmu_segmentation_facets.empty(); }) != volumes.end())) {
             //FIXME be more specific! Don't enumerate extruders that are not used for painting!
             painting_extruders.assign(num_extruders , 0);
             std::iota(painting_extruders.begin(), painting_extruders.end(), 1);
@@ -1973,7 +1979,11 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
                     if ((*it)->m_shared_regions != nullptr)
                         update_apply_status((*it)->invalidate_all_steps());
             };
-            if (print_object_regions && ! trafos_differ_in_rotation_by_z_and_mirroring_by_xy_only(print_object_regions->trafo_bboxes, model_object_status.print_instances.front().trafo)) {
+            // SliceOfMe: painting regions appear or go away when the inside filament is switched on or off
+            const bool painted_regions_differ = print_object_regions != nullptr &&
+                std::any_of(print_object_regions->layer_ranges.begin(), print_object_regions->layer_ranges.end(),
+                            [](const PrintObjectRegions::LayerRangeRegions &r) { return ! r.painted_regions.empty(); }) != ! painting_extruders.empty();
+            if (print_object_regions && (painted_regions_differ || ! trafos_differ_in_rotation_by_z_and_mirroring_by_xy_only(print_object_regions->trafo_bboxes, model_object_status.print_instances.front().trafo))) {
                 invalidate();
                 print_object_regions->clear();
                 model_object_status.print_object_regions_status = ModelObjectStatus::PrintObjectRegionsStatus::Invalid;

@@ -876,11 +876,64 @@ void PrintObject::slice()
     this->set_done(posSlice);
 }
 
+// SliceOfMe: the inside filament (interior_filament). Whatever lies deeper than interior_skin_layers below a top surface and
+// above a bottom surface goes to that filament, over paint and over the filaments of the object's parts, so colors stay on
+// the outer layers. 'segmentation' is per layer, per extruder (index = extruder - 1), as from the painting.
 template<typename ThrowOnCancel>
-static inline void apply_mm_segmentation(PrintObject &print_object, ThrowOnCancel throw_on_cancel)
+static void apply_interior_filament(const PrintObject &print_object, std::vector<std::vector<ExPolygons>> &segmentation, ThrowOnCancel throw_on_cancel)
+{
+    const int    filament = print_object.config().interior_filament.value;
+    const int    skin     = std::max(0, print_object.config().interior_skin_layers.value);
+    const size_t n        = segmentation.size();
+    if (filament <= 0 || n == 0 || n != print_object.layer_count() || size_t(filament) > segmentation.front().size())
+        return;
+    // the whole object per layer
+    std::vector<ExPolygons> outline(n);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, n), [&](const tbb::blocked_range<size_t> &range) {
+        for (size_t i = range.begin(); i < range.end(); ++i) {
+            throw_on_cancel();
+            const Layer *layer = print_object.get_layer(int(i));
+            ExPolygons   all;
+            for (const LayerRegion *layerm : layer->regions())
+                append(all, to_expolygons(layerm->slices.surfaces));
+            outline[i] = union_ex(all);
+        }
+    });
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, n), [&](const tbb::blocked_range<size_t> &range) {
+        for (size_t i = range.begin(); i < range.end(); ++i) {
+            throw_on_cancel();
+            // inside = covered by the object 'skin' layers above and below
+            ExPolygons inside = outline[i];
+            for (int d = 1; d <= skin && ! inside.empty(); ++d) {
+                if (i < size_t(d) || i + d >= n) {
+                    inside.clear();
+                    break;
+                }
+                inside = intersection_ex(inside, outline[i + d]);
+                if (! inside.empty())
+                    inside = intersection_ex(inside, outline[i - d]);
+            }
+            if (inside.empty())
+                continue;
+            std::vector<ExPolygons> &by_extruder = segmentation[i];
+            for (size_t e = 0; e < by_extruder.size(); ++e)
+                if (int(e) + 1 != filament && ! by_extruder[e].empty())
+                    by_extruder[e] = diff_ex(by_extruder[e], inside);
+            append(by_extruder[filament - 1], std::move(inside));
+            by_extruder[filament - 1] = union_ex(by_extruder[filament - 1]);
+        }
+    });
+}
+
+template<typename ThrowOnCancel>
+static inline void apply_mm_segmentation(PrintObject &print_object, bool painted, ThrowOnCancel throw_on_cancel)
 {
     // Returns MMU segmentation based on painting in MMU segmentation gizmo
-    std::vector<std::vector<ExPolygons>> segmentation = multi_material_segmentation_by_painting(print_object, throw_on_cancel);
+    std::vector<std::vector<ExPolygons>> segmentation = painted ?
+        multi_material_segmentation_by_painting(print_object, throw_on_cancel) :
+        std::vector<std::vector<ExPolygons>>(print_object.layer_count(), std::vector<ExPolygons>(print_object.print()->config().filament_diameter.size()));
+    // SliceOfMe
+    apply_interior_filament(print_object, segmentation, throw_on_cancel);
     assert(segmentation.size() == print_object.layer_count());
     tbb::parallel_for(
         tbb::blocked_range<size_t>(0, segmentation.size(), std::max(segmentation.size() / 128, size_t(1))),
@@ -1208,14 +1261,16 @@ void PrintObject::slice_volumes(long long *region_split_ms_out, long long *mm_se
         BOOST_LOG_TRIVIAL(info) << "filament shrink compensation will not work for object " << this->model_object()->name << " for multi filament.";
     }
 
-    // Is any ModelVolume MMU painted?
-    if (const auto& volumes = this->model_object()->volumes;
-        m_print->config().filament_diameter.size() > 1 && // BBS
-        std::find_if(volumes.begin(), volumes.end(), [](const ModelVolume *v) { return v->is_model_part() && !v->mmu_segmentation_facets.empty(); }) != volumes.end()) {
+    // Is any ModelVolume MMU painted? (SliceOfMe: or has the object an inside filament, applied the same way)
+    const auto &mm_volumes = this->model_object()->volumes;
+    const bool  mm_painted = m_print->config().filament_diameter.size() > 1 && // BBS
+        std::find_if(mm_volumes.begin(), mm_volumes.end(), [](const ModelVolume *v) { return v->is_model_part() && !v->mmu_segmentation_facets.empty(); }) != mm_volumes.end();
+    const bool  mm_interior = m_print->config().filament_diameter.size() > 1 && m_config.interior_filament.value > 0;
+    if (mm_painted || mm_interior) {
 
         // If XY Size compensation is also enabled, notify the user that XY Size compensation
         // would not be used because the object is multi-material painted.
-        if (m_config.xy_hole_compensation.value != 0.f || m_config.xy_contour_compensation.value != 0.f) {
+        if (mm_painted && (m_config.xy_hole_compensation.value != 0.f || m_config.xy_contour_compensation.value != 0.f)) {
             this->active_step_add_warning(
                 PrintStateBase::WarningLevel::CRITICAL,
                 L("An object's XY size compensation will not be used because it is also color-painted.\nXY Size "
@@ -1225,7 +1280,7 @@ void PrintObject::slice_volumes(long long *region_split_ms_out, long long *mm_se
 
         BOOST_LOG_TRIVIAL(debug) << "Slicing volumes - MMU segmentation";
         const long long mm_segment_begin_time = Slic3r::Utils::get_current_milliseconds_time_monotonic();
-        apply_mm_segmentation(*this, [print]() { print->throw_if_canceled(); });
+        apply_mm_segmentation(*this, mm_painted, [print]() { print->throw_if_canceled(); });
         const long long mm_segment_elapsed =
             Slic3r::Utils::get_current_milliseconds_time_monotonic() - mm_segment_begin_time;
         if (mm_segment_ms_out)

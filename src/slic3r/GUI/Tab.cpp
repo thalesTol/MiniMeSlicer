@@ -3558,6 +3558,9 @@ void TabPrint::build()
         optgroup->append_single_option_line("interlocking_boundary_avoidance");
         optgroup->append_single_option_line("sparse_infill_filament");
         optgroup->append_single_option_line("solid_infill_filament");
+        // SliceOfMe
+        optgroup->append_single_option_line("interior_filament");
+        optgroup->append_single_option_line("interior_skin_layers");
         optgroup->append_single_option_line("wall_filament");
 
         optgroup = page->new_optgroup(L("G-code output"), L"param_gcode");

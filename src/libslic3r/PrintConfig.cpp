@@ -4208,6 +4208,29 @@ void PrintConfigDef::init_fff_params()
     def->mode     = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(0.));
 
+    // SliceOfMe
+    def           = this->add("interior_filament", coInt);
+    def->gui_type = ConfigOptionDef::GUIType::i_enum_open;
+    def->label    = L("Inside filament");
+    def->category = L("Strength");
+    def->tooltip  = L("Prints the inside of the object with this filament: everything that lies deeper than 'Colored skin layers' "
+                      "below a top surface and above a bottom surface, including painted colors and other parts' filaments. "
+                      "Colors then stay on the outer layers only, which saves filament changes. 'Default' turns it off.");
+    def->min      = 0;
+    def->mode     = comSimple;
+    def->set_default_value(new ConfigOptionInt(0));
+
+    def           = this->add("interior_skin_layers", coInt);
+    def->label    = L("Colored skin layers");
+    def->category = L("Strength");
+    def->tooltip  = L("With an inside filament: how many layers below each top surface and above each bottom surface keep their "
+                      "own colors. 0 prints the whole object with the inside filament.");
+    def->sidetext = L("layers");
+    def->min      = 0;
+    def->max      = 1000;
+    def->mode     = comSimple;
+    def->set_default_value(new ConfigOptionInt(1));
+
     def           = this->add("interlocking_beam", coBool);
     def->label    = L("Use beam interlocking");
     def->tooltip  = L("Generate interlocking beam structure at the locations where different filaments touch. This improves the adhesion between filaments, especially models printed in different materials.");

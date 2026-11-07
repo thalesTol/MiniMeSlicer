@@ -768,7 +768,7 @@ void ObjectList::update_filament_values_for_items(const size_t filaments_count)
 const std::vector<std::string>& filament_index_object_keys()
 {
     static const std::vector<std::string> keys{"support_filament", "support_interface_filament",
-                                                "sparse_infill_filament", "solid_infill_filament", "wall_filament"};
+                                                "sparse_infill_filament", "solid_infill_filament", "wall_filament", "interior_filament"};
     return keys;
 }
 

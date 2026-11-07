@@ -747,7 +747,7 @@ void ConfigManipulation::update_print_fff_config(DynamicPrintConfig* config, con
 
     // BBS
     static const char* filament_slot_keys[] = { "support_filament", "support_interface_filament",
-        "wall_filament", "sparse_infill_filament", "solid_infill_filament"};
+        "wall_filament", "sparse_infill_filament", "solid_infill_filament", "interior_filament"};
     for (int i = 0; i < sizeof(filament_slot_keys) / sizeof(filament_slot_keys[0]); i++) {
         std::string key = std::string(filament_slot_keys[i]);
         auto* opt = dynamic_cast<ConfigOptionInt*>(config->option(key, false));
