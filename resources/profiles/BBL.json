@@ -1,7 +1,7 @@
 {
     "name": "Bambulab",
     "url": "http://www.bambulab.com/Parameters/vendor/BBL.json",
-    "version": "02.08.00.09",
+    "version": "02.08.00.90",
     "force_update": "0",
     "description": "the initial version of BBL configurations",
     "machine_model_list": [
@@ -8262,6 +8262,1270 @@
         {
             "name": "Generic TPU for AMS @BBL X2D 0.4 nozzle",
             "sub_path": "filament/Generic TPU for AMS @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @base",
+            "sub_path": "filament/STLFLIX PLA @base.json"
+        },
+        {
+            "name": "STLFLIX PLA @0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL A1 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL A1",
+            "sub_path": "filament/STLFLIX PLA @BBL A1.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL A1M",
+            "sub_path": "filament/STLFLIX PLA @BBL A1M.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL A2L",
+            "sub_path": "filament/STLFLIX PLA @BBL A2L.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2C",
+            "sub_path": "filament/STLFLIX PLA @BBL H2C.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2D",
+            "sub_path": "filament/STLFLIX PLA @BBL H2D.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2DP",
+            "sub_path": "filament/STLFLIX PLA @BBL H2DP.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL H2S",
+            "sub_path": "filament/STLFLIX PLA @BBL H2S.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL P2S",
+            "sub_path": "filament/STLFLIX PLA @BBL P2S.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/STLFLIX PLA @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA @BBL X2D",
+            "sub_path": "filament/STLFLIX PLA @BBL X2D.json"
+        },
+        {
+            "name": "STLFLIX PLA",
+            "sub_path": "filament/STLFLIX PLA.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @base",
+            "sub_path": "filament/STLFLIX PLA Matte @base.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL A1 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL A1",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL A1.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL A1M",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL A1M.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL A2L",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL A2L.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2C",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2C.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2D",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2D.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2DP",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2DP.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL H2S",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL H2S.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL P2S",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL P2S.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte @BBL X2D",
+            "sub_path": "filament/STLFLIX PLA Matte @BBL X2D.json"
+        },
+        {
+            "name": "STLFLIX PLA Matte",
+            "sub_path": "filament/STLFLIX PLA Matte.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @base",
+            "sub_path": "filament/STLFLIX PLA Silk @base.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL A1",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL A1.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL A1M",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL A1M.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL A2L",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL A2L.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL H2C",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL H2C.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL H2D",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL H2D.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL H2DP",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL H2DP.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL H2S",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL H2S.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL P2S",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL P2S.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk @BBL X2D",
+            "sub_path": "filament/STLFLIX PLA Silk @BBL X2D.json"
+        },
+        {
+            "name": "STLFLIX PLA Silk",
+            "sub_path": "filament/STLFLIX PLA Silk.json"
+        },
+        {
+            "name": "STLFLIX PETG @base",
+            "sub_path": "filament/STLFLIX PETG @base.json"
+        },
+        {
+            "name": "STLFLIX PETG @0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL A1 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL A1",
+            "sub_path": "filament/STLFLIX PETG @BBL A1.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL A1M",
+            "sub_path": "filament/STLFLIX PETG @BBL A1M.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL A2L",
+            "sub_path": "filament/STLFLIX PETG @BBL A2L.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2C",
+            "sub_path": "filament/STLFLIX PETG @BBL H2C.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2D",
+            "sub_path": "filament/STLFLIX PETG @BBL H2D.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2DP",
+            "sub_path": "filament/STLFLIX PETG @BBL H2DP.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL H2S",
+            "sub_path": "filament/STLFLIX PETG @BBL H2S.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL P2S",
+            "sub_path": "filament/STLFLIX PETG @BBL P2S.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/STLFLIX PETG @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "STLFLIX PETG @BBL X2D",
+            "sub_path": "filament/STLFLIX PETG @BBL X2D.json"
+        },
+        {
+            "name": "STLFLIX PETG",
+            "sub_path": "filament/STLFLIX PETG.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @base",
+            "sub_path": "filament/Voolt3D PLA High Speed @base.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL A1 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL A1",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL A1.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL A1M",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL A1M.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL A2L",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL A2L.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2C",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2C.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2D",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2D.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2DP",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2DP.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL H2S",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL H2S.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL P1P",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL P1P.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL P2S",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL P2S.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL X1C",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL X1C.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL X2D",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL X2D.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL P1P 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL P1P 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL X1C 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL X1C 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA High Speed @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA High Speed @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @base",
+            "sub_path": "filament/Voolt3D PLA Velvet @base.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL A1 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL A1",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL A1.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL A1M",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL A1M.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL A2L",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL A2L.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2C",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2C.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2D",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2D.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2DP",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2DP.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL H2S",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL H2S.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL P2S",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL P2S.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet @BBL X2D",
+            "sub_path": "filament/Voolt3D PLA Velvet @BBL X2D.json"
+        },
+        {
+            "name": "Voolt3D PLA Velvet",
+            "sub_path": "filament/Voolt3D PLA Velvet.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @base",
+            "sub_path": "filament/Voolt3D PLA V-Silk @base.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL A1",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL A1.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL A1M",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL A1M.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL A2L",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL A2L.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL H2C",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL H2C.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL H2D",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL H2D.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL H2DP",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL H2DP.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL H2S",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL H2S.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL P2S",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL P2S.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk @BBL X2D",
+            "sub_path": "filament/Voolt3D PLA V-Silk @BBL X2D.json"
+        },
+        {
+            "name": "Voolt3D PLA V-Silk",
+            "sub_path": "filament/Voolt3D PLA V-Silk.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @base",
+            "sub_path": "filament/Voolt3D PETG HF @base.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL A1 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL A1",
+            "sub_path": "filament/Voolt3D PETG HF @BBL A1.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL A1M",
+            "sub_path": "filament/Voolt3D PETG HF @BBL A1M.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL A2L",
+            "sub_path": "filament/Voolt3D PETG HF @BBL A2L.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2C",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2C.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2D",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2D.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2DP",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2DP.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL H2S 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL H2S 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL P1P 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL P1P 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL P1P",
+            "sub_path": "filament/Voolt3D PETG HF @BBL P1P.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL P1S 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL P1S 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL P1S 0.6 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL P1S 0.6 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL P2S 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL P2S 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL P2S",
+            "sub_path": "filament/Voolt3D PETG HF @BBL P2S.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL X1 0.6 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL X1 0.6 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL X1C 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL X1C 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL X1C",
+            "sub_path": "filament/Voolt3D PETG HF @BBL X1C.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/Voolt3D PETG HF @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "Voolt3D PETG HF @BBL X2D",
+            "sub_path": "filament/Voolt3D PETG HF @BBL X2D.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @base",
+            "sub_path": "filament/GTMax3D PLA Speed+ @base.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL A1 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL A1",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL A1.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL A1M",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL A1M.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL A2L",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL A2L.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2C",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2C.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2D",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2D.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2DP",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2DP.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL H2S",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL H2S.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL P1P",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL P1P.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL P2S",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL P2S.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL X1C",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL X1C.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL X2D",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL X2D.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL P1P 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL P1P 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL X1C 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL X1C 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PLA Speed+ @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PLA Speed+ @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @base",
+            "sub_path": "filament/GTMax3D PETG HF @base.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL A1 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL A1",
+            "sub_path": "filament/GTMax3D PETG HF @BBL A1.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL A1M",
+            "sub_path": "filament/GTMax3D PETG HF @BBL A1M.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL A2L",
+            "sub_path": "filament/GTMax3D PETG HF @BBL A2L.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2C",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2C.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2D",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2D.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2DP",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2DP.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL H2S 0.4 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL H2S 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL P1P 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL P1P 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL P1P",
+            "sub_path": "filament/GTMax3D PETG HF @BBL P1P.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL P1S 0.4 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL P1S 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL P1S 0.6 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL P1S 0.6 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL P2S 0.4 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL P2S 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL P2S",
+            "sub_path": "filament/GTMax3D PETG HF @BBL P2S.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL X1 0.6 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL X1 0.6 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL X1C 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL X1C 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL X1C",
+            "sub_path": "filament/GTMax3D PETG HF @BBL X1C.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/GTMax3D PETG HF @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D PETG HF @BBL X2D",
+            "sub_path": "filament/GTMax3D PETG HF @BBL X2D.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @base",
+            "sub_path": "filament/GTMax3D ABS Speed+ @base.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL A1 0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL A1",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL A1.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2C",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2C.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2D",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2D.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2S 0.4 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2S 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL P2S",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL P2S.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL X2D",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL X2D.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+",
+            "sub_path": "filament/GTMax3D ABS Speed+.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL H2DP",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL H2DP.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL X1E 0.2 nozzle",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL X1E 0.2 nozzle.json"
+        },
+        {
+            "name": "GTMax3D ABS Speed+ @BBL X1E",
+            "sub_path": "filament/GTMax3D ABS Speed+ @BBL X1E.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @base",
+            "sub_path": "filament/National3D PLA Max High Speed @base.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL A1 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL A1",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL A1.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL A1M",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL A1M.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL A2L",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL A2L.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2C",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2C.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2D",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2D.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2DP",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2DP.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL H2S",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL H2S.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL P1P",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL P1P.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL P2S",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL P2S.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL X1C",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL X1C.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL X2D",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL X2D.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL P1P 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL P1P 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL X1C 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL X1C 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D PLA Max High Speed @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/National3D PLA Max High Speed @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @base",
+            "sub_path": "filament/National3D ABS MG-94 @base.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL A1 0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL A1",
+            "sub_path": "filament/National3D ABS MG-94 @BBL A1.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2C",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2C.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2D",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2D.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2S 0.4 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2S 0.4 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL P2S",
+            "sub_path": "filament/National3D ABS MG-94 @BBL P2S.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL X2D",
+            "sub_path": "filament/National3D ABS MG-94 @BBL X2D.json"
+        },
+        {
+            "name": "National3D ABS MG-94",
+            "sub_path": "filament/National3D ABS MG-94.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL H2DP",
+            "sub_path": "filament/National3D ABS MG-94 @BBL H2DP.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL X1E 0.2 nozzle",
+            "sub_path": "filament/National3D ABS MG-94 @BBL X1E 0.2 nozzle.json"
+        },
+        {
+            "name": "National3D ABS MG-94 @BBL X1E",
+            "sub_path": "filament/National3D ABS MG-94 @BBL X1E.json"
+        },
+        {
+            "name": "Masterprint PLA @base",
+            "sub_path": "filament/Masterprint PLA @base.json"
+        },
+        {
+            "name": "Masterprint PLA @0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL A1 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL A1 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL A1",
+            "sub_path": "filament/Masterprint PLA @BBL A1.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL A1M 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL A1M 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL A1M",
+            "sub_path": "filament/Masterprint PLA @BBL A1M.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL A2L 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL A2L 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL A2L",
+            "sub_path": "filament/Masterprint PLA @BBL A2L.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2C 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL H2C 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2C 0.4 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL H2C 0.4 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2C",
+            "sub_path": "filament/Masterprint PLA @BBL H2C.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2D 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL H2D 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2D",
+            "sub_path": "filament/Masterprint PLA @BBL H2D.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2DP 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL H2DP 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2DP",
+            "sub_path": "filament/Masterprint PLA @BBL H2DP.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2S 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL H2S 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL H2S",
+            "sub_path": "filament/Masterprint PLA @BBL H2S.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL P2S 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL P2S 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL P2S",
+            "sub_path": "filament/Masterprint PLA @BBL P2S.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL X2D 0.2 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL X2D 0.2 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL X2D 0.4 nozzle",
+            "sub_path": "filament/Masterprint PLA @BBL X2D 0.4 nozzle.json"
+        },
+        {
+            "name": "Masterprint PLA @BBL X2D",
+            "sub_path": "filament/Masterprint PLA @BBL X2D.json"
+        },
+        {
+            "name": "Masterprint PLA",
+            "sub_path": "filament/Masterprint PLA.json"
         }
     ],
     "machine_list": [

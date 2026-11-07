@@ -1,0 +1,28 @@
+{
+    "type": "filament",
+    "name": "Voolt3D PLA V-Silk @BBL A1",
+    "inherits": "Voolt3D PLA V-Silk @base",
+    "from": "system",
+    "setting_id": "MMBR125",
+    "instantiation": "true",
+    "fan_cooling_layer_time": [
+        "80"
+    ],
+    "fan_max_speed": [
+        "80"
+    ],
+    "fan_min_speed": [
+        "60"
+    ],
+    "filament_max_volumetric_speed": [
+        "7.5"
+    ],
+    "filament_retraction_length": [
+        "0.5"
+    ],
+    "compatible_printers": [
+        "Bambu Lab A1 0.4 nozzle",
+        "Bambu Lab A1 0.6 nozzle",
+        "Bambu Lab A1 0.8 nozzle"
+    ]
+}

@@ -20,6 +20,10 @@ Done:
   - Logo: the user's artwork in `tools/branding/art` (icon + tall poster). `tools/branding/install_artwork.ps1`
     makes the icons, the About banner, the splash poster and the chat pictures from it (Bambu's file names kept).
     The first-run wizard uses `resources/web/image/logo.png` and the texts t1/t2/t83/t85 in `resources/web/data/text.js`.
+- **Brazilian filaments**: `python tools/profiles/brazil_filaments.py` makes system profiles (all Bambu printers) for
+  STLFLIX, Voolt3D, GTMax3D, National3D and Masterprint from the manufacturers' data on top of the Generic profiles, and
+  raises the BBL bundle version (02.08.00.90) so MiniMe copies them into its data folder. Run it again after an upstream
+  merge that changes BBL.json or the Generic profiles.
 - **Installer**: `tools/installer/build_installer.ps1` (Inno Setup 6 + VS 2022 C++ runtime DLLs, put next to the exe)
   makes `dist/MiniMeSlicer-Setup-<version>.exe` from `install_dir`; per-user install by default, English and
   Brazilian Portuguese. Settings of an installed MiniMe live in `%APPDATA%\MiniMeSlicer`.

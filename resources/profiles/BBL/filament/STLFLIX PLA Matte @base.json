@@ -1,0 +1,38 @@
+{
+    "type": "filament",
+    "name": "STLFLIX PLA Matte @base",
+    "inherits": "Generic PLA @base",
+    "from": "system",
+    "instantiation": "false",
+    "description": "STLFLIX PLA Matte (195-220 C on standard printers, 200-230 C on fast printers (Bambu Lab), bed 60 C). Built on MiniMe's Generic PLA profile; tune flow and pressure advance for your printer.",
+    "filament_vendor": [
+        "STLFLIX"
+    ],
+    "nozzle_temperature": [
+        "215"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "220"
+    ],
+    "nozzle_temperature_range_low": [
+        "195"
+    ],
+    "nozzle_temperature_range_high": [
+        "230"
+    ],
+    "hot_plate_temp": [
+        "60"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "60"
+    ],
+    "textured_plate_temp": [
+        "60"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "60"
+    ],
+    "filament_density": [
+        "1.24"
+    ]
+}

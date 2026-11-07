@@ -1,0 +1,35 @@
+{
+    "type": "filament",
+    "name": "GTMax3D PLA Speed+ @base",
+    "inherits": "Generic PLA High Speed @base",
+    "from": "system",
+    "instantiation": "false",
+    "description": "GTMax3D PLA Speed+ (PLA Speed+: 190-220 C, bed 0-60 C, up to 500 mm/s). Built on MiniMe's Generic PLA High Speed profile; tune flow and pressure advance for your printer.",
+    "filament_vendor": [
+        "GTMax3D"
+    ],
+    "nozzle_temperature": [
+        "215"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "220"
+    ],
+    "nozzle_temperature_range_low": [
+        "190"
+    ],
+    "nozzle_temperature_range_high": [
+        "220"
+    ],
+    "hot_plate_temp": [
+        "60"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "60"
+    ],
+    "textured_plate_temp": [
+        "60"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "60"
+    ]
+}

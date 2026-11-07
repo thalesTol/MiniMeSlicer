@@ -1,0 +1,71 @@
+{
+    "type": "filament",
+    "name": "Voolt3D PETG HF @BBL H2S 0.4 nozzle",
+    "inherits": "Voolt3D PETG HF @base",
+    "from": "system",
+    "setting_id": "MMBR151",
+    "instantiation": "true",
+    "filament_cooling_before_tower": [
+        "10",
+        "10",
+        "10"
+    ],
+    "filament_max_volumetric_speed": [
+        "16",
+        "16",
+        "16"
+    ],
+    "filament_retraction_length": [
+        "0.4",
+        "0.4",
+        "0.4"
+    ],
+    "filament_wipe": [
+        "1",
+        "1",
+        "1"
+    ],
+    "filament_wipe_distance": [
+        "1",
+        "1",
+        "1"
+    ],
+    "filament_z_hop_types": [
+        "Spiral Lift",
+        "Spiral Lift",
+        "Spiral Lift"
+    ],
+    "filament_ramming_travel_time": [
+        "0",
+        "0",
+        "0"
+    ],
+    "include": [
+        "fdm_filament_template_direct_dual_e3d"
+    ],
+    "long_retractions_when_ec": [
+        "0",
+        "0",
+        "0"
+    ],
+    "nozzle_temperature": [
+        "240",
+        "240",
+        "240"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "240",
+        "240",
+        "240"
+    ],
+    "retraction_distances_when_ec": [
+        "0",
+        "0",
+        "0"
+    ],
+    "compatible_printers": [
+        "Bambu Lab H2S 0.4 nozzle",
+        "Bambu Lab H2S 0.6 nozzle",
+        "Bambu Lab H2S 0.8 nozzle"
+    ]
+}

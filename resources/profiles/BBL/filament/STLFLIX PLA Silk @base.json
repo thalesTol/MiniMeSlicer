@@ -1,0 +1,38 @@
+{
+    "type": "filament",
+    "name": "STLFLIX PLA Silk @base",
+    "inherits": "Generic PLA Silk @base",
+    "from": "system",
+    "instantiation": "false",
+    "description": "STLFLIX PLA Silk (200-230 C on fast printers (blue: 210-240 C), bed 60 C). Built on MiniMe's Generic PLA Silk profile; tune flow and pressure advance for your printer.",
+    "filament_vendor": [
+        "STLFLIX"
+    ],
+    "nozzle_temperature": [
+        "225"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "225"
+    ],
+    "nozzle_temperature_range_low": [
+        "200"
+    ],
+    "nozzle_temperature_range_high": [
+        "240"
+    ],
+    "hot_plate_temp": [
+        "60"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "60"
+    ],
+    "textured_plate_temp": [
+        "60"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "60"
+    ],
+    "filament_density": [
+        "1.24"
+    ]
+}

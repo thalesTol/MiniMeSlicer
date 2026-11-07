@@ -1,0 +1,23 @@
+{
+    "type": "filament",
+    "name": "Voolt3D PETG HF @BBL A2L 0.2 nozzle",
+    "inherits": "Voolt3D PETG HF @base",
+    "from": "system",
+    "setting_id": "MMBR141",
+    "instantiation": "true",
+    "filament_flush_temp_fast": [
+        "220"
+    ],
+    "pre_start_fan_time": [
+        "2"
+    ],
+    "slow_down_min_speed": [
+        "40"
+    ],
+    "compatible_printers": [
+        "Bambu Lab A2L 0.2 nozzle"
+    ],
+    "filament_start_gcode": [
+        ""
+    ]
+}

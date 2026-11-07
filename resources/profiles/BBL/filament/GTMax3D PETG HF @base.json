@@ -1,0 +1,35 @@
+{
+    "type": "filament",
+    "name": "GTMax3D PETG HF @base",
+    "inherits": "Generic PETG HF @base",
+    "from": "system",
+    "instantiation": "false",
+    "description": "GTMax3D PETG HF (PETG HF: 225-270 C, bed 80-95 C). Built on MiniMe's Generic PETG HF profile; tune flow and pressure advance for your printer.",
+    "filament_vendor": [
+        "GTMax3D"
+    ],
+    "nozzle_temperature": [
+        "245"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "245"
+    ],
+    "nozzle_temperature_range_low": [
+        "225"
+    ],
+    "nozzle_temperature_range_high": [
+        "270"
+    ],
+    "hot_plate_temp": [
+        "80"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "80"
+    ],
+    "textured_plate_temp": [
+        "80"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "80"
+    ]
+}

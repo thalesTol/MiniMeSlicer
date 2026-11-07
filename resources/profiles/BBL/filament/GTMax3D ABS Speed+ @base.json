@@ -1,0 +1,11 @@
+{
+    "type": "filament",
+    "name": "GTMax3D ABS Speed+ @base",
+    "inherits": "Generic ABS @base",
+    "from": "system",
+    "instantiation": "false",
+    "description": "GTMax3D ABS Speed+ (the manufacturer gives no temperatures for ABS Speed+: Generic ABS values). Built on MiniMe's Generic ABS profile; tune flow and pressure advance for your printer.",
+    "filament_vendor": [
+        "GTMax3D"
+    ]
+}

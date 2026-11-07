@@ -1,0 +1,38 @@
+{
+    "type": "filament",
+    "name": "Voolt3D PLA Velvet @base",
+    "inherits": "Generic PLA @base",
+    "from": "system",
+    "instantiation": "false",
+    "description": "Voolt3D PLA Velvet (PLA Velvet (matte): 205-220 C, bed 70-75 C, 1.24 g/cm3, 19 mm3/s). Built on MiniMe's Generic PLA profile; tune flow and pressure advance for your printer.",
+    "filament_vendor": [
+        "Voolt3D"
+    ],
+    "nozzle_temperature": [
+        "215"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "220"
+    ],
+    "nozzle_temperature_range_low": [
+        "205"
+    ],
+    "nozzle_temperature_range_high": [
+        "220"
+    ],
+    "hot_plate_temp": [
+        "70"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "70"
+    ],
+    "textured_plate_temp": [
+        "70"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "70"
+    ],
+    "filament_density": [
+        "1.24"
+    ]
+}
