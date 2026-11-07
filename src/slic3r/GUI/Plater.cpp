@@ -24795,6 +24795,85 @@ int Plater::send_gcode(int plate_idx, Export3mfProgressFn proFn)
     return result;
 }
 
+// SliceOfMe: Bambu Lab printers take print jobs over the network only from slicer builds Bambu Lab has signed (its
+// "Authorization Control"). For other slicers Bambu Lab made Bambu Connect: the slicer saves the sliced plate and opens
+// bambu-connect://import-file?path=...&name=...&version=1.0.0; Bambu Connect then sends it to the printer (cloud or LAN).
+static bool bambu_connect_installed()
+{
+#ifdef _WIN32
+    HKEY key;
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"bambu-connect\\shell\\open\\command", 0, KEY_READ, &key) == ERROR_SUCCESS) {
+        RegCloseKey(key);
+        return true;
+    }
+    return false;
+#elif defined(__APPLE__)
+    return boost::filesystem::exists("/Applications/Bambu Connect.app");
+#else
+    return false;
+#endif
+}
+
+void Plater::send_to_bambu_connect()
+{
+    if (!bambu_connect_installed()) {
+        MessageDialog dlg(this,
+                          _L("Bambu Lab printers only take print jobs from slicers that Bambu Lab has signed, so MiniMe sends them "
+                             "through Bambu Connect, Bambu Lab's free app for other slicers. It is not installed on this computer.\n\n"
+                             "Open the Bambu Connect download page?"),
+                          _L("Bambu Connect is needed"), wxICON_INFORMATION | wxYES_NO);
+        if (dlg.ShowModal() == wxID_YES)
+            wxLaunchDefaultBrowser("https://wiki.bambulab.com/en/software/bambu-connect");
+        return;
+    }
+    const int plate_idx = p->partplate_list.get_curr_plate_index();
+    if (send_gcode(plate_idx, [](int, int, int, bool &) {}) != 0) {
+        show_error(this, _L("The sliced plate could not be saved for Bambu Connect."));
+        return;
+    }
+    PrintPrepareData data;
+    get_print_job_data(&data);
+    boost::system::error_code ec;
+    if (data._3mf_path.empty() || !boost::filesystem::exists(data._3mf_path, ec)) {
+        show_error(this, _L("The sliced plate could not be saved for Bambu Connect."));
+        return;
+    }
+    // a copy of its own: Bambu Connect reads the file only when the user presses Print there, maybe much later
+    const boost::filesystem::path dir = boost::filesystem::temp_directory_path(ec) / "MiniMeSlicer" / "bambu-connect";
+    boost::filesystem::create_directories(dir, ec);
+    const std::time_t too_old = std::time(nullptr) - 3 * 24 * 3600;
+    for (boost::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+        if (boost::filesystem::is_regular_file(it->path(), ec) && boost::filesystem::last_write_time(it->path(), ec) < too_old)
+            boost::filesystem::remove(it->path(), ec);
+    std::string name = into_u8(get_export_gcode_filename("", true, false));
+    for (const char *ext : {".gcode.3mf", ".3mf", ".gcode"})
+        if (name.size() > strlen(ext) && name.compare(name.size() - strlen(ext), strlen(ext), ext) == 0) {
+            name.erase(name.size() - strlen(ext));
+            break;
+        }
+    // characters that could break the link or the file name
+    for (char &c : name)
+        if (std::strchr("&=?#%+/\\:*\"<>|", c) != nullptr)
+            c = '_';
+    if (name.empty())
+        name = "MiniMe plate";
+    const boost::filesystem::path dest = dir / boost::filesystem::path(boost::nowide::widen(name + ".gcode.3mf"));
+    boost::filesystem::copy_file(data._3mf_path, dest, boost::filesystem::copy_options::overwrite_existing, ec);
+    if (ec) {
+        show_error(this, _L("The sliced plate could not be saved for Bambu Connect.") + "\n" + from_u8(ec.message()));
+        return;
+    }
+    const std::string url = "bambu-connect://import-file?path=" + Http::url_encode(boost::nowide::narrow(dest.wstring())) +
+                            "&name=" + Http::url_encode(name) + "&version=1.0.0";
+    BOOST_LOG_TRIVIAL(info) << "MiniMe: sending to Bambu Connect: " << url;
+    if (!wxLaunchDefaultBrowser(from_u8(url))) {
+        show_error(this, _L("Bambu Connect could not be opened."));
+        return;
+    }
+    get_notification_manager()->push_notification(NotificationType::CustomNotification, NotificationManager::NotificationLevel::RegularNotificationLevel,
+                                                  _u8L("Sent to Bambu Connect: choose the printer and the AMS slots there, then press Print."));
+}
+
 int Plater::export_config_3mf(int plate_idx, Export3mfProgressFn proFn)
 {
     int result = 0;

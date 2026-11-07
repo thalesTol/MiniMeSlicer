@@ -1,3 +1,27 @@
+<img src="tools/branding/art/icon_256.png" width="96" align="left" alt="MiniMe">
+
+# MiniMe Slicer
+
+**MiniMe Slicer** is a fork of Bambu Studio with extra features for FDM printing:
+
+- **Claude chat** inside the slicer: Claude sees the plate, slices, reads layers and filament changes, and changes objects,
+  parts, supports and settings (each change can be undone with Ctrl+Z). It uses your own Claude account.
+- **Inside filament**: print the inside of an object in one filament and keep colors on the outer layers only.
+- **Support tools**: plate zones where tree supports may or may not stand, supports standing on other objects.
+- **Cut tool**: curved and shape cuts with connectors; cuts of multi-body models come out clean.
+- **Filament looks**: gradient, multi-color, translucent and glow filaments shown on the model.
+- **Brazilian filament profiles**: STLFLIX, Voolt3D, GTMax3D, National3D and Masterprint for all Bambu Lab printers.
+- **Print with Bambu Connect**: Bambu Lab printers only accept prints from slicers Bambu Lab signs, so MiniMe sends them
+  through [Bambu Connect](https://wiki.bambulab.com/en/software/bambu-connect) (install it once).
+
+**Download for Windows:** [latest release](../../releases/latest) (run the installer; Windows may warn that it is unsigned:
+More info, Run anyway).
+
+MiniMe Slicer is licensed under the GNU Affero General Public License v3, like Bambu Studio. It is not made or endorsed by
+Bambu Lab. The original Bambu Studio README follows.
+
+---
+
 ![image](https://user-images.githubusercontent.com/106916061/179006347-497d24c0-9bd6-45b7-8c49-d5cc8ecfe5d7.png)
 # BambuStudio
 Bambu Studio is a cutting-edge, feature-rich slicing software.  

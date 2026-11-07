@@ -2308,6 +2308,13 @@ wxBoxSizer* MainFrame::create_side_tools()
                 wxPostEvent(m_plater, SimpleEvent(EVT_GLTOOLBAR_SEND_TO_PRINTER_ALL));
             else if (m_print_select == eSendMultiApp)
                 wxPostEvent(m_plater, SimpleEvent(EVT_GLTOOLBAR_SEND_MULTI_APP));
+            else if (m_print_select == eSendBambuConnect) {
+                // SliceOfMe: Bambu printers refuse print jobs from unsigned slicers; Bambu Connect sends them
+                m_print_enable = get_enable_print_status();
+                m_print_btn->Enable(m_print_enable);
+                if (m_print_enable)
+                    m_plater->send_to_bambu_connect();
+            }
             /* else if (m_print_select == ePrintMultiMachine)
                  wxPostEvent(m_plater, SimpleEvent(EVT_GLTOOLBAR_PRINT_MULTI_MACHINE));*/
         });
@@ -2402,6 +2409,19 @@ wxBoxSizer* MainFrame::create_side_tools()
             }
             else {
                 //Bambu Studio Buttons
+                // SliceOfMe: the way that works for MiniMe (see Plater::send_to_bambu_connect)
+                SideButton* bambu_connect_btn = new SideButton(p, _L("Print with Bambu Connect"), "");
+                bambu_connect_btn->SetCornerRadius(0);
+                bambu_connect_btn->Bind(wxEVT_BUTTON, [this, p](wxCommandEvent&) {
+                    m_print_btn->SetLabel(_L("Print with Bambu Connect"));
+                    m_print_select = eSendBambuConnect;
+                    m_print_enable = get_enable_print_status();
+                    m_print_btn->Enable(m_print_enable);
+                    this->Layout();
+                    p->Dismiss();
+                    });
+                p->append_button(bambu_connect_btn);
+
                 SideButton* print_plate_btn = new SideButton(p, _L("Print plate"), "");
                 print_plate_btn->SetCornerRadius(0);
 
@@ -2668,7 +2688,7 @@ bool MainFrame::get_enable_print_status()
             enable = false;
         }
         enable = enable && !is_all_plates;
-    }else if (m_print_select == eSendMultiApp) {
+    }else if (m_print_select == eSendMultiApp || m_print_select == eSendBambuConnect) {
         if (!current_plate->is_slice_result_ready_for_print()) {
             enable = false;
         }
@@ -4486,8 +4506,9 @@ void MainFrame::on_config_changed(DynamicPrintConfig* config) const
 void MainFrame::set_print_button_to_default(PrintSelectType select_type)
 {
     if (select_type == PrintSelectType::ePrintPlate) {
-        m_print_btn->SetLabel(_L("Print plate"));
-        m_print_select = ePrintPlate;
+        // SliceOfMe: Bambu printers only take print jobs from MiniMe through Bambu Connect
+        m_print_btn->SetLabel(_L("Print with Bambu Connect"));
+        m_print_select = eSendBambuConnect;
         if (m_print_enable)
             m_print_enable = get_enable_print_status();
         m_print_btn->Enable(m_print_enable);

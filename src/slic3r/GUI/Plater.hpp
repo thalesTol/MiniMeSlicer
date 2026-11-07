@@ -556,6 +556,8 @@ public:
     /* -1: send current gcode if not specified
      * -2: send all gcode to target machine */
     int send_gcode(int plate_idx = -1, Export3mfProgressFn proFn = nullptr);
+    // SliceOfMe: hands the sliced current plate to Bambu Connect (Bambu Lab's app for slicers it has not signed)
+    void send_to_bambu_connect();
     void send_gcode_legacy(int plate_idx = -1, Export3mfProgressFn proFn = nullptr);
     int export_config_3mf(int plate_idx = -1, Export3mfProgressFn proFn = nullptr);
     //BBS jump to nonitor after print job finished

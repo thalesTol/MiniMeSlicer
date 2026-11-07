@@ -254,7 +254,8 @@ public:
         eUploadGcode         = 7,
         eExportAllSlicedFile = 8,
         ePrintMultiMachine   = 9,
-        eSendMultiApp        = 10
+        eSendMultiApp        = 10,
+        eSendBambuConnect    = 11 // SliceOfMe
     };
 
     void update_layout();
