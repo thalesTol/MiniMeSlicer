@@ -12889,6 +12889,8 @@ void Plater::priv::on_slicing_update(SlicingStatusEvent &evt)
         //slicing parallel, only update if percent is greater than before
         if (evt.status.percent > plate_list.get_curr_plate()->get_slicing_percent())
             plate_list.get_curr_plate()->update_slicing_percent(evt.status.percent);
+        // MiniMe: the step being done, for the chat's slice tool
+        plate_list.get_curr_plate()->set_slicing_stage(evt.status.text);
     }
 
     if (evt.status.flags & (PrintBase::SlicingStatus::RELOAD_SCENE | PrintBase::SlicingStatus::RELOAD_SLA_SUPPORT_POINTS)) {
@@ -21616,6 +21618,69 @@ void Plater::calib_VFA(const Calib_Params &params)
     }
 
     p->background_process.fff_print()->set_calib_params(params);
+}
+
+// MiniMe: OrcaSlicer's cornering and input shaping calibrations. A box printed with one wall and nothing inside; the
+// firmware value changes in a straight line from the bottom to the top, so the height where the walls look best gives it.
+void Plater::calib_motion(const Calib_Params &params)
+{
+    const bool cornering = params.mode == CalibMode::Calib_Cornering;
+    if (!cornering && params.mode != CalibMode::Calib_Input_Shaping_Freq && params.mode != CalibMode::Calib_Input_Shaping_Damp)
+        return;
+    model().calib_pa_pattern.reset(nullptr);
+    const wxString name = cornering ? _L("Cornering test") :
+                          params.mode == CalibMode::Calib_Input_Shaping_Freq ? _L("Input shaping frequency test") : _L("Input shaping damping test");
+    if (new_project(false, false, name) == wxID_CANCEL)
+        return;
+    wxGetApp().mainframe->select_tab(size_t(MainFrame::tp3DEditor));
+
+    add_model(false, Slic3r::resources_dir() + "/calib/motion/tower.stl");
+    if (model().objects.empty())
+        return;
+    auto print_config    = &wxGetApp().preset_bundle->prints.get_edited_preset().config;
+    auto filament_config = &wxGetApp().preset_bundle->filaments.get_edited_preset().config;
+    auto printer_config  = &wxGetApp().preset_bundle->printers.get_edited_preset().config;
+
+    // walls only: every wall shows the corners and the ringing after them
+    print_config->set_key_value("wall_loops", new ConfigOptionInt(1));
+    print_config->set_key_value("top_shell_layers", new ConfigOptionInt(0));
+    print_config->set_key_value("bottom_shell_layers", new ConfigOptionInt(3));
+    print_config->set_key_value("sparse_infill_density", new ConfigOptionPercent(0));
+    print_config->set_key_value("spiral_mode", new ConfigOptionBool(false));
+    print_config->set_key_value("enable_wrapping_detection", new ConfigOptionBool(false));
+    set_config_values<bool, ConfigOptionBoolsNullable>(print_config, "enable_overhang_speed", false);
+    set_config_values<bool, ConfigOptionBoolsNullable>(print_config, "enable_height_slowdown", false);
+    // the test sets the jerk itself on every layer: no jerk per feature on top of it
+    print_config->set_key_value("default_jerk", new ConfigOptionFloat(0));
+    filament_config->set_key_value("slow_down_layer_time", new ConfigOptionInts{0});
+
+    // Orca's suggested motion: cornering at a moderate speed and acceleration, input shaping fast and hard
+    double accel_limit = 0.;
+    if (auto *ax = printer_config->option<ConfigOptionFloats>("machine_max_acceleration_x"); ax != nullptr && !ax->values.empty())
+        accel_limit = ax->values.front();
+    double accel = cornering ? 2000. : 10000.;
+    if (accel_limit > 0.)
+        accel = std::min(accel, accel_limit);
+    set_config_values<double, ConfigOptionFloatsNullable>(print_config, "outer_wall_speed", cornering ? 100. : 200.);
+    set_config_values<double, ConfigOptionFloatsNullable>(print_config, "outer_wall_acceleration", accel);
+    set_config_values<double, ConfigOptionFloatsNullable>(print_config, "default_acceleration", accel);
+
+    ModelObject *obj = model().objects[0];
+    obj->config.set_key_value("brim_type", new ConfigOptionEnum<BrimType>(btOuterOnly));
+    obj->config.set_key_value("brim_width", new ConfigOptionFloat(3.0));
+    obj->config.set_key_value("brim_object_gap", new ConfigOptionFloat(0.0));
+
+    changed_objects({0});
+    wxGetApp().get_tab(Preset::TYPE_PRINT)->update_dirty();
+    wxGetApp().get_tab(Preset::TYPE_FILAMENT)->update_dirty();
+    wxGetApp().get_tab(Preset::TYPE_PRINT)->update_ui_from_settings();
+    wxGetApp().get_tab(Preset::TYPE_FILAMENT)->update_ui_from_settings();
+
+    // the value runs from the top of the bottom layers to the top of the tower
+    Calib_Params tower = params;
+    tower.z_from       = 1.;
+    tower.z_to         = obj->instance_bounding_box(0).size().z();
+    p->background_process.fff_print()->set_calib_params(tower);
 }
 
 void Plater::import_sl1_archive()

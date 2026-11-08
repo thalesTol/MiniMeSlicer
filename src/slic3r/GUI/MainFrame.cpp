@@ -1,4 +1,5 @@
 #include "MainFrame.hpp"
+#include "MiniMePricing.hpp"
 #include "GLToolbar.hpp"
 #include <wx/panel.h>
 #include <wx/notebook.h>
@@ -3541,6 +3542,8 @@ void MainFrame::init_menubar_as_editor()
         // SliceOfMe
         append_menu_check_item(viewMenu, wxID_ANY, _L("Claude chat") + "	" + ctrl + "Shift+J", _L("Talk with Claude about this plate"),
             [this](wxCommandEvent &) { toggle_chat(); }, this, []() { return true; }, [this]() { return is_chat_shown(); }, this);
+        append_menu_item(viewMenu, wxID_ANY, _L("Print price"), _L("What to charge for the sliced plate, with your costs and margins"),
+            [](wxCommandEvent &) { Pricing::show_window(); }, "", nullptr, []() { return true; }, this);
         append_menu_item(
             viewMenu, wxID_ANY, _L("Set 3DConnexion"), _L("Set 3DConnexion mouse"),
             [this](wxCommandEvent &) {
@@ -3756,84 +3759,8 @@ void MainFrame::init_menubar_as_editor()
     //m_topbar->AddDropDownMenuItem(config_item);
     m_topbar->AddDropDownSubMenu(helpMenu, _L("Help"));
 
-     // OrcaSlicer calibrations
-    {
-        append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Temperature"), _L("Temperature Calibration"),
-            [this](wxCommandEvent&) {
-                if (!m_temp_calib_dlg)
-                    m_temp_calib_dlg = new Temp_Calibration_Dlg((wxWindow*)this, wxID_ANY, m_plater);
-                m_temp_calib_dlg->ShowModal();
-            }, "", nullptr,
-            [this]() {return m_plater->is_view3D_shown();; }, this);
-        auto flowrate_menu = new wxMenu();
-        append_menu_item(
-            flowrate_menu, wxID_ANY, _L("Coarse"), _L("Flow rate test - Coarse"),
-            [this](wxCommandEvent&) { if (m_plater) m_plater->calib_flowrate(1); }, "", nullptr,
-            [this]() {return m_plater->is_view3D_shown();; }, this);
-        append_menu_item(flowrate_menu, wxID_ANY, _L("Fine"), _L("Flow rate test - Fine"),
-            [this](wxCommandEvent&) { if (m_plater) m_plater->calib_flowrate(2); }, "", nullptr,
-            [this]() {return m_plater->is_view3D_shown();; }, this);
-        m_topbar->GetCalibMenu()->AppendSubMenu(flowrate_menu, _L("Flow rate"));
-        append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Pressure advance"), _L("Pressure advance"),
-            [this](wxCommandEvent&) {
-                //if (!m_pa_calib_dlg)
-                m_pa_calib_dlg = new PA_Calibration_Dlg((wxWindow*)this, wxID_ANY, m_plater);
-                m_pa_calib_dlg->ShowModal();
-            }, "", nullptr,
-            [this]() {return m_plater->is_view3D_shown();; }, this);
-        append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Retraction test"), _L("Retraction test"),
-            [this](wxCommandEvent&) {
-                if (!m_retraction_calib_dlg)
-                    m_retraction_calib_dlg = new Retraction_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
-                m_retraction_calib_dlg->ShowModal();
-            }, "", nullptr,
-            [this]() {return m_plater->is_view3D_shown();; }, this);
-
-        // Advance calibrations
-        auto advance_menu = new wxMenu(); // sub menu
-        {
-            append_menu_item(
-                advance_menu, wxID_ANY, _L("Max flowrate"), _L("Max flowrate"),
-                [this](wxCommandEvent &) {
-                    if (!m_vol_test_dlg) m_vol_test_dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow *) this, wxID_ANY, m_plater);
-                    m_vol_test_dlg->ShowModal();
-                },
-                "", nullptr,
-                [this]() {
-                    return m_plater->is_view3D_shown();
-                    ;
-                },
-                this);
-
-            append_menu_item(
-                advance_menu, wxID_ANY, _L("VFA"), _L("VFA"),
-                [this](wxCommandEvent &) {
-                    if (!m_vfa_test_dlg) m_vfa_test_dlg = new VFA_Test_Dlg((wxWindow *) this, wxID_ANY, m_plater);
-                    m_vfa_test_dlg->ShowModal();
-                },
-                "", nullptr,
-                [this]() {
-                    return m_plater->is_view3D_shown();
-                    ;
-                },
-                this);
-            m_topbar->GetCalibMenu()->AppendSubMenu(advance_menu, _L("More..."));
-        }
-
-        // help
-        append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Tutorial"), _L("Calibration help"),
-            [this](wxCommandEvent&) {
-                try {
-                    json js;
-                    js["cali_type"] = "third_cali_tutorial";
-                    NetworkAgent *agent   = GUI::wxGetApp().getAgent();
-                    if (agent) agent->track_event("third_cali", js.dump());
-                } catch (...) {}
-                wxLaunchDefaultBrowser("https://wiki.bambulab.com/en/bambu-studio/Calibration", wxBROWSER_NEW_WINDOW);
-            }, "", nullptr,
-            [this]() {return m_plater->is_view3D_shown();; }, this);
-
-    }
+    // calibrations, in the order of OrcaSlicer's calibration guide
+    fill_calibration_menu(m_topbar->GetCalibMenu());
 #else
     m_menubar->Append(fileMenu, wxString::Format("&%s", _L("File")));
     if (editMenu)
@@ -3843,129 +3770,9 @@ void MainFrame::init_menubar_as_editor()
     //if (publishMenu)
     //    m_menubar->Append(publishMenu, wxString::Format("&%s", _L("3D Models")));
 
-        // SoftFever calibrations
+    // calibrations, in the order of OrcaSlicer's calibration guide
     m_calib_menu = new wxMenu();
-
-    // Temp
-    append_menu_item(
-        m_calib_menu, wxID_ANY, _L("Temperature"), _L("Temperature"),
-        [this](wxCommandEvent &) {
-            if (!m_temp_calib_dlg)
-                m_temp_calib_dlg = new Temp_Calibration_Dlg((wxWindow *) this, wxID_ANY, m_plater);
-            m_temp_calib_dlg->ShowModal();
-        },
-        "", nullptr,
-        [this]() {
-            return m_plater->is_view3D_shown();
-            ;
-        },
-        this);
-
-    // Flowrate
-    auto flowrate_menu = new wxMenu();
-    append_menu_item(
-        flowrate_menu, wxID_ANY, _L("Coarse"), _L("Flow rate test - Coarse"),
-        [this](wxCommandEvent &) {
-            if (m_plater) m_plater->calib_flowrate(1);
-        },
-        "", nullptr,
-        [this]() {
-            return m_plater->is_view3D_shown();
-            ;
-        },
-        this);
-    append_menu_item(
-        flowrate_menu, wxID_ANY, _L("Fine"), _L("Flow rate test - Fine"),
-        [this](wxCommandEvent &) {
-            if (m_plater) m_plater->calib_flowrate(2);
-        },
-        "", nullptr,
-        [this]() {
-            return m_plater->is_view3D_shown();
-            ;
-        },
-        this);
-    append_submenu(m_calib_menu, flowrate_menu, wxID_ANY, _L("Flow rate"), _L("Flow rate"), "", [this]() {
-        return m_plater->is_view3D_shown();
-        ;
-    });
-
-    // PA
-    append_menu_item(
-        m_calib_menu, wxID_ANY, _L("Pressure advance"), _L("Pressure advance"),
-        [this](wxCommandEvent &) {
-            m_pa_calib_dlg = new PA_Calibration_Dlg((wxWindow *) this, wxID_ANY, m_plater);
-            m_pa_calib_dlg->ShowModal();
-        },
-        "", nullptr,
-        [this]() {
-            return m_plater->is_view3D_shown();
-            ;
-        },
-        this);
-
-    // Retraction
-    append_menu_item(
-        m_calib_menu, wxID_ANY, _L("Retraction test"), _L("Retraction test"),
-        [this](wxCommandEvent &) {
-            if (!m_retraction_calib_dlg) m_retraction_calib_dlg = new Retraction_Test_Dlg((wxWindow *) this, wxID_ANY, m_plater);
-            m_retraction_calib_dlg->ShowModal();
-        },
-        "", nullptr,
-        [this]() {
-            return m_plater->is_view3D_shown();
-            ;
-        },
-        this);
-
-    // Advance calibrations
-    auto advance_menu = new wxMenu();
-    append_menu_item(
-        advance_menu, wxID_ANY, _L("Max flowrate"), _L("Max flowrate"),
-        [this](wxCommandEvent &) {
-            if (!m_vol_test_dlg) m_vol_test_dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow *) this, wxID_ANY, m_plater);
-            m_vol_test_dlg->ShowModal();
-        },
-        "", nullptr,
-        [this]() {
-            return m_plater->is_view3D_shown();
-            ;
-        },
-        this);
-    append_menu_item(
-        advance_menu, wxID_ANY, _L("VFA"), _L("VFA"),
-        [this](wxCommandEvent &) {
-            if (!m_vfa_test_dlg) m_vfa_test_dlg = new VFA_Test_Dlg((wxWindow *) this, wxID_ANY, m_plater);
-            m_vfa_test_dlg->ShowModal();
-        },
-        "", nullptr,
-        [this]() {
-            return m_plater->is_view3D_shown();
-            ;
-        },
-        this);
-
-    append_submenu(m_calib_menu, advance_menu, wxID_ANY, _L("More..."), _L("More calibrations"), "", [this]() {
-        return m_plater->is_view3D_shown();
-        ;
-    });
-    // help
-    append_menu_item(
-        m_calib_menu, wxID_ANY, _L("Tutorial"), _L("Calibration help"),
-        [this](wxCommandEvent &) {
-            try {
-                json js;
-                js["cali_type"] = "third_cali_tutorial";
-                NetworkAgent *agent = GUI::wxGetApp().getAgent();
-                if (agent) agent->track_event("third_cali", js.dump());
-            } catch (...) {}
-            wxLaunchDefaultBrowser("https://wiki.bambulab.com/en/bambu-studio/Calibration", wxBROWSER_NEW_WINDOW);
-        }, "", nullptr,
-        [this]() {
-            return m_plater->is_view3D_shown();
-            ;
-        },
-        this);
+    fill_calibration_menu(m_calib_menu);
 
     m_menubar->Append(new wxMenu(), L("Window"));
     std::string window_items[] = {
@@ -4114,13 +3921,97 @@ void MainFrame::update_menubar()
     const bool is_fff = plater()->printer_technology() == ptFFF;
 }
 
+// MiniMe: the calibration menu, in the order of OrcaSlicer's calibration guide (filament tests first, then the printer ones)
+void MainFrame::fill_calibration_menu(wxMenu *menu)
+{
+    auto in_3d = [this]() { return m_plater != nullptr && m_plater->is_view3D_shown(); };
+    auto item  = [this, menu, in_3d](wxMenu *where, const wxString &label, const wxString &help, std::function<void()> run) {
+        append_menu_item(where != nullptr ? where : menu, wxID_ANY, label, help, [run](wxCommandEvent &) { run(); }, "", nullptr, in_3d, this);
+    };
+
+    item(nullptr, _L("Temperature"), _L("Temperature tower: the best printing temperature"), [this]() {
+        if (!m_temp_calib_dlg)
+            m_temp_calib_dlg = new Temp_Calibration_Dlg((wxWindow *) this, wxID_ANY, m_plater);
+        m_temp_calib_dlg->ShowModal();
+    });
+    item(nullptr, _L("Max flowrate"), _L("The most filament the hot end can melt (max volumetric speed)"), [this]() {
+        if (!m_vol_test_dlg)
+            m_vol_test_dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow *) this, wxID_ANY, m_plater);
+        m_vol_test_dlg->ShowModal();
+    });
+    item(nullptr, _L("Pressure advance"), _L("Pressure advance (flow dynamics): sharp corners and even lines"), [this]() {
+        m_pa_calib_dlg = new PA_Calibration_Dlg((wxWindow *) this, wxID_ANY, m_plater);
+        m_pa_calib_dlg->ShowModal();
+    });
+    auto flow_menu = new wxMenu();
+    item(flow_menu, _L("Pass 1 (coarse)"), _L("Flow rate test - coarse: blocks from -20% to +20%"), [this]() {
+        if (m_plater)
+            m_plater->calib_flowrate(1);
+    });
+    item(flow_menu, _L("Pass 2 (fine)"), _L("Flow rate test - fine: blocks from -9% to 0% around the result of pass 1"), [this]() {
+        if (m_plater)
+            m_plater->calib_flowrate(2);
+    });
+    append_submenu(menu, flow_menu, wxID_ANY, _L("Flow ratio"), _L("Flow rate calibration"), "", in_3d);
+    item(nullptr, _L("Retraction"), _L("Retraction tower: the shortest retraction without stringing"), [this]() {
+        if (!m_retraction_calib_dlg)
+            m_retraction_calib_dlg = new Retraction_Test_Dlg((wxWindow *) this, wxID_ANY, m_plater);
+        m_retraction_calib_dlg->ShowModal();
+    });
+
+    menu->AppendSeparator();
+    // printer motion: only for firmwares that take the values from the G-code
+    auto motion = [this](CalibMode mode) {
+        PresetBundle *pb      = wxGetApp().preset_bundle;
+        Preset       &printer = pb->printers.get_edited_preset();
+        GCodeFlavor   flavor  = gcfMarlinFirmware;
+        if (const auto *fl = printer.config.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor"))
+            flavor = fl->value;
+        wxString why;
+        if (printer.is_bbl_vendor_preset(pb))
+            why = mode == CalibMode::Calib_Cornering ?
+                      _L("Bambu Lab printers set their own cornering limits, and MiniMe does not send jerk to them, so every height of this "
+                         "test would print the same.") :
+                      _L("Bambu Lab printers measure and set their own vibration compensation (input shaping) in their startup calibration, "
+                         "so this manual test is not needed and cannot change it.");
+        else if (!motion_calibration_supported(mode, flavor))
+            why = _L("This test needs Klipper, Marlin 2 or RepRapFirmware (the G-code flavor in the printer settings).");
+        if (!why.IsEmpty()) {
+            MessageDialog msg(this, why, _L("Calibration"), wxICON_INFORMATION | wxOK);
+            msg.ShowModal();
+            return;
+        }
+        Motion_Test_Dlg dlg((wxWindow *) this, wxID_ANY, m_plater, mode);
+        dlg.ShowModal();
+    };
+    item(nullptr, _L("Cornering"), _L("Cornering calibration: jerk, junction deviation or square corner velocity"),
+         [motion]() { motion(CalibMode::Calib_Cornering); });
+    auto shaping_menu = new wxMenu();
+    item(shaping_menu, _L("Input shaping frequency"), _L("Input shaping: the resonance frequency"),
+         [motion]() { motion(CalibMode::Calib_Input_Shaping_Freq); });
+    item(shaping_menu, _L("Input shaping damping"), _L("Input shaping: the damping (zeta) factor"),
+         [motion]() { motion(CalibMode::Calib_Input_Shaping_Damp); });
+    append_submenu(menu, shaping_menu, wxID_ANY, _L("Input shaping"), _L("Input shaping calibration"), "", in_3d);
+    item(nullptr, _L("VFA"), _L("Vertical fine artifacts: the wall speeds that cause ripples"), [this]() {
+        if (!m_vfa_test_dlg)
+            m_vfa_test_dlg = new VFA_Test_Dlg((wxWindow *) this, wxID_ANY, m_plater);
+        m_vfa_test_dlg->ShowModal();
+    });
+
+    menu->AppendSeparator();
+    item(nullptr, _L("Calibration guide"), _L("How to run and read each test (OrcaSlicer's guide)"), []() {
+        wxLaunchDefaultBrowser("https://www.orcaslicer.com/wiki/guides/calibration_guide.html", wxBROWSER_NEW_WINDOW);
+    });
+}
+
 void MainFrame::update_calibration_button_status()
 {
     Preset &printer_preset = wxGetApp().preset_bundle->printers.get_edited_preset();
     bool isBBL = printer_preset.is_bbl_vendor_preset(wxGetApp().preset_bundle);
     bool is_multi_extruder = wxGetApp().preset_bundle->get_printer_extruder_count() > 1;
-    // Show calibration Menu for BBL printers if Develop Mode is on.
-    bool show_calibration = (!isBBL || wxGetApp().app_config->get("developer_mode") == "true");
+    // MiniMe: the calibration menu is for every printer (Bambu Studio showed it to Bambu Lab printers in developer mode only)
+    (void) is_multi_extruder;
+    bool show_calibration = true;
     wxGetApp().mainframe->show_calibration_button(show_calibration, isBBL);
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include "GCodeWriter.hpp"
@@ -21,7 +22,11 @@ enum class CalibMode : int {
     Calib_Temp_Tower,
     Calib_Vol_speed_Tower,
     Calib_VFA_Tower,
-    Calib_Retraction_tower
+    Calib_Retraction_tower,
+    // MiniMe: OrcaSlicer's motion calibrations, a value that changes with the height of a tower
+    Calib_Cornering,
+    Calib_Input_Shaping_Freq,
+    Calib_Input_Shaping_Damp
 };
 
 enum class CalibState {
@@ -42,7 +47,27 @@ struct Calib_Params
     double start, end, step;
     bool print_numbers = false;
     CalibMode mode;
+    // motion towers: the value goes from start (at z_from) to end (at z_to) in a straight line
+    double z_from = 0., z_to = 0.;
+    // input shaping: the shaper type ("" = the firmware's), the damping for the frequency test, the X/Y frequencies for the
+    // damping test; cornering: "jd" uses Marlin's junction deviation instead of jerk
+    std::string option;
+    double damping = 0., freq_x = 0., freq_y = 0.;
+    // the value at a height of a motion tower
+    double value_at(double z) const
+    {
+        if (z_to <= z_from)
+            return start;
+        const double t = std::clamp((z - z_from) / (z_to - z_from), 0., 1.);
+        return start + (end - start) * t;
+    }
 };
+
+// MiniMe: the G-code that sets the value of a motion tower (cornering / input shaping) at a height, for the printer's firmware;
+// empty for firmwares that cannot take it
+std::string motion_calibration_gcode(const Calib_Params &params, double z, GCodeFlavor flavor);
+// whether a firmware can take the G-code of a motion tower
+bool motion_calibration_supported(CalibMode mode, GCodeFlavor flavor);
 
 enum FlowRatioCalibrationType {
     COMPLETE_CALIBRATION = 0,

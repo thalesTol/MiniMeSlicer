@@ -4767,6 +4767,11 @@ GCode::LayerResult GCode::process_layer(
         sprintf(buf, "; Calib_Retraction_tower: Z_HEIGHT: %g, length:%g\n", print_z, _length);
         gcode += buf;
     }
+    else if (print.calib_mode() == CalibMode::Calib_Cornering || print.calib_mode() == CalibMode::Calib_Input_Shaping_Freq ||
+             print.calib_mode() == CalibMode::Calib_Input_Shaping_Damp) {
+        // MiniMe: OrcaSlicer's motion towers, the firmware value changes with the height
+        gcode += motion_calibration_gcode(print.calib_params(), print_z, m_config.gcode_flavor.value);
+    }
 
     //BBS
     if (first_layer) {

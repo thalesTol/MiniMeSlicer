@@ -30,6 +30,9 @@
 #include "libslic3r/TriangleMeshSlicer.hpp"
 #include "libslic3r/CustomGCode.hpp"
 #include "libslic3r/CutUtils.hpp"
+#include "libslic3r/Calib.hpp"
+#include "libslic3r/AABBMesh.hpp"
+#include "libslic3r/QuadricEdgeCollapse.hpp"
 #include "libslic3r/Geometry.hpp"
 
 #include <boost/asio.hpp>
@@ -1186,27 +1189,30 @@ json support_report_json()
 
 json tool_slice(const json &args)
 {
-    const int timeout_s = std::clamp(int(num(args, "timeout_seconds", 600)), 10, 3600);
-    if (args.contains("plate") && !args["plate"].is_null()) {
-        on_gui([args]() -> json {
-            const int idx = plate_arg(args);
-            if (idx != plater()->get_partplate_list().get_curr_plate_index())
-                plater()->select_plate(idx);
-            return {};
-        });
-    }
-    on_gui([]() -> json {
-        Plater    *p     = plater();
-        PartPlate *plate = p->get_partplate_list().get_curr_plate();
-        if (plate->get_obj_and_inst_set().empty())
-            throw ToolError("the current plate is empty");
-        close_gizmo();
-        wxPostEvent(p, SimpleEvent(EVT_GLTOOLBAR_SLICE_PLATE));
-        return {};
+    // a chat tool call is cut off after about a minute: wait at most this long, then report how far it got. Calling slice
+    // again for the same plate keeps waiting; it does not start the slice over.
+    const int wait_s = std::clamp(int(num(args, "wait_seconds", num(args, "timeout_seconds", 45))), 5, 45);
+    const json begin = on_gui([args]() -> json {
+        Plater        *p    = plater();
+        PartPlateList &pl   = p->get_partplate_list();
+        const int      idx  = plate_arg(args);
+        const bool     busy = p->is_background_process_slicing();
+        if (busy && idx != pl.get_curr_plate_index())
+            throw ToolError("MiniMe is slicing plate " + std::to_string(pl.get_curr_plate_index()) +
+                            " now: call slice for that plate to wait for it, then slice this one");
+        if (idx != pl.get_curr_plate_index())
+            p->select_plate(idx);
+        if (pl.get_curr_plate()->get_obj_and_inst_set().empty())
+            throw ToolError("the plate is empty");
+        if (!busy) {
+            close_gizmo();
+            wxPostEvent(p, SimpleEvent(EVT_GLTOOLBAR_SLICE_PLATE));
+        }
+        return {{"continuing", busy}, {"plate", idx}};
     });
 
     const auto start = std::chrono::steady_clock::now();
-    bool       seen_busy = false;
+    bool       seen_busy = begin["continuing"].get<bool>();
     int        retries   = 0;
     double     idle_since = -1.; // MiniMe looks idle for a moment between slicing and making the G-code
     for (;;) {
@@ -1241,8 +1247,21 @@ json tool_slice(const json &args)
         }
         if (idle_since >= 0. && elapsed - idle_since > 5. && (seen_busy || elapsed > 8.))
             throw ToolError("slicing stopped without a result - MiniMe shows the reason in its notifications (render_view can show it)");
-        if (elapsed > timeout_s)
-            throw ToolError("slicing takes longer than " + std::to_string(timeout_s) + " s; it goes on in MiniMe, call slice again later");
+        if (elapsed > wait_s) {
+            // still slicing: say how far it got, the caller asks again
+            return on_gui([elapsed]() -> json {
+                PartPlateList &pl    = plater()->get_partplate_list();
+                PartPlate     *plate = pl.get_curr_plate();
+                return {{"state", "still slicing"},
+                        {"plate", pl.get_curr_plate_index()},
+                        {"percent", int(plate->get_slicing_percent())},
+                        {"step", plate->get_slicing_stage()},
+                        {"waited_seconds", int(elapsed)},
+                        {"note", "MiniMe goes on slicing. Call slice again for this plate to keep waiting (it continues, it does "
+                                 "not start over); there is no need for sleep commands. Heavy meshes slice faster after "
+                                 "simplify."}};
+            });
+        }
     }
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 
@@ -2244,8 +2263,12 @@ json tool_price(const json &args)
     });
     if (want["plates"].empty())
         throw ToolError("no plate has objects on it");
-    for (const json &i : want["todo"])
-        tool_slice({{"plate", i}, {"timeout_seconds", num(args, "timeout_seconds", 600)}});
+    for (const json &i : want["todo"]) {
+        const json r = tool_slice({{"plate", i}});
+        if (r.contains("state"))
+            throw ToolError("plate " + std::to_string(i.get<int>()) + " is still slicing (" + std::to_string(r["percent"].get<int>()) +
+                            "%, " + r["step"].get<std::string>() + "): call slice for it until it is done, then price");
+    }
     return on_gui([args, all, want]() -> json {
         Plater *p = plater();
         if (all && !want["todo"].empty() && p->get_partplate_list().get_curr_plate_index() != want["current"].get<int>())
@@ -2271,6 +2294,335 @@ json tool_price(const json &args)
             j["sliced_now"] = want["todo"];
         j["note"] = std::string("money in R$; margins are R$ per print hour; scenario prices already include the channel fee") +
                     (all ? "; all plates are one product: time and filament added up, packaging and shipping counted once" : "");
+        return j;
+    });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// simplify: fewer triangles for heavy meshes (MiniMe's Simplify model), checked against the original surface. It can take
+// longer than one chat tool call, so it runs in the background and the tool reports its progress.
+
+struct SimplifyJob
+{
+    std::mutex  mutex;
+    bool        running{false};
+    std::string key;     // the request (object + settings) the job is for
+    int         percent{0};
+    json        result;  // when done
+    std::string error;
+    // the last result handed over: the same request on the mesh it made is not simplified a second time
+    std::string done_key;
+    json        done_result;
+    size_t      done_triangles{0};
+};
+SimplifyJob s_simplify;
+
+json tool_simplify(const json &args)
+{
+    const double keep_pct = num(args, "keep_percent", 25.);
+    const double max_dev  = num(args, "max_deviation_mm", 0.02);
+    if (keep_pct <= 0. || keep_pct >= 100.)
+        throw ToolError("keep_percent is the share of triangles to keep, between 0 and 100");
+    if (max_dev <= 0.)
+        throw ToolError("max_deviation_mm must be above 0");
+
+    // the meshes to simplify (a copy; the object may change while the job runs, then nothing is applied)
+    struct Piece { ObjectID volume_id; std::string name; indexed_triangle_set its; double scale; };
+    auto pieces = std::make_shared<std::vector<Piece>>();
+    const json who = on_gui([&args, pieces]() -> json {
+        const int    obj_idx = find_object(args);
+        ModelObject *mo      = plater()->model().objects[obj_idx];
+        const bool   one     = args.contains("part") && !args["part"].is_null();
+        const int    only    = one ? find_part(mo, args) : -1;
+        for (int vi = 0; vi < int(mo->volumes.size()); ++vi) {
+            ModelVolume *mv = mo->volumes[vi];
+            if ((one && vi != only) || (!one && !mv->is_model_part()) || mv->mesh().its.indices.size() < 2000)
+                continue;
+            const Transform3d m = mo->instances[0]->get_matrix() * mv->get_matrix();
+            const double      sc = std::max({m.linear().col(0).norm(), m.linear().col(1).norm(), m.linear().col(2).norm()});
+            pieces->push_back({mv->id(), mv->name, mv->mesh().its, sc});
+        }
+        if (pieces->empty())
+            throw ToolError("nothing to simplify: the parts of '" + mo->name + "' have under 2000 triangles");
+        size_t tris = 0;
+        for (const Piece &pc : *pieces)
+            tris += pc.its.indices.size();
+        return {{"object", mo->name}, {"object_id", mo->id().id}, {"triangles", tris}};
+    });
+    json key_j = args;
+    key_j.erase("wait_seconds");
+    key_j["object"] = who["object"];
+    const std::string key = key_j.dump();
+
+    {
+        std::lock_guard<std::mutex> lock(s_simplify.mutex);
+        if (!s_simplify.running && s_simplify.done_key == key && s_simplify.done_triangles == who["triangles"].get<size_t>()) {
+            json again    = s_simplify.done_result;
+            again["note"] = "already simplified with these settings: nothing changed. Simplifying again would move the surface "
+                            "further; use undo to go back to the original.";
+            return again;
+        }
+        if (s_simplify.running && s_simplify.key != key)
+            throw ToolError("another simplify is running (" + std::to_string(s_simplify.percent) + "%); call simplify with its settings to wait for it");
+        if (!s_simplify.running && s_simplify.key == key && (!s_simplify.result.is_null() || !s_simplify.error.empty())) {
+            // done since the last call: hand over the result once
+            s_simplify.key.clear();
+            if (!s_simplify.error.empty())
+                throw ToolError(s_simplify.error);
+            if (s_simplify.result.value("applied", false)) {
+                s_simplify.done_key       = key;
+                s_simplify.done_result    = s_simplify.result;
+                s_simplify.done_triangles = s_simplify.result.value("triangles_after", size_t(0));
+            }
+            return s_simplify.result;
+        }
+        if (!s_simplify.running) {
+            s_simplify.running = true;
+            s_simplify.key     = key;
+            s_simplify.percent = 0;
+            s_simplify.result  = json();
+            s_simplify.error.clear();
+            const ObjectID object_id(size_t(who["object_id"].get<size_t>()));
+            std::thread([pieces, keep_pct, max_dev, object_id, name = who["object"].get<std::string>()]() {
+                json        out;
+                std::string err;
+                try {
+                    std::vector<indexed_triangle_set> results;
+                    json        parts   = json::array();
+                    double      worst   = 0.;
+                    size_t      before  = 0, after = 0;
+                    const size_t n      = pieces->size();
+                    for (size_t k = 0; k < n; ++k) {
+                        const Piece &pc     = (*pieces)[k];
+                        indexed_triangle_set its = pc.its;
+                        const uint32_t target = uint32_t(std::max<double>(500., its.indices.size() * keep_pct / 100.));
+                        its_quadric_edge_collapse(its, target, nullptr, nullptr, [k, n](int pct) {
+                            std::lock_guard<std::mutex> lock(s_simplify.mutex);
+                            s_simplify.percent = int((k * 100 + pct * 0.8) / n);
+                        });
+                        // how far the surface moved: original vertices to the new surface, and new vertices to the original
+                        const AABBMesh orig_tree(pc.its), new_tree(its);
+                        auto farthest = [](const indexed_triangle_set &from, const AABBMesh &to) {
+                            double       m    = 0.;
+                            const size_t step = std::max<size_t>(1, from.vertices.size() / 60000);
+                            for (size_t i = 0; i < from.vertices.size(); i += step)
+                                m = std::max(m, to.squared_distance(from.vertices[i].cast<double>()));
+                            return std::sqrt(m);
+                        };
+                        const double dev = std::max(farthest(pc.its, new_tree), farthest(its, orig_tree)) * pc.scale;
+                        worst            = std::max(worst, dev);
+                        before += pc.its.indices.size();
+                        after += its.indices.size();
+                        parts.push_back({{"part", pc.name}, {"triangles_before", pc.its.indices.size()}, {"triangles_after", its.indices.size()},
+                                         {"max_deviation_mm", r2(dev * 1000.) / 1000.}});
+                        results.push_back(std::move(its));
+                        std::lock_guard<std::mutex> lock(s_simplify.mutex);
+                        s_simplify.percent = int((k + 1) * 100 / n);
+                    }
+                    out = {{"object", name}, {"parts", parts}, {"triangles_before", before}, {"triangles_after", after},
+                           {"max_deviation_mm", r2(worst * 1000.) / 1000.}, {"limit_mm", max_dev}};
+                    if (worst > max_dev) {
+                        out["applied"] = false;
+                        out["note"]    = "not applied: the surface would move more than the limit; keep more triangles (higher "
+                                         "keep_percent) or allow more deviation";
+                    } else {
+                        // apply on MiniMe's thread, as one undo step, if the object is still the same
+                        out["applied"] = on_gui([pieces, &results, object_id, name]() -> json {
+                            Plater *p   = plater();
+                            int     idx = -1;
+                            for (size_t i = 0; i < p->model().objects.size(); ++i)
+                                if (p->model().objects[i]->id() == object_id)
+                                    idx = int(i);
+                            if (idx < 0)
+                                return false;
+                            ModelObject *mo = p->model().objects[idx];
+                            std::vector<ModelVolume *> vols;
+                            for (const Piece &pc : *pieces) {
+                                ModelVolume *found = nullptr;
+                                for (ModelVolume *mv : mo->volumes)
+                                    if (mv->id() == pc.volume_id && mv->mesh().its.indices.size() == pc.its.indices.size())
+                                        found = mv;
+                                if (found == nullptr)
+                                    return false; // changed meanwhile
+                                vols.push_back(found);
+                            }
+                            close_gizmo();
+                            Plater::TakeSnapshot snapshot(p, "Claude: simplify " + name);
+                            p->clear_before_change_mesh(idx);
+                            for (size_t k = 0; k < vols.size(); ++k) {
+                                ModelVolume *mv = vols[k];
+                                mv->set_mesh(std::move(results[k]));
+                                mv->calculate_convex_hull();
+                                mv->invalidate_convex_hull_2d();
+                                mv->set_new_unique_id();
+                            }
+                            mo->invalidate_bounding_box();
+                            mo->ensure_on_bed();
+                            p->changed_mesh(idx);
+                            wxGetApp().obj_list()->update_item_error_icon(idx, -1);
+                            return true;
+                        });
+                        if (!out["applied"].get<bool>())
+                            out["note"] = "not applied: the object was changed or deleted while simplifying";
+                        else
+                            out["note"] = "applied as one undo step; slice to see the time saved";
+                    }
+                } catch (const std::exception &e) {
+                    err = std::string("simplify failed: ") + e.what();
+                }
+                std::lock_guard<std::mutex> lock(s_simplify.mutex);
+                s_simplify.running = false;
+                s_simplify.result  = out;
+                s_simplify.error   = err;
+            }).detach();
+        }
+    }
+
+    // wait for it, at most one chat call long
+    const int  wait_s = std::clamp(int(num(args, "wait_seconds", 40)), 1, 45);
+    const auto t0     = std::chrono::steady_clock::now();
+    for (;;) {
+        {
+            std::lock_guard<std::mutex> lock(s_simplify.mutex);
+            if (!s_simplify.running && s_simplify.key == key) {
+                s_simplify.key.clear();
+                if (!s_simplify.error.empty())
+                    throw ToolError(s_simplify.error);
+                if (s_simplify.result.value("applied", false)) {
+                    s_simplify.done_key       = key;
+                    s_simplify.done_result    = s_simplify.result;
+                    s_simplify.done_triangles = s_simplify.result.value("triangles_after", size_t(0));
+                }
+                return s_simplify.result;
+            }
+            if (std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() > wait_s)
+                return {{"state", "still simplifying"}, {"percent", s_simplify.percent},
+                        {"note", "it goes on in the background: call simplify again with the same settings to wait for the result"}};
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// calibration tests (the Calibration menu): a new project with the test object and the test settings
+
+json tool_calibration_test(const json &args)
+{
+    const std::string test = lower(str(args, "test", ""));
+    return on_gui([args, test]() -> json {
+        Plater       *p  = plater();
+        PresetBundle *pb = wxGetApp().preset_bundle;
+        // the test replaces the project and changes the settings: only from a clean start, never over the user's work
+        if (!p->model().objects.empty())
+            throw ToolError("the project has objects: a calibration test replaces the whole project. Ask the user to save and close it "
+                            "(File > New project), or to start the test from the Calibration menu.");
+        if (wxGetApp().has_current_preset_changes())
+            throw ToolError("the printer, filament or process settings have unsaved changes (an earlier test also leaves some): the "
+                            "test would discard them. Ask the user to save or discard them first, or to use the Calibration menu.");
+        Preset       &printer = pb->printers.get_edited_preset();
+        GCodeFlavor   flavor  = gcfMarlinFirmware;
+        if (const auto *fl = printer.config.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor"))
+            flavor = fl->value;
+
+        Calib_Params params;
+        params.start = num(args, "start", 0.);
+        params.end   = num(args, "end", 0.);
+        params.step  = num(args, "step", 0.);
+        auto need_range = [&](bool step) {
+            if (!args.contains("start") || !args.contains("end") || params.end <= params.start || params.start < 0. ||
+                (step && params.step <= 0.))
+                throw ToolError(std::string("give start and end (end above start)") + (step ? " and step above 0" : ""));
+        };
+        json table = json::array();
+        std::string how;
+        int         flow_pass = 0;
+        if (test == "temperature") {
+            if (!args.contains("start") || !args.contains("end") || params.start > 350. || params.end < 180. || params.end > params.start - 5.)
+                throw ToolError("give start (the hottest, at the bottom, <= 350) and end (the coolest, >= 180, at least 5 below start)");
+            params.mode = CalibMode::Calib_Temp_Tower;
+            for (double t = params.start, z = 0.; t >= params.end - 1e-6; t -= 5., z += 10.)
+                table.push_back({{"z_mm", json::array({z, z + 10.})}, {"temperature", t}});
+            how = "one 10 mm block per temperature, 5 degrees apart, hottest at the bottom; pick the block with the best bridges, "
+                  "overhangs and least stringing";
+        } else if (test == "max_flowrate") {
+            need_range(true);
+            params.mode = CalibMode::Calib_Vol_speed_Tower;
+            how = "the flow rises with the height (start at the bottom, + step per mm of height); find where the wall starts to fail "
+                  "(gaps, rough surface) and read the volumetric speed just below it";
+        } else if (test == "pressure_advance") {
+            need_range(true);
+            const std::string method = lower(str(args, "method", "tower"));
+            params.mode = method == "line" ? CalibMode::Calib_PA_Line : method == "pattern" ? CalibMode::Calib_PA_Pattern : CalibMode::Calib_PA_Tower;
+            params.print_numbers = true;
+            how = method == "tower" ? "the value rises by step every 1 mm of height; pick the height with the sharpest corners" :
+                                      "each line / pattern has its value printed next to it; pick the most even one";
+        } else if (test == "flow_coarse" || test == "flow_fine") {
+            flow_pass = test == "flow_coarse" ? 1 : 2;
+            how = flow_pass == 1 ? "blocks with flow -20% to +20% of the current flow ratio; pick the smoothest top and run flow_fine after "
+                                   "setting the new ratio" :
+                                   "blocks with flow -9% to 0%; pick the smoothest top";
+        } else if (test == "retraction") {
+            need_range(true);
+            params.mode = CalibMode::Calib_Retraction_tower;
+            how = "the retraction length rises by step per mm of height; pick the lowest height without strings and read the length";
+        } else if (test == "vfa") {
+            need_range(true);
+            params.mode = CalibMode::Calib_VFA_Tower;
+            for (double v = params.start, z = 0.; v <= params.end + 1e-6; v += params.step, z += 5.)
+                table.push_back({{"z_mm", json::array({z, z + 5.})}, {"outer_wall_speed", v}});
+            how = "one 5 mm band per wall speed; avoid the speeds whose bands show fine vertical ripples";
+        } else if (test == "cornering" || test == "input_shaping_freq" || test == "input_shaping_damp") {
+            params.mode = test == "cornering" ? CalibMode::Calib_Cornering :
+                          test == "input_shaping_freq" ? CalibMode::Calib_Input_Shaping_Freq : CalibMode::Calib_Input_Shaping_Damp;
+            if (printer.is_bbl_vendor_preset(pb))
+                throw ToolError(test == "cornering" ? "Bambu Lab printers set their own cornering limits and MiniMe sends no jerk to them: "
+                                                      "this test would print the same at every height" :
+                                                      "Bambu Lab printers set their own vibration compensation (input shaping) in their "
+                                                      "startup calibration: this test cannot change it");
+            if (!motion_calibration_supported(params.mode, flavor))
+                throw ToolError("this test needs Klipper, Marlin 2 or RepRapFirmware as the printer's G-code flavor");
+            need_range(false);
+            params.option  = lower(str(args, "option", ""));
+            params.damping = num(args, "damping", 0.);
+            params.freq_x  = num(args, "freq_x", 0.);
+            params.freq_y  = num(args, "freq_y", 0.);
+            if (params.mode == CalibMode::Calib_Input_Shaping_Damp && (params.freq_x <= 0. || params.freq_y <= 0. || params.end >= 1.))
+                throw ToolError("the damping test needs freq_x and freq_y (from the frequency test) and damping start < end < 1");
+            Calib_Params shown = params;
+            shown.z_from = 1.;
+            shown.z_to   = 50.; // the tower is 50 mm tall
+            for (double z = 1.; z <= 50. + 1e-6; z += 7.)
+                table.push_back({{"z_mm", z}, {"value", r2(shown.value_at(z) * 1000.) / 1000.}});
+            how = "a 60 x 60 x 50 mm box with one wall; the value goes in a straight line from start at 1 mm to end at 50 mm; find the "
+                  "height where the walls look best (least ringing, sharpest corners) and read the value there (value = start + (end - "
+                  "start) * (height - 1) / 49)";
+        } else
+            throw ToolError("'test' is temperature, max_flowrate, pressure_advance, flow_coarse, flow_fine, retraction, vfa, cornering, "
+                            "input_shaping_freq or input_shaping_damp");
+
+        // a fresh project without asking (it is empty and nothing is unsaved), so the test does not stop at a question
+        p->new_project(true, true);
+        switch (params.mode) {
+        case CalibMode::Calib_Temp_Tower: p->calib_temp(params); break;
+        case CalibMode::Calib_Vol_speed_Tower: p->calib_max_vol_speed(params); break;
+        case CalibMode::Calib_PA_Tower:
+        case CalibMode::Calib_PA_Line:
+        case CalibMode::Calib_PA_Pattern: p->calib_pa(params); break;
+        case CalibMode::Calib_Retraction_tower: p->calib_retraction(params); break;
+        case CalibMode::Calib_VFA_Tower: p->calib_VFA(params); break;
+        case CalibMode::Calib_Cornering:
+        case CalibMode::Calib_Input_Shaping_Freq:
+        case CalibMode::Calib_Input_Shaping_Damp: p->calib_motion(params); break;
+        default: p->calib_flowrate(flow_pass); break;
+        }
+        json objects = json::array();
+        for (const ModelObject *mo : p->model().objects)
+            objects.push_back(mo->name);
+        json j = {{"started", test}, {"objects", objects}, {"how_to_read", how},
+                  {"note", "the test changed the process and filament settings for this project (unsaved). Slice to check it; the "
+                           "user prints it and tells you what they see. Their own presets are not saved with the test values."}};
+        if (!table.empty())
+            j["value_by_height"] = table;
         return j;
     });
 }
@@ -2499,10 +2851,11 @@ const std::vector<Tool> &tools()
             tool_render_view);
         add("slice",
             "Slices the current plate (as the Slice button does), waits for it and returns print time, support print time, filament, "
-            "warnings and the support report per object.",
+            "warnings and the support report per object. One call waits at most about 45 s: a heavy plate answers 'still "
+            "slicing' with the percent and step; call slice again for the same plate to keep waiting (it does not start over).",
             R"J({"type": "object", "properties": {
                 "plate": {"type": "integer", "description": "plate to make current first"},
-                "timeout_seconds": {"type": "integer"}}})J",
+                "wait_seconds": {"type": "integer", "description": "how long this call waits, at most 45"}}})J",
             tool_slice);
         add("support_report", "The last tree support summary per object: branches on the plate, on painted tops, in no-support zones, thinned trunks.",
             R"J({"type": "object", "properties": {}})J", tool_support_report);
@@ -2715,6 +3068,33 @@ const std::vector<Tool> &tools()
                 "slot": {"type": "integer", "description": "assign: the MiniMe filament number"},
                 "price_kg": {"type": "number", "description": "assign: a price per kg instead of a list filament"}}, "required": ["action"]})J",
             tool_pricing);
+        add("simplify",
+            "Reduces the triangles of an object's parts (or one part), as MiniMe's Simplify model does, to make heavy meshes "
+            "(hundreds of thousands to millions of triangles) slice much faster. It measures how far the surface moves and "
+            "applies the result (one undo step) only within max_deviation_mm, so details stay. Takes a while on big meshes: "
+            "if it says still simplifying, call it again with the same settings.",
+            R"J({"type": "object", "properties": {"object": $OBJ,
+                "part": {"type": ["integer", "string"], "description": "only this part; default every solid part"},
+                "keep_percent": {"type": "number", "description": "share of the triangles to keep, default 25"},
+                "max_deviation_mm": {"type": "number", "description": "the most the surface may move, default 0.02"}}, "required": ["object"]})J",
+            tool_simplify);
+        add("calibration_test",
+            "Starts a calibration test from MiniMe's Calibration menu as a new project (test object + test settings): temperature "
+            "tower, max_flowrate, pressure_advance (method tower / line / pattern), flow_coarse and flow_fine (flow ratio), "
+            "retraction, vfa, and for Klipper / Marlin / RepRapFirmware printers cornering (jerk, or option=jd for Marlin junction "
+            "deviation), input_shaping_freq and input_shaping_damp (option = shaper type). Only when the project is empty and no "
+            "settings are unsaved; it says how to read the result and, for towers, the value at each height.",
+            R"J({"type": "object", "properties": {
+                "test": {"type": "string", "enum": ["temperature", "max_flowrate", "pressure_advance", "flow_coarse", "flow_fine", "retraction", "vfa", "cornering", "input_shaping_freq", "input_shaping_damp"]},
+                "start": {"type": "number", "description": "value at the bottom (temperature: the hottest)"},
+                "end": {"type": "number", "description": "value at the top (temperature: the coolest)"},
+                "step": {"type": "number", "description": "max_flowrate, pressure_advance, retraction, vfa"},
+                "method": {"type": "string", "enum": ["tower", "line", "pattern"], "description": "pressure_advance"},
+                "option": {"type": "string", "description": "cornering: jd = Marlin junction deviation; input shaping: shaper type (e.g. mzv)"},
+                "damping": {"type": "number", "description": "input_shaping_freq: damping to use, 0 = firmware's"},
+                "freq_x": {"type": "number", "description": "input_shaping_damp: X frequency from the frequency test"},
+                "freq_y": {"type": "number", "description": "input_shaping_damp: Y frequency"}}, "required": ["test"]})J",
+            tool_calibration_test);
         add("height_range",
             "Different process settings for a band of an object's height (MiniMe's height range modifier, one undo step): e.g. "
             "thicker layers (layer_height_mm) in a hidden body and thin ones where the details and color changes are, or less "
@@ -2769,6 +3149,10 @@ const char *INSTRUCTIONS =
     "supports-only-here areas on the plate), support_report after slicing.\n"
     "- Height ranges: height_range gives a band of an object's height its own layer height or other settings (thick layers in a "
     "hidden body, thin ones at the details). Objects printed side by side need the same ranges to change filament on the same layers.\n"
+    "- Calibration: calibration_test starts a test of the Calibration menu (temperature, max flowrate, pressure advance, flow "
+    "ratio, retraction, VFA, cornering, input shaping) as a new project, only from an empty project with no unsaved settings. "
+    "Read the user's result with its value_by_height; to keep a result, tell the user which setting to change in their filament "
+    "or printer preset.\n"
     "- Price: price gives what to charge for a plate (it slices first when needed), or with plate=\"all\" for a product made of "
     "every plate, with the user's own costs and profit margins (R$), the break-even price and whether a given price is worth "
     "it; pricing reads or (when the user asks) changes their saved costs and filament "
@@ -2780,6 +3164,8 @@ const char *INSTRUCTIONS =
     "- If a tool result says the user changed things since your last call, call get_scene before going on.\n"
     "- Before telling the user to do something by hand or that MiniMe cannot do it, check this list: most edits have a tool.\n"
     "- render_view leaves MiniMe's popups out; zoom_box_on_plate_mm looks closely at one area.\n"
+    "- Heavy meshes (get_scene shows triangles; above about 300 000) slice slowly: offer simplify first, it keeps the surface "
+    "within 0.02 mm. A slice that is not done in one call says 'still slicing': call slice again, never use sleep commands.\n"
     "- Prefer settings for one object (set_settings with object, or height_range for a band of its height) over changing the "
     "whole process preset, and say which one you changed. Ask before changing the process preset for every object.\n"
     "\n"

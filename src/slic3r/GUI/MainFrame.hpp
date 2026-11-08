@@ -299,6 +299,7 @@ public:
     void        init_menubar_as_gcodeviewer();
     void        update_menubar();
     void        update_calibration_button_status();
+    void        fill_calibration_menu(wxMenu *menu);
     // Open item in menu by menu and item name (in actual language)
     void        open_menubar_item(const wxString& menu_name,const wxString& item_name);
 #ifdef _WIN32

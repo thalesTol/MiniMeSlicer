@@ -760,4 +760,167 @@ void Retraction_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
 }
 
 
+
+// Motion_Test_Dlg (MiniMe): OrcaSlicer's cornering and input shaping towers
+//
+
+Motion_Test_Dlg::Motion_Test_Dlg(wxWindow *parent, wxWindowID id, Plater *plater, CalibMode mode)
+    : DPIDialog(parent, id,
+                mode == CalibMode::Calib_Cornering           ? _L("Cornering test") :
+                mode == CalibMode::Calib_Input_Shaping_Freq ? _L("Input shaping frequency test") :
+                                                               _L("Input shaping damping test"),
+                wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
+    , m_mode(mode)
+    , m_plater(plater)
+{
+    const DynamicPrintConfig &printer = wxGetApp().preset_bundle->printers.get_edited_preset().config;
+    if (const auto *fl = printer.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor"))
+        m_flavor = fl->value;
+    const bool marlin = m_flavor == gcfMarlinFirmware || m_flavor == gcfMarlinLegacy;
+
+    wxBoxSizer *v_sizer = new wxBoxSizer(wxVERTICAL);
+    SetSizer(v_sizer);
+    wxStaticBoxSizer *settings = new wxStaticBoxSizer(wxVERTICAL, this, _L("Settings"));
+    const wxSize st_size = FromDIP(wxSize(190, -1));
+    const wxSize ti_size = FromDIP(wxSize(100, -1));
+    auto add_row = [&](const wxString &label, const wxString &unit, TextInput *&input) {
+        auto row  = new wxBoxSizer(wxHORIZONTAL);
+        auto text = new wxStaticText(this, wxID_ANY, label, wxDefaultPosition, st_size, wxALIGN_LEFT);
+        input     = new TextInput(this, "", unit, "", wxDefaultPosition, ti_size, wxTE_CENTRE);
+        input->GetTextCtrl()->SetValidator(wxTextValidator(wxFILTER_NUMERIC));
+        row->Add(text, 0, wxALL | wxALIGN_CENTER_VERTICAL, 2);
+        row->Add(input, 0, wxALL | wxALIGN_CENTER_VERTICAL, 2);
+        settings->Add(row);
+    };
+
+    if (m_mode == CalibMode::Calib_Cornering) {
+        if (marlin) {
+            m_junction = new wxCheckBox(this, wxID_ANY, _L("Junction deviation (Marlin 2 with junction deviation on)"));
+            m_junction->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent &) { set_defaults(); });
+            settings->Add(m_junction, 0, wxALL, 4);
+        }
+        add_row(_L("Start (bottom):"), "", m_tiStart);
+        add_row(_L("End (top):"), "", m_tiEnd);
+    } else {
+        // shaper types the firmware has; Marlin has ZV only
+        if (!marlin) {
+            auto row  = new wxBoxSizer(wxHORIZONTAL);
+            auto text = new wxStaticText(this, wxID_ANY, _L("Shaper type:"), wxDefaultPosition, st_size, wxALIGN_LEFT);
+            wxArrayString types;
+            types.Add(_L("Firmware setting"));
+            if (m_flavor == gcfKlipper)
+                for (const char *t : {"zv", "mzv", "zvd", "ei", "2hump_ei", "3hump_ei"})
+                    types.Add(t);
+            else
+                for (const char *t : {"zvd", "mzv", "zvdd", "zvddd", "ei2", "ei3"})
+                    types.Add(t);
+            m_shaper = new wxChoice(this, wxID_ANY, wxDefaultPosition, ti_size, types);
+            m_shaper->SetSelection(0);
+            row->Add(text, 0, wxALL | wxALIGN_CENTER_VERTICAL, 2);
+            row->Add(m_shaper, 0, wxALL | wxALIGN_CENTER_VERTICAL, 2);
+            settings->Add(row);
+        }
+        if (m_mode == CalibMode::Calib_Input_Shaping_Freq) {
+            add_row(_L("Start frequency (bottom):"), "Hz", m_tiStart);
+            add_row(_L("End frequency (top):"), "Hz", m_tiEnd);
+            add_row(_L("Damping (0 = firmware setting):"), "", m_tiDamping);
+        } else {
+            add_row(_L("Frequency X:"), "Hz", m_tiFreqX);
+            add_row(_L("Frequency Y:"), "Hz", m_tiFreqY);
+            add_row(_L("Start damping (bottom):"), "", m_tiStart);
+            add_row(_L("End damping (top):"), "", m_tiEnd);
+        }
+    }
+    v_sizer->Add(settings, 0, wxEXPAND | wxALL, FromDIP(5));
+
+    m_hint = new wxStaticText(this, wxID_ANY, "");
+    m_hint->SetForegroundColour(wxColour(144, 144, 144));
+    v_sizer->Add(m_hint, 0, wxLEFT | wxRIGHT | wxEXPAND, FromDIP(8));
+    set_defaults();
+
+    v_sizer->Add(0, FromDIP(10), 0, wxEXPAND, 5);
+    m_btnStart = new Button(this, _L("OK"));
+    StateColor btn_bg(std::pair<wxColour, int>(wxColour(20, 80, 184), StateColor::Pressed),
+                      std::pair<wxColour, int>(wxColour(91, 157, 255), StateColor::Hovered),
+                      std::pair<wxColour, int>(wxColour(30, 110, 240), StateColor::Normal));
+    m_btnStart->SetBackgroundColor(btn_bg);
+    m_btnStart->SetBorderColor(wxColour(30, 110, 240));
+    m_btnStart->SetTextColor(wxColour("#FFFFFE"));
+    m_btnStart->SetSize(wxSize(FromDIP(48), FromDIP(24)));
+    m_btnStart->SetMinSize(wxSize(FromDIP(48), FromDIP(24)));
+    m_btnStart->SetCornerRadius(FromDIP(3));
+    m_btnStart->Bind(wxEVT_BUTTON, &Motion_Test_Dlg::on_start, this);
+    v_sizer->Add(m_btnStart, 0, wxALL | wxALIGN_RIGHT, FromDIP(5));
+
+    Layout();
+    Fit();
+    CenterOnParent();
+}
+
+void Motion_Test_Dlg::set_defaults()
+{
+    wxString hint;
+    if (m_mode == CalibMode::Calib_Cornering) {
+        const bool jd = m_junction != nullptr && m_junction->GetValue();
+        m_tiStart->GetTextCtrl()->SetValue(jd ? "0" : "1");
+        m_tiEnd->GetTextCtrl()->SetValue(jd ? "0.3" : "20");
+        m_tiStart->SetLabel(jd ? "mm" : "mm/s");
+        m_tiEnd->SetLabel(jd ? "mm" : "mm/s");
+        hint = jd ? _L("Junction deviation in mm, usually 0 to 0.3.") :
+                    m_flavor == gcfKlipper ? _L("Square corner velocity in mm/s, usually 1 to 20.") : _L("Jerk in mm/s, usually 1 to 20.");
+        hint += "\n" + _L("Prints at 100 mm/s and 2000 mm/s2. Find the height where the corners start to round off or bulge,\nand read the value there (the slice preview and the G-code show it per layer).");
+    } else if (m_mode == CalibMode::Calib_Input_Shaping_Freq) {
+        m_tiStart->GetTextCtrl()->SetValue("15");
+        m_tiEnd->GetTextCtrl()->SetValue("110");
+        m_tiDamping->GetTextCtrl()->SetValue("0");
+        hint = _L("Prints fast and hard (200 mm/s). Find the height with the least ringing on the X walls and on the\nY walls, and read the frequency there. Use an opaque, glossy filament.");
+    } else {
+        m_tiFreqX->GetTextCtrl()->SetValue("");
+        m_tiFreqY->GetTextCtrl()->SetValue("");
+        m_tiStart->GetTextCtrl()->SetValue("0");
+        m_tiEnd->GetTextCtrl()->SetValue("0.4");
+        hint = _L("Use the X and Y frequencies from the frequency test. Find the height with the least ringing and\nread the damping there; 0.1 to 0.2 is usual.");
+    }
+    if (m_hint != nullptr) {
+        m_hint->SetLabel(hint);
+        Layout();
+        Fit();
+    }
+}
+
+void Motion_Test_Dlg::on_start(wxCommandEvent &)
+{
+    Calib_Params params;
+    params.mode = m_mode;
+    bool ok     = m_tiStart->GetTextCtrl()->GetValue().ToDouble(&params.start) && m_tiEnd->GetTextCtrl()->GetValue().ToDouble(&params.end);
+    ok          = ok && params.start >= 0. && params.end > params.start;
+    if (m_tiDamping != nullptr)
+        ok = ok && m_tiDamping->GetTextCtrl()->GetValue().ToDouble(&params.damping) && params.damping >= 0. && params.damping < 1.;
+    if (m_tiFreqX != nullptr)
+        ok = ok && m_tiFreqX->GetTextCtrl()->GetValue().ToDouble(&params.freq_x) && m_tiFreqY->GetTextCtrl()->GetValue().ToDouble(&params.freq_y) &&
+             params.freq_x > 0. && params.freq_y > 0.;
+    if (m_mode == CalibMode::Calib_Input_Shaping_Damp)
+        ok = ok && params.end < 1.;
+    if (!ok) {
+        MessageDialog msg(nullptr,
+                          m_mode == CalibMode::Calib_Input_Shaping_Damp ? _L("Please enter valid values:\nfrequencies above 0, 0 <= start < end < 1") :
+                                                                           _L("Please enter valid values:\nstart >= 0 and end > start"),
+                          wxEmptyString, wxICON_WARNING | wxOK);
+        msg.ShowModal();
+        return;
+    }
+    if (m_junction != nullptr && m_junction->GetValue())
+        params.option = "jd";
+    if (m_shaper != nullptr && m_shaper->GetSelection() > 0)
+        params.option = m_shaper->GetStringSelection().ToStdString();
+    EndModal(wxID_OK);
+    m_plater->calib_motion(params);
+}
+
+void Motion_Test_Dlg::on_dpi_changed(const wxRect &suggested_rect)
+{
+    this->Refresh();
+    Fit();
+}
+
 }} // namespace Slic3r::GUI

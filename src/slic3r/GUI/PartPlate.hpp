@@ -112,6 +112,7 @@ private:
     bool m_wipe_tower_placed {false};
     std::unique_ptr<HelioPlateResult> m_helio_result;
     float m_slice_percent;
+    std::string m_slice_stage;
 
     Print *m_print; //Print reference, not own it, no need to serialize
     GCodeProcessorResult *m_gcode_result;
@@ -533,6 +534,9 @@ public:
     }
 
     float get_slicing_percent() { return m_slice_percent; }
+    // MiniMe: the step of the slice being done (e.g. "Generating support"), for the chat
+    void               set_slicing_stage(const std::string &stage) { m_slice_stage = stage; }
+    const std::string &get_slicing_stage() const { return m_slice_stage; }
 
     /*slice related functions*/
     //update current slice context into backgroud slicing process

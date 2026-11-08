@@ -13,6 +13,8 @@
 #include "GUI_App.hpp"
 #include "wx/hyperlink.h"
 #include <wx/radiobox.h>
+#include <wx/checkbox.h>
+#include <wx/choice.h>
 #include "libslic3r/Calib.hpp"
 
 namespace Slic3r { namespace GUI {
@@ -103,6 +105,31 @@ protected:
     Plater* m_plater;
 };
 
+
+// MiniMe: OrcaSlicer's cornering (jerk / junction deviation) and input shaping (frequency / damping) towers
+class Motion_Test_Dlg : public DPIDialog
+{
+public:
+    Motion_Test_Dlg(wxWindow *parent, wxWindowID id, Plater *plater, CalibMode mode);
+    void on_dpi_changed(const wxRect &suggested_rect) override;
+
+protected:
+    void on_start(wxCommandEvent &event);
+    void set_defaults();
+
+    CalibMode    m_mode;
+    GCodeFlavor  m_flavor{gcfMarlinFirmware};
+    Plater      *m_plater;
+    TextInput   *m_tiStart{nullptr};
+    TextInput   *m_tiEnd{nullptr};
+    TextInput   *m_tiDamping{nullptr};
+    TextInput   *m_tiFreqX{nullptr};
+    TextInput   *m_tiFreqY{nullptr};
+    wxChoice    *m_shaper{nullptr};
+    wxCheckBox  *m_junction{nullptr};
+    wxStaticText *m_hint{nullptr};
+    Button      *m_btnStart{nullptr};
+};
 
 class Retraction_Test_Dlg : public DPIDialog
 {

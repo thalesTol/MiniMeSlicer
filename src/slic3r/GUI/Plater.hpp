@@ -394,6 +394,8 @@ public:
     void calib_max_vol_speed(const Calib_Params &params);
     void calib_retraction(const Calib_Params &params);
     void calib_VFA(const Calib_Params &params);
+    // MiniMe: cornering / input shaping towers (OrcaSlicer's motion calibrations)
+    void calib_motion(const Calib_Params &params);
 
     // for helio slice
     void update_helio_background_process(std::string& printer_id,

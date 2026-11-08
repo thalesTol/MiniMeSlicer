@@ -6,6 +6,81 @@
 
 
 namespace Slic3r {
+
+bool motion_calibration_supported(CalibMode mode, GCodeFlavor flavor)
+{
+    const bool marlin = flavor == gcfMarlinFirmware || flavor == gcfMarlinLegacy;
+    if (mode == CalibMode::Calib_Cornering)
+        return flavor == gcfKlipper || marlin || flavor == gcfRepRapFirmware;
+    // input shaping: Marlin 2 (M593), Klipper and RepRapFirmware 3
+    return flavor == gcfKlipper || flavor == gcfMarlinFirmware || flavor == gcfRepRapFirmware;
+}
+
+std::string motion_calibration_gcode(const Calib_Params &params, double z, GCodeFlavor flavor)
+{
+    if (!motion_calibration_supported(params.mode, flavor))
+        return {};
+    const double v = params.value_at(z);
+    char         buf[256];
+    std::string  out;
+    if (params.mode == CalibMode::Calib_Cornering) {
+        if (flavor == gcfKlipper)
+            sprintf(buf, "SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=%.2f ; cornering test\n", v);
+        else if (flavor == gcfRepRapFirmware)
+            sprintf(buf, "M566 X%.0f Y%.0f ; cornering test (jerk %.2f mm/s)\n", v * 60., v * 60., v);
+        else if (params.option == "jd")
+            sprintf(buf, "M205 J%.3f ; cornering test (junction deviation)\n", v);
+        else
+            sprintf(buf, "M205 X%.2f Y%.2f ; cornering test (jerk)\n", v, v);
+        out = buf;
+    } else if (params.mode == CalibMode::Calib_Input_Shaping_Freq) {
+        const std::string type = params.option;
+        if (flavor == gcfKlipper) {
+            out = "SET_INPUT_SHAPER";
+            if (!type.empty())
+                out += " SHAPER_TYPE=" + type;
+            sprintf(buf, " SHAPER_FREQ_X=%.1f SHAPER_FREQ_Y=%.1f", v, v);
+            out += buf;
+            if (params.damping > 0.) {
+                sprintf(buf, " DAMPING_RATIO_X=%.3f DAMPING_RATIO_Y=%.3f", params.damping, params.damping);
+                out += buf;
+            }
+        } else if (flavor == gcfRepRapFirmware) {
+            sprintf(buf, "M593 P\"%s\" F%.1f", type.empty() ? "mzv" : type.c_str(), v);
+            out = buf;
+            if (params.damping > 0.) {
+                sprintf(buf, " S%.3f", params.damping);
+                out += buf;
+            }
+        } else {
+            sprintf(buf, "M593 F%.1f", v);
+            out = buf;
+            if (params.damping > 0.) {
+                sprintf(buf, " D%.3f", params.damping);
+                out += buf;
+            }
+        }
+        out += " ; input shaping frequency test\n";
+    } else if (params.mode == CalibMode::Calib_Input_Shaping_Damp) {
+        const std::string type = params.option;
+        if (flavor == gcfKlipper) {
+            out = "SET_INPUT_SHAPER";
+            if (!type.empty())
+                out += " SHAPER_TYPE=" + type;
+            sprintf(buf, " SHAPER_FREQ_X=%.1f SHAPER_FREQ_Y=%.1f DAMPING_RATIO_X=%.3f DAMPING_RATIO_Y=%.3f ; input shaping damping test\n",
+                    params.freq_x, params.freq_y, v, v);
+            out += buf;
+        } else if (flavor == gcfRepRapFirmware) {
+            sprintf(buf, "M593 P\"%s\" F%.1f S%.3f ; input shaping damping test\n", type.empty() ? "mzv" : type.c_str(), params.freq_x, v);
+            out = buf;
+        } else {
+            sprintf(buf, "M593 X F%.1f D%.3f ; input shaping damping test\nM593 Y F%.1f D%.3f\n", params.freq_x, v, params.freq_y, v);
+            out = buf;
+        }
+    }
+    return out;
+}
+
 float CalibPressureAdvance::find_optimal_PA_speed(const DynamicPrintConfig &config, double line_width, double layer_height, int extruder_id, int filament_idx)
 {
     const double general_suggested_min_speed   = 100.0;
