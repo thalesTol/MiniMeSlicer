@@ -90,9 +90,12 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           brew install automake texinfo nasm yasm x264
-          # zstd is removed so that no dependency links Homebrew's copy, but Homebrew's git and curl need it: use the
-          # system's git and curl for the downloads instead
-          brew uninstall --ignore-dependencies zstd || true
+          # zstd is taken away so that no dependency links Homebrew's copy, but Homebrew's git and curl need it: use the
+          # system's git and curl for the downloads instead. It is moved aside rather than uninstalled, so putting it
+          # back afterwards needs no download (Homebrew's own curl cannot download without it).
+          zkeg="$(brew --cellar)/zstd"
+          brew unlink zstd || true
+          if [ -d "$zkeg" ]; then mv "$zkeg" "$RUNNER_TEMP/zstd-keg"; fi
           mkdir -p "$RUNNER_TEMP/systools"
           ln -sf /usr/bin/git "$RUNNER_TEMP/systools/git"
           ln -sf /usr/bin/curl "$RUNNER_TEMP/systools/curl"
@@ -105,7 +108,10 @@ jobs:
             (cd "${{ github.workspace }}/deps/build/${arch}" && \
              find . -mindepth 1 -maxdepth 1 ! -name 'BambuStudio_deps' -exec rm -rf {} +)
           done
-          brew install zstd
+          # zstd back, so the cache is saved with the same compression the app job restores it with
+          if [ -d "$RUNNER_TEMP/zstd-keg" ]; then mv "$RUNNER_TEMP/zstd-keg" "$zkeg" && brew link zstd; fi
+          command -v zstd > /dev/null || HOMEBREW_CURL_PATH=/usr/bin/curl brew install zstd
+          zstd --version
 
   app:
     name: Mac app
