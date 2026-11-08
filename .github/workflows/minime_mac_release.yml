@@ -1,0 +1,158 @@
+name: MiniMe macOS release
+
+# Builds MiniMe Slicer for macOS (one universal app for Apple Silicon and Intel) and attaches it to a GitHub release as a
+# .dmg. Runs when a release is published, or by hand (Actions > MiniMe macOS release > Run workflow) for an existing tag.
+# The dependencies take hours to build the first time; they are cached afterwards, so later releases take about an hour.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and attach the Mac app to (e.g. v2.8.4.57-minime2)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: minime-mac-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: true
+
+env:
+  TAG: ${{ inputs.tag || github.event.release.tag_name }}
+
+jobs:
+  check:
+    name: Mac app already attached?
+    runs-on: ubuntu-latest
+    outputs:
+      attached: ${{ steps.look.outputs.attached }}
+    steps:
+      - name: Look at the release
+        id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # publishing a draft that already has the Mac app (built by hand before) needs no second build
+          if gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets[].name' | grep -q -- '-mac-universal\.dmg$'; then
+            echo "attached=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "attached=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deps:
+    name: Mac dependencies
+    needs: check
+    if: needs.check.outputs.attached != 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 360
+    outputs:
+      cache-key: ${{ steps.key.outputs.key }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
+          lfs: 'true'
+
+      - name: Cache key
+        id: key
+        run: echo "key=macos-15-universal-minime-deps-${{ hashFiles('deps/**') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Load cached dependencies
+        id: cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/deps/build
+          key: ${{ steps.key.outputs.key }}
+
+      - name: Free disk space
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          df -h
+          sudo find /Applications -maxdepth 1 -type d -name "Xcode_*.app" ! -name "Xcode_15.4.app" -exec rm -rf {} + || true
+          sudo rm -rf ~/Library/Developer/CoreSimulator/Caches/* || true
+          df -h
+
+      - name: Build dependencies (universal)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          brew install automake texinfo nasm yasm x264
+          brew uninstall --ignore-dependencies zstd || true
+          brew unlink cmake || true
+          brew tap-new $USER/old-cmake
+          brew extract --version=3.31.0 cmake $USER/old-cmake
+          brew install $USER/old-cmake/cmake@3.31.0
+          brew link --overwrite cmake@3.31.0
+          brew pin cmake@3.31.0
+          ./BuildMac.sh -d -x -a universal -t 10.15 -1
+          for arch in arm64 x86_64; do
+            (cd "${{ github.workspace }}/deps/build/${arch}" && \
+             find . -mindepth 1 -maxdepth 1 ! -name 'BambuStudio_deps' -exec rm -rf {} +)
+          done
+          brew install zstd
+
+  app:
+    name: Mac app
+    needs: deps
+    runs-on: macos-15
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
+          lfs: 'true'
+
+      - name: Load cached dependencies
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/deps/build
+          key: ${{ needs.deps.outputs.cache-key }}
+          fail-on-cache-miss: true
+
+      - name: Version
+        run: |
+          raw=$(grep 'set(SLIC3R_VERSION' version.inc | cut -d '"' -f2)
+          ver=$(echo "$raw" | awk -F. '{printf "%d.%d.%d.%d", $1, $2, $3, $4}')
+          echo "VER=$ver" >> "$GITHUB_ENV"
+
+      - name: Build MiniMe (universal)
+        run: |
+          brew install automake texinfo
+          brew unlink cmake || true
+          brew tap-new $USER/old-cmake
+          brew extract --version=3.31.0 cmake $USER/old-cmake
+          brew install $USER/old-cmake/cmake@3.31.0
+          brew link --overwrite cmake@3.31.0
+          brew pin cmake@3.31.0
+          ./BuildMac.sh -s -x -a universal -t 10.15 -1
+
+      - name: Package the app
+        run: |
+          src="build/universal/BambuStudio/BambuStudio.app"
+          test -d "$src"
+          mkdir -p dmg
+          ditto "$src" "dmg/MiniMe Slicer.app"
+          ln -s /Applications dmg/Applications
+          # an ad-hoc signature: Apple Silicon Macs refuse to start unsigned apps (this is not an Apple Developer ID signature)
+          codesign --force --deep --sign - "dmg/MiniMe Slicer.app"
+          codesign --verify --deep --strict "dmg/MiniMe Slicer.app"
+          name="MiniMeSlicer-${VER}-mac-universal.dmg"
+          hdiutil create -volname "MiniMe Slicer" -srcfolder dmg -ov -format UDZO "$name"
+          echo "DMG=$name" >> "$GITHUB_ENV"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$DMG" --clobber --repo "${{ github.repository }}"
+
+      - name: Keep the app as a workflow artifact too
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.DMG }}
+          path: ${{ env.DMG }}
+          retention-days: 14

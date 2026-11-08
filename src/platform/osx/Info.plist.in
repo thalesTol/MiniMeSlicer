@@ -5,15 +5,17 @@
   <key>CFBundleExecutable</key>
   <string>@SLIC3R_APP_KEY@</string>
   <key>CFBundleGetInfoString</key>
-  <string>@SLIC3R_APP_NAME@ Copyright(C) 2021-2025 Lunkuo All Rights Reserved</string>
+  <string>MiniMe Slicer, a fork of Bambu Studio. GNU AGPL v3</string>
   <key>CFBundleIconFile</key>
   <string>images/BambuStudio.icns</string>
   <key>CFBundleName</key>
-  <string>@SLIC3R_APP_KEY@</string>
+  <string>MiniMe Slicer</string>
+  <key>CFBundleDisplayName</key>
+  <string>MiniMe Slicer</string>
   <key>CFBundleShortVersionString</key>
-  <string>@SLIC3R_APP_NAME@ @SLIC3R_BUILD_ID@</string>
+  <string>@SLIC3R_VERSION@</string>
   <key>CFBundleIdentifier</key>
-  <string>com.bbl.slic3r/</string>
+  <string>io.github.thalestol.minimeslicer</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundlePackageType</key>
@@ -31,10 +33,10 @@
   <array>
     <dict>
       <key>CFBundleURLName</key>
-      <string>bambustudioopen url</string>
+      <string>minimeslicer url</string>
       <key>CFBundleURLSchemes</key>
       <array>
-        <string>bambustudioopen</string>
+        <string>minimeslicer</string>
       </array>
     </dict>
   </array>

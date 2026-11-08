@@ -2676,14 +2676,16 @@ void GUI_App::init_app_config()
             // SliceOfMe: never share the official Bambu Studio's folder (presets, login, caches, instance locks)
             std::string data_dir = (wxStandardPaths::Get().GetUserConfigDir() + wxS("\\MiniMeSlicer")).ToUTF8().data();
         #elif !defined(__linux__)
-            std::string data_dir = wxStandardPaths::Get().GetUserDataDir().ToUTF8().data();
+            // SliceOfMe: ~/Library/Application Support/MiniMeSlicer, not the official Bambu Studio's folder
+            std::string data_dir = (wxFileName::GetHomeDir() + wxS("/Library/Application Support/MiniMeSlicer")).ToUTF8().data();
         #else
             // Since version 2.3, config dir on Linux is in ${XDG_CONFIG_HOME}.
             // https://github.com/prusa3d/PrusaSlicer/issues/2911
             wxString dir;
             if (! wxGetEnv(wxS("XDG_CONFIG_HOME"), &dir) || dir.empty() )
                 dir = wxFileName::GetHomeDir() + wxS("/.config");
-            std::string data_dir = (dir + "/" + GetAppName()).ToUTF8().data();
+            // SliceOfMe: ~/.config/MiniMeSlicer, not the official Bambu Studio's folder
+            std::string data_dir = (dir + "/MiniMeSlicer").ToUTF8().data();
         #endif
 #if BBL_INTERNAL_TESTING
             data_dir += BBL_INTERNAL_TESTING == 1 ? "Internal" : "Beta";
