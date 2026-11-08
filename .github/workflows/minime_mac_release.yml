@@ -90,7 +90,15 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           brew install automake texinfo nasm yasm x264
+          # zstd is removed so that no dependency links Homebrew's copy, but Homebrew's git and curl need it: use the
+          # system's git and curl for the downloads instead
           brew uninstall --ignore-dependencies zstd || true
+          mkdir -p "$RUNNER_TEMP/systools"
+          ln -sf /usr/bin/git "$RUNNER_TEMP/systools/git"
+          ln -sf /usr/bin/curl "$RUNNER_TEMP/systools/curl"
+          export PATH="$RUNNER_TEMP/systools:$PATH"
+          git --version
+          git ls-remote https://github.com/glennrp/libpng.git v1.6.35 > /dev/null && echo "git over https works"
           cmake --version
           ./BuildMac.sh -d -x -a universal -t 10.15 -1
           for arch in arm64 x86_64; do
