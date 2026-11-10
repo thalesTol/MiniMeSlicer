@@ -800,6 +800,9 @@ namespace Slic3r
                 std::map<int, double> flushed_volume_of_extruders_all_plates; // map<extruder_idx, flushed volume>
                 std::map<int, double> wipe_tower_volume_of_extruders_all_plates; // map<extruder_idx, flushed volume>
                 std::map<int, double> support_volume_of_extruders_all_plates; // map<extruder_idx, flushed volume>
+                std::map<int, double> purge_volume_of_extruders_all_plates; // SliceOfMe: map<extruder_idx, purged volume>
+                std::vector<double> purge_filaments_m_all_plates;
+                std::vector<double> purge_filaments_g_all_plates;
                 std::map<int, double> plate_time; // map<plate_idx, time>
                 std::vector<double> model_used_filaments_m_all_plates;
                 std::vector<double> model_used_filaments_g_all_plates;
@@ -818,6 +821,7 @@ namespace Slic3r
                         Flushed = 2,
                         WipeTower = 4,
                         Support = 1 << 3,
+                        Purge = 1 << 4, // SliceOfMe: start G-code purge and calibration lines, other poops
                     };
                 };
                 int displayed_columns = 0;
@@ -919,6 +923,10 @@ namespace Slic3r
                                 double support_volume = plate_print_statistics.support_volumes_per_extruder.at(extruder_id);
                                 support_volume_of_extruders_all_plates[extruder_id] += support_volume;
                             }
+                            {
+                                auto pit = plate_print_statistics.purge_volumes_per_extruder.find(extruder_id);
+                                purge_volume_of_extruders_all_plates[extruder_id] += pit == plate_print_statistics.purge_volumes_per_extruder.end() ? 0. : pit->second;
+                            }
                         }
                         const PrintEstimatedStatistics::Mode& plate_time_mode = plate_print_statistics.modes[static_cast<size_t>(m_time_estimate_mode)];
                         plate_time.insert_or_assign(plate->get_index(), plate_time_mode.time);
@@ -955,6 +963,13 @@ namespace Slic3r
                         support_used_filaments_m_all_plates.push_back(support_filament_m);
                         support_used_filaments_g_all_plates.push_back(support_filament_g);
                     }
+                    for (auto it = purge_volume_of_extruders_all_plates.begin(); it != purge_volume_of_extruders_all_plates.end(); it++) {
+                        auto [purge_m, purge_g] = get_used_filament_from_volume(it->second, it->first);
+                        if (purge_m != 0.0 || purge_g != 0.0)
+                            displayed_columns |= ColumnData::Purge;
+                        purge_filaments_m_all_plates.push_back(purge_m);
+                        purge_filaments_g_all_plates.push_back(purge_g);
+                    }
                     char buff[64];
                     double longest_str = 0.0;
                     for (auto i : model_used_filaments_g_all_plates) {
@@ -974,6 +989,9 @@ namespace Slic3r
                     }
                     if (displayed_columns & ColumnData::WipeTower) {
                         title_columns.push_back({ _u8L("Tower"), {buff} });
+                    }
+                    if (displayed_columns & ColumnData::Purge) {
+                        title_columns.push_back({ _u8L("Poops"), {buff} });
                     }
                     if ((displayed_columns & ~ColumnData::Model) > 0) {
                         title_columns.push_back({ _u8L("Total"), {buff} });
@@ -1022,6 +1040,12 @@ namespace Slic3r
                                 columns_offsets.push_back({ buf, fil_table_offsets[_u8L("Tower")] });
                                 column_sum_m += wipe_tower_used_filaments_m_all_plates[i];
                                 column_sum_g += wipe_tower_used_filaments_g_all_plates[i];
+                            }
+                            if ((displayed_columns & ColumnData::Purge) && i < purge_filaments_m_all_plates.size()) {
+                                ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", purge_filaments_m_all_plates[i], purge_filaments_g_all_plates[i] / unit_conver);
+                                columns_offsets.push_back({ buf, fil_table_offsets[_u8L("Poops")] });
+                                column_sum_m += purge_filaments_m_all_plates[i];
+                                column_sum_g += purge_filaments_g_all_plates[i];
                             }
                             if ((displayed_columns & ~ColumnData::Model) > 0) {
                                 ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", column_sum_m, column_sum_g / unit_conver);
@@ -1094,10 +1118,17 @@ namespace Slic3r
                             ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", total_wipe_tower_used_filament_m, total_wipe_tower_used_filament_g / unit_conver);
                             columns_offsets.push_back({ buf, fil_table_offsets[_u8L("Tower")] });
                         }
+                        double total_purge_m = 0, total_purge_g = 0;
+                        for (double v : purge_filaments_m_all_plates) total_purge_m += v;
+                        for (double v : purge_filaments_g_all_plates) total_purge_g += v;
+                        if (displayed_columns & ColumnData::Purge) {
+                            ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", total_purge_m, total_purge_g / unit_conver);
+                            columns_offsets.push_back({ buf, fil_table_offsets[_u8L("Poops")] });
+                        }
                         if ((displayed_columns & ~ColumnData::Model) > 0) {
                             ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g",
-                                total_model_used_filament_m + total_support_used_filament_m + total_flushed_filament_m + total_wipe_tower_used_filament_m,
-                                (total_model_used_filament_g + total_support_used_filament_g + total_flushed_filament_g + total_wipe_tower_used_filament_g) / unit_conver);
+                                total_model_used_filament_m + total_support_used_filament_m + total_flushed_filament_m + total_wipe_tower_used_filament_m + total_purge_m,
+                                (total_model_used_filament_g + total_support_used_filament_g + total_flushed_filament_g + total_wipe_tower_used_filament_g + total_purge_g) / unit_conver);
                             columns_offsets.push_back({ buf, fil_table_offsets[_u8L("Total")] });
                         }
                         append_item(false, m_tools.m_tool_colors[0], columns_offsets);
@@ -1837,12 +1868,16 @@ namespace Slic3r
                 std::vector<double> support_used_filaments_m;
                 std::vector<double> support_used_filaments_g;
                 double total_support_used_filament_m = 0, total_support_used_filament_g = 0;
+                std::vector<double> purge_filaments_m;
+                std::vector<double> purge_filaments_g;
+                double total_purge_m = 0, total_purge_g = 0;
                 struct ColumnData {
                     enum {
                         Model = 1,
                         Flushed = 2,
                         WipeTower = 4,
                         Support = 1 << 3,
+                        Purge = 1 << 4, // SliceOfMe: start G-code purge and calibration lines, other poops
                     };
                 };
                 int displayed_columns = 0;
@@ -1910,6 +1945,19 @@ namespace Slic3r
                         total_support_used_filament_g += used_filament_g;
                         displayed_columns |= ColumnData::Support;
                     }
+                }
+                for (size_t extruder_id : m_extruder_ids) {
+                    auto pit = m_print_statistics.purge_volumes_per_extruder.find(extruder_id);
+                    double purge_m = 0., purge_g = 0.;
+                    if (pit != m_print_statistics.purge_volumes_per_extruder.end()) {
+                        std::tie(purge_m, purge_g) = get_used_filament_from_volume(pit->second, extruder_id);
+                        total_purge_m += purge_m;
+                        total_purge_g += purge_g;
+                        if (purge_m != 0. || purge_g != 0.)
+                            displayed_columns |= ColumnData::Purge;
+                    }
+                    purge_filaments_m.push_back(purge_m);
+                    purge_filaments_g.push_back(purge_g);
                 }
                 // extrusion paths section -> title
                 ImGui::Dummy({ window_padding, window_padding });
@@ -1998,6 +2046,9 @@ namespace Slic3r
                     }
                     if (displayed_columns & ColumnData::WipeTower) {
                         title_columns.push_back({ _u8L("Tower"), total_filaments });
+                    }
+                    if (displayed_columns & ColumnData::Purge) {
+                        title_columns.push_back({ _u8L("Poops"), total_filaments });
                     }
                     if ((displayed_columns & ~ColumnData::Model) > 0) {
                         title_columns.push_back({ _u8L("Total"), total_filaments });
@@ -2193,6 +2244,12 @@ namespace Slic3r
                                 column_sum_m += wipe_tower_used_filaments_m[i];
                                 column_sum_g += wipe_tower_used_filaments_g[i];
                             }
+                            if ((displayed_columns & ColumnData::Purge) && i < purge_filaments_m.size()) {
+                                ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", purge_filaments_m[i], purge_filaments_g[i] / unit_conver);
+                                columns_offsets.push_back({ buf, color_print_offsets[_u8L("Poops")] });
+                                column_sum_m += purge_filaments_m[i];
+                                column_sum_g += purge_filaments_g[i];
+                            }
                             if ((displayed_columns & ~ColumnData::Model) > 0) {
                                 ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", column_sum_m, column_sum_g / unit_conver);
                                 columns_offsets.push_back({ buf, color_print_offsets[_u8L("Total")] });
@@ -2241,9 +2298,13 @@ namespace Slic3r
                             ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", total_wipe_tower_used_filament_m, total_wipe_tower_used_filament_g / unit_conver);
                             columns_offsets.push_back({ buf, color_print_offsets[_u8L("Tower")] });
                         }
+                        if (displayed_columns & ColumnData::Purge) {
+                            ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", total_purge_m, total_purge_g / unit_conver);
+                            columns_offsets.push_back({ buf, color_print_offsets[_u8L("Poops")] });
+                        }
                         if ((displayed_columns & ~ColumnData::Model) > 0) {
-                            ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", total_model_used_filament_m + total_support_used_filament_m + total_flushed_filament_m + total_wipe_tower_used_filament_m,
-                                (total_model_used_filament_g + total_support_used_filament_g + total_flushed_filament_g + total_wipe_tower_used_filament_g) / unit_conver);
+                            ::sprintf(buf, imperial_units ? "%.2f in\n%.2f oz" : "%.2f m\n%.2f g", total_model_used_filament_m + total_support_used_filament_m + total_flushed_filament_m + total_wipe_tower_used_filament_m + total_purge_m,
+                                (total_model_used_filament_g + total_support_used_filament_g + total_flushed_filament_g + total_wipe_tower_used_filament_g + total_purge_g) / unit_conver);
                             columns_offsets.push_back({ buf, color_print_offsets[_u8L("Total")] });
                         }
                         append_item(EItemType::None, m_tools.m_tool_colors[0], columns_offsets);

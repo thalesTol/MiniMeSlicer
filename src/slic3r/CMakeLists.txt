@@ -441,6 +441,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/MiniMeChat.cpp
     GUI/MiniMePricing.hpp
     GUI/MiniMePricing.cpp
+    GUI/MiniMeWatchdog.hpp
+    GUI/MiniMeWatchdog.cpp
     Config/Snapshot.cpp
     Config/Snapshot.hpp
     Config/Version.cpp

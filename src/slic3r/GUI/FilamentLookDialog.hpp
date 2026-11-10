@@ -5,6 +5,7 @@
 #include "EncodedFilament.hpp"
 
 #include <wx/colour.h>
+#include <string>
 #include <vector>
 
 class wxBitmapButton;
@@ -34,6 +35,10 @@ public:
     const FilamentColor &GetFilamentColor() const { return m_color; }
     // wxNullColour when the filament does not glow.
     wxColour GetGlowColour() const { return m_glow; }
+
+    // For tests (the Claude bridge's test tool): shows the window and goes through every tab, every swatch, the colour stop
+    // editors and the filter as clicks would, letting the event loop run in between. Returns what it did.
+    std::string exercise_for_test();
 
 protected:
     void on_dpi_changed(const wxRect &suggested_rect) override;
@@ -101,6 +106,7 @@ private:
     wxSlider       *m_opacity_slider{nullptr};
     wxSpinCtrl     *m_opacity_input{nullptr}; // the exact percentage
 
+    Button *m_custom_btn{nullptr}; // "Choose a colour..." on the Solid tab
     Button *m_ok_btn{nullptr};
     Button *m_cancel_btn{nullptr};
 };

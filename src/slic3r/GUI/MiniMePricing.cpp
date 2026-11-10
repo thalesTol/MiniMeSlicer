@@ -314,7 +314,7 @@ json plate_usage(const json &data, int plate)
             continue;
         const double density = id < res->filament_densities.size() && res->filament_densities[id] > 0.f ? res->filament_densities[id] : 1.24;
         const double grams   = volume * density / 1000.;
-        const double purge   = (vol_of(ps.flush_per_filament, id) + vol_of(ps.wipe_tower_volumes_per_extruder, id)) * density / 1000.;
+        const double purge   = (vol_of(ps.flush_per_filament, id) + vol_of(ps.wipe_tower_volumes_per_extruder, id) + vol_of(ps.purge_volumes_per_extruder, id)) * density / 1000.;
         const std::string preset = id < pb->filament_presets.size() ? pb->filament_presets[id] : "";
         const std::string colour = colours != nullptr && id < colours->values.size() ? colours->values[id] : "";
         const std::string key    = preset + "|" + lower(colour);

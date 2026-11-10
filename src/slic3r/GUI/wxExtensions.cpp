@@ -1,4 +1,7 @@
 #include "wxExtensions.hpp"
+#ifdef _WIN32
+#include <wx/msw/wrapwin.h> // ::SetFocus
+#endif
 
 #include <stdexcept>
 #include <cmath>
@@ -668,6 +671,12 @@ wxColourData show_sys_picker_dialog(wxWindow *parent, const wxColourData &clr_da
 
     wxColourDialog dialog(parent, &data);
     dialog.SetTitle(_L("Please choose the filament colour"));
+#ifdef _WIN32
+    // SliceOfMe: Windows' colour dialog froze MiniMe when it opened while one of MiniMe's own drawn buttons (Button) had the
+    // focus: deactivating the parent window made Windows' dialog code search for the next control forever
+    // (GetNextDlgTabItem). Nothing has the focus while the dialog opens.
+    ::SetFocus(nullptr);
+#endif
 
     if (dialog.ShowModal() == wxID_OK) {
         data = dialog.GetColourData();

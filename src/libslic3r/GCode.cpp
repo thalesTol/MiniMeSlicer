@@ -1929,6 +1929,9 @@ void GCode::do_export(Print* print, const char* path, GCodeProcessorResult* resu
 
     m_processor.result().support_traditional_timelapse =
         is_i3_traditional_timelapse ? has_generated_wipe_tower : m_support_traditional_timelapse;
+    // SliceOfMe: only Bambu Lab printers take timelapse instructions from the slicer; for other printers this is no error
+    if (!print->is_BBL_Printer())
+        m_processor.result().support_traditional_timelapse = true;
 
     bool activate_long_retraction_when_cut = false;
     for (const auto& filament : m_writer.extruders())
@@ -1970,7 +1973,10 @@ void GCode::do_export(Print* print, const char* path, GCodeProcessorResult* resu
     // check the print mass was within limit
     if (m_print->config().machine_max_printed_mass.value > EPSILON) {
         double mass_on_bed_total = print->m_print_statistics.total_weight;
-        for (auto volume : m_processor.get_result().print_statistics.flush_per_filament) {
+        std::map<size_t, double> off_bed = m_processor.get_result().print_statistics.flush_per_filament;
+        for (const auto &[id, v] : m_processor.get_result().print_statistics.purge_volumes_per_extruder)
+            off_bed[id] += v; // SliceOfMe: purges go to the chute too
+        for (auto volume : off_bed) {
             size_t extruder_id = volume.first;
             auto   extruder    = std::find_if(m_writer.extruders().begin(), m_writer.extruders().end(), [extruder_id](const Extruder &extr) { return extr.id() == extruder_id; });
             if (extruder == m_writer.extruders().end()) continue;
@@ -2859,6 +2865,42 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
         }
         auto center = bbox_wo_wt.center();
         m_placeholder_parser.set("first_layer_center_no_wipe_tower", new ConfigOptionFloats{ {center.x(),center.y()}});
+
+        // SliceOfMe: the adaptive bed mesh of OrcaSlicer's printer profiles (Klipper BED_MESH_CALIBRATE and the like):
+        // the first layer area plus a margin, inside the area the printer can probe
+        BoundingBoxf mesh_bbox(m_config.bed_mesh_min.value, m_config.bed_mesh_max.value);
+        const double mesh_margin = m_config.adaptive_bed_mesh_margin.value;
+        mesh_bbox.min = mesh_bbox.min.cwiseMax((bbox_without_plate_offset.min.array() - mesh_margin).matrix());
+        mesh_bbox.max = mesh_bbox.max.cwiseMin((bbox_without_plate_offset.max.array() + mesh_margin).matrix());
+        m_placeholder_parser.set("adaptive_bed_mesh_min", new ConfigOptionFloats({mesh_bbox.min.x(), mesh_bbox.min.y()}));
+        m_placeholder_parser.set("adaptive_bed_mesh_max", new ConfigOptionFloats({mesh_bbox.max.x(), mesh_bbox.max.y()}));
+        const double probe_dist_x = std::max(1., m_config.bed_mesh_probe_distance.value.x());
+        const double probe_dist_y = std::max(1., m_config.bed_mesh_probe_distance.value.y());
+        int probe_count_x = std::max(3, (int) std::ceil(mesh_bbox.size().x() / probe_dist_x) + 1);
+        int probe_count_y = std::max(3, (int) std::ceil(mesh_bbox.size().y() / probe_dist_y) + 1);
+        const char *bed_mesh_algo = "bicubic";
+        if (probe_count_x * probe_count_y <= 6)   // lagrange takes up to 6 points
+            bed_mesh_algo = "lagrange";
+        else if (print.config().gcode_flavor == gcfKlipper) {
+            // bicubic needs 4 points per axis
+            probe_count_x = std::max(probe_count_x, 4);
+            probe_count_y = std::max(probe_count_y, 4);
+        }
+        m_placeholder_parser.set("bed_mesh_probe_count", new ConfigOptionInts({probe_count_x, probe_count_y}));
+        m_placeholder_parser.set("bed_mesh_algo", std::string(bed_mesh_algo));
+    }
+    // SliceOfMe: other names OrcaSlicer's (and PrusaSlicer's) printer profiles use in their G-code
+    m_placeholder_parser.set("temperature", new ConfigOptionInts(m_config.nozzle_temperature.values));
+    m_placeholder_parser.set("retract_length", new ConfigOptionFloats(m_config.retraction_length.values));
+    m_placeholder_parser.set("first_layer_height", new ConfigOptionFloat(m_config.initial_layer_print_height.value));
+    m_placeholder_parser.set("num_extruders", int(m_config.nozzle_diameter.values.size()));
+    m_placeholder_parser.set("notes", m_config.printer_notes.value);   // PrusaSlicer's name for the printer notes
+    {
+        std::vector<unsigned char> is_extruder_used(std::max(size_t(16), m_config.filament_diameter.values.size()), 0);
+        for (unsigned int extruder : print.extruders())
+            if (extruder < is_extruder_used.size())
+                is_extruder_used[extruder] = 1;
+        m_placeholder_parser.set("is_extruder_used", new ConfigOptionBools(is_extruder_used));
     }
 
     int max_chamber_temp = 0;
@@ -3890,6 +3932,21 @@ void GCode::process_layers(
 std::string GCode::placeholder_parser_process(const std::string &name, const std::string &templ, unsigned int current_filament_id, const DynamicConfig *config_override)
 {
     try {
+        // SliceOfMe: OrcaSlicer's printer profiles use the nozzle position and the current layer height in every custom G-code
+        // (e.g. a filament's start G-code); give them where the caller does not
+        if (templ.find("position") != std::string::npos || templ.find("layer_z") != std::string::npos) {
+            DynamicConfig extended;
+            if (config_override != nullptr)
+                extended = *config_override;
+            const Vec3d pos = m_writer.get_position();
+            if (!extended.has("position"))
+                extended.set_key_value("position", new ConfigOptionFloats({pos.x(), pos.y(), pos.z()}));
+            if (!extended.has("layer_z"))
+                extended.set_key_value("layer_z", new ConfigOptionFloat(m_layer != nullptr ? m_layer->print_z : 0.));
+            if (!extended.has("max_layer_z"))
+                extended.set_key_value("max_layer_z", new ConfigOptionFloat(m_max_layer_z));
+            return m_placeholder_parser.process(templ, current_filament_id, &extended, &m_placeholder_parser_context);
+        }
         return m_placeholder_parser.process(templ, current_filament_id, config_override, &m_placeholder_parser_context);
     } catch (std::runtime_error &err) {
         // Collect the names of failed template substitutions for error reporting.

@@ -3,6 +3,8 @@
 #include "GUI_App.hpp"
 #include "MainFrame.hpp"
 #include "Plater.hpp"
+#include "PresetComboBoxes.hpp"
+#include "FilamentLookDialog.hpp"
 #include "PartPlate.hpp"
 #include "GLCanvas3D.hpp"
 #include "GLToolbar.hpp"
@@ -29,11 +31,13 @@
 #include "libslic3r/Tesselate.hpp"
 #include "libslic3r/TriangleMeshSlicer.hpp"
 #include "libslic3r/CustomGCode.hpp"
+#include "libslic3r/Layer.hpp"
 #include "libslic3r/CutUtils.hpp"
 #include "libslic3r/Calib.hpp"
 #include "libslic3r/AABBMesh.hpp"
 #include "libslic3r/QuadricEdgeCollapse.hpp"
 #include "libslic3r/Geometry.hpp"
+#include "slic3r/Utils/PresetUpdater.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
@@ -50,11 +54,16 @@
 #include <chrono>
 #include <cmath>
 #include <future>
+#include <map>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <thread>
 
 namespace Slic3r::GUI {
+
+// Plater.cpp: adds a mixed filament as the sidebar does (for the mix_filaments tool)
+int minime_add_mixed_filament(const std::vector<unsigned int> &components, const std::vector<int> &ratios);
 
 namespace {
 
@@ -551,6 +560,247 @@ json tool_set_filament(const json &args)
     });
 }
 
+// a filament's colour (what the plate shows and what the Filament look window sets): solid, gradient or multi-color, and glow
+json tool_set_filament_colour(const json &args)
+{
+    if (!args.contains("filament") || !args.contains("colours") || !args["colours"].is_array() || args["colours"].empty())
+        throw ToolError("give 'filament' (1-based) and 'colours', e.g. [\"#5E43B7\"] or two to four for a gradient / multi-color");
+    std::vector<std::string> colours;
+    for (const json &c : args["colours"]) {
+        const std::string text = c.is_string() ? c.get<std::string>() : std::string();
+        const wxColour    clr(wxString::FromUTF8(text));
+        if (text.empty() || text[0] != '#' || !clr.IsOk())
+            throw ToolError("colours are #RRGGBB or #RRGGBBAA (AA = opacity), not '" + text + "'");
+        colours.push_back(clr.GetAsString(wxC2S_HTML_SYNTAX).ToStdString());
+    }
+    if (colours.size() > 4)
+        throw ToolError("at most 4 colours");
+    const std::string style = lower(str(args, "style", colours.size() > 1 ? "gradient" : "solid"));
+    if (style != "solid" && style != "gradient" && style != "multi")
+        throw ToolError("'style' is solid, gradient or multi");
+    if (style == "solid" && colours.size() > 1)
+        throw ToolError("a solid colour is one colour; use style gradient or multi for more");
+    if (style != "solid" && colours.size() < 2)
+        throw ToolError("a gradient or multi-color filament needs 2 to 4 colours");
+    return on_gui([args, colours, style]() -> json {
+        std::vector<PlaterPresetComboBox *> &combos = wxGetApp().sidebar().combos_filament();
+        const int f = int(num(args, "filament", 0));
+        if (f < 1 || f > int(combos.size()) || combos[f - 1] == nullptr)
+            throw ToolError("there is no filament " + std::to_string(f) + " (there are " + std::to_string(combos.size()) + ")");
+        DynamicPrintConfig *cfg = &wxGetApp().preset_bundle->project_config;
+        // glow first, as the Filament look window does, so the colour change below redraws with it
+        if (args.contains("glow")) {
+            std::string glow = args["glow"].is_string() ? args["glow"].get<std::string>() : std::string();
+            if (!glow.empty() && !wxColour(wxString::FromUTF8(glow)).IsOk())
+                throw ToolError("glow is a #RRGGBB colour, or \"\" for no glow");
+            if (auto *glow_opt = cfg->option<ConfigOptionStrings>("filament_glow_colour")) {
+                if (int(glow_opt->values.size()) < f)
+                    glow_opt->values.resize(f, "");
+                glow_opt->values[f - 1] = glow.empty() ? std::string() : wxColour(wxString::FromUTF8(glow)).GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
+            }
+        }
+        // not a gradient: one colour is solid, several are a multi-color filament
+        combos[f - 1]->sync_colour_config(colours, style == "gradient");
+        json j = {{"filament", f}, {"colours", colours}, {"style", style}};
+        if (const auto *glow_opt = cfg->option<ConfigOptionStrings>("filament_glow_colour"); glow_opt && int(glow_opt->values.size()) >= f)
+            j["glow"] = glow_opt->values[f - 1];
+        return j;
+    });
+}
+
+// a mixed filament: a new filament slot printed by alternating layers of two or more real filaments (MiniMe's sidebar
+// "add mixed filament")
+json tool_mix_filaments(const json &args)
+{
+    if (!args.contains("filaments") || !args["filaments"].is_array() || args["filaments"].size() < 2)
+        throw ToolError("give 'filaments': two or more filament numbers to mix, e.g. [1, 2]");
+    std::vector<unsigned int> comps;
+    for (const json &f : args["filaments"])
+        comps.push_back(f.is_number_integer() ? (unsigned int) std::max(0, f.get<int>()) : 0u);
+    std::vector<int> ratios;
+    if (args.contains("percent") && args["percent"].is_array()) {
+        for (const json &r : args["percent"])
+            ratios.push_back(r.is_number() ? int(std::lround(r.get<double>())) : 0);
+        if (ratios.size() != comps.size())
+            throw ToolError("'percent' needs one value per filament");
+        int sum = 0;
+        for (int r : ratios) {
+            if (r <= 0)
+                throw ToolError("every percentage must be above 0");
+            sum += r;
+        }
+        if (sum != 100)
+            throw ToolError("the percentages must add up to 100");
+    } else {
+        const int n = int(comps.size());
+        ratios.assign(n, 100 / n);
+        ratios[0] += 100 - (100 / n) * n;
+    }
+    return on_gui([comps, ratios]() -> json {
+        const size_t physical = wxGetApp().sidebar().combos_filament().size();
+        std::set<unsigned int> seen;
+        for (unsigned int c : comps) {
+            if (c < 1 || c > physical)
+                throw ToolError("filament " + std::to_string(c) + " is not a real filament (1 to " + std::to_string(physical) + ")");
+            if (!seen.insert(c).second)
+                throw ToolError("each filament once");
+        }
+        const int idx = minime_add_mixed_filament(comps, ratios);
+        if (idx < 0)
+            throw ToolError("MiniMe could not add a mixed filament (it needs two filaments, and has a limit of filaments)");
+        const auto *colours = wxGetApp().preset_bundle->project_config.option<ConfigOptionStrings>("filament_colour");
+        json j = {{"filament", idx + 1}, {"mixes", comps}, {"percent", ratios}};
+        if (colours && idx < int(colours->values.size()))
+            j["colour"] = colours->values[idx];
+        return j;
+    });
+}
+
+// test only (registered when MINIME_BRIDGE_TEST is set): drives the Filament look window as clicks would
+json tool_test_filament_look(const json &args)
+{
+    return on_gui([args]() -> json {
+        PresetBundle *pb     = wxGetApp().preset_bundle;
+        auto         &combos = wxGetApp().sidebar().combos_filament();
+        const int     f      = int(num(args, "filament", 1));
+        if (f < 1 || f > int(combos.size()))
+            throw ToolError("no such filament");
+        const Preset *preset = pb->filaments.find_preset(pb->filament_presets[f - 1]);
+        const wxString fila_id = preset ? wxString::FromUTF8(preset->filament_id) : wxString();
+        std::string    type;
+        if (preset) {
+            std::string        display;
+            DynamicPrintConfig cfg = preset->config;
+            type = cfg.get_filament_type(display);
+        }
+        FilamentColor current;
+        if (const auto *colours = pb->project_config.option<ConfigOptionStrings>("filament_colour"); colours && f <= int(colours->values.size()))
+            current.AddColor(wxColour(wxString::FromUTF8(colours->values[f - 1])));
+        current.EndSet(1);
+        FilamentLookDialog dialog(combos[f - 1], fila_id, current, wxNullColour, type);
+        std::string        result;
+        // inside the dialog's own modal loop, as when the user opens it
+        dialog.CallAfter([&dialog, &result]() {
+            result = dialog.exercise_for_test();
+            dialog.EndModal(wxID_CANCEL);
+        });
+        dialog.ShowModal();
+        return json{{"result", result}};
+    });
+}
+
+// pauses and custom G-code at a layer of the current plate (what the preview's layer slider adds with right-click)
+json tool_layer_gcode(const json &args)
+{
+    const std::string action = lower(str(args, "action", "list"));
+    if (action != "list" && action != "add_pause" && action != "add_gcode" && action != "remove")
+        throw ToolError("'action' is list, add_pause, add_gcode or remove");
+    return on_gui([args, action]() -> json {
+        Plater    *p     = plater();
+        Model     &model = p->model();
+        PartPlate *plate = p->get_partplate_list().get_curr_plate();
+        const int  pi    = p->get_partplate_list().get_curr_plate_index();
+        CustomGCode::Info &info = model.plates_custom_gcodes[pi];
+
+        // the plate's layer heights, from the last slice
+        std::vector<double> zs;
+        if (Print *print = plate->fff_print(); print != nullptr && plate->is_slice_result_valid()) {
+            for (const PrintObject *po : print->objects())
+                for (const Layer *l : po->layers())
+                    zs.push_back(l->print_z);
+            std::sort(zs.begin(), zs.end());
+            zs.erase(std::unique(zs.begin(), zs.end(), [](double a, double b) { return std::abs(a - b) < 1e-4; }), zs.end());
+        }
+        auto layer_of = [&zs](double z) -> int {
+            for (size_t i = 0; i < zs.size(); ++i)
+                if (std::abs(zs[i] - z) < 1e-3)
+                    return int(i) + 1;
+            return 0;
+        };
+        auto list_json = [&]() {
+            json items = json::array();
+            for (const CustomGCode::Item &it : info.gcodes) {
+                json j = {{"height_mm", r2(it.print_z)}};
+                if (int l = layer_of(it.print_z); l > 0)
+                    j["layer"] = l;
+                j["type"] = it.type == CustomGCode::PausePrint ? "pause" : it.type == CustomGCode::Custom ? "gcode" :
+                            it.type == CustomGCode::ColorChange ? "colour change" : it.type == CustomGCode::ToolChange ? "filament change" : "other";
+                if (it.type == CustomGCode::Custom)
+                    j["gcode"] = it.extra;
+                items.push_back(j);
+            }
+            return items;
+        };
+        if (action == "list")
+            return json{{"plate", pi}, {"layer_gcodes", list_json()}, {"layers", zs.size()}};
+
+        // where: a layer number (1 = first layer, needs a slice) or a height
+        double z = -1.;
+        if (args.contains("layer")) {
+            const int layer = int(num(args, "layer", 0));
+            if (zs.empty())
+                throw ToolError("slice the plate first to give a layer number, or give height_mm");
+            if (layer < 2 || layer > int(zs.size()))
+                throw ToolError("layer is 2 to " + std::to_string(zs.size()) + " (the pause or G-code runs before that layer prints)");
+            z = zs[layer - 1];
+        } else if (args.contains("height_mm")) {
+            z = num(args, "height_mm", 0.);
+            if (!zs.empty()) { // the top of the nearest layer
+                double best = zs.front();
+                for (double lz : zs)
+                    if (std::abs(lz - z) < std::abs(best - z))
+                        best = lz;
+                z = best;
+            }
+        } else
+            throw ToolError("give 'layer' (from the slice) or 'height_mm'");
+
+        Plater::TakeSnapshot snapshot(p, "Claude: layer G-code");
+        if (action == "remove") {
+            const size_t before = info.gcodes.size();
+            info.gcodes.erase(std::remove_if(info.gcodes.begin(), info.gcodes.end(),
+                                             [z](const CustomGCode::Item &it) {
+                                                 return std::abs(it.print_z - z) < 1e-3 &&
+                                                        (it.type == CustomGCode::PausePrint || it.type == CustomGCode::Custom);
+                                             }),
+                              info.gcodes.end());
+            if (info.gcodes.size() == before)
+                throw ToolError("there is no pause or G-code at " + std::to_string(r2(z)) + " mm");
+        } else {
+            CustomGCode::Item item;
+            item.print_z  = z;
+            item.extruder = 1;
+            if (action == "add_pause") {
+                item.type = CustomGCode::PausePrint;
+            } else {
+                item.type  = CustomGCode::Custom;
+                item.extra = str(args, "gcode", "");
+                if (item.extra.empty())
+                    throw ToolError("give the G-code text in 'gcode'");
+            }
+            for (const CustomGCode::Item &it : info.gcodes)
+                if (std::abs(it.print_z - z) < 1e-3 && it.type == item.type)
+                    throw ToolError("there is already one at " + std::to_string(r2(z)) + " mm");
+            if (info.mode == CustomGCode::Undef)
+                info.mode = wxGetApp().preset_bundle->filament_presets.size() > 1 ? CustomGCode::MultiAsSingle : CustomGCode::SingleExtruder;
+            info.gcodes.push_back(item);
+            std::sort(info.gcodes.begin(), info.gcodes.end());
+        }
+        // as the layer slider does: the slice is outdated, the G-code gets the pause on the next slice
+        plate->update_slice_result_valid_state(false);
+        p->set_plater_dirty(true);
+        if (MainFrame *mf = wxGetApp().mainframe)
+            mf->update_slice_print_status(MainFrame::SlicePrintEventType::eEventSliceUpdate, true, false);
+        json j = {{"plate", pi}, {"height_mm", r2(z)}, {"layer_gcodes", list_json()},
+                  {"note", "slice again to put it in the G-code; the preview's layer slider shows it"}};
+        if (int l = layer_of(z); l > 0)
+            j["layer"] = l;
+        if (action == "add_pause")
+            j["pause_gcode"] = wxGetApp().preset_bundle->printers.get_edited_preset().config.opt_string("machine_pause_gcode");
+        return j;
+    });
+}
+
 json tool_assemble(const json &args)
 {
     if (!args.contains("objects") || !args["objects"].is_array() || args["objects"].size() < 2)
@@ -950,6 +1200,8 @@ json tool_get_scene(const json &)
             for (const Vec2d &pt : area->values)
                 bb.merge(pt);
             j["plate_size_mm"] = xy(bb.size());
+            // most printers' beds start at the plate's front left corner; some (deltas, Flashforge...) have the origin in the middle
+            j["printable_area_on_plate_mm"] = {{"min", xy(bb.min)}, {"max", xy(bb.max)}, {"center", xy(bb.center())}};
         }
         if (full.has("printable_height"))
             j["printable_height_mm"] = full.opt_float("printable_height");
@@ -1059,7 +1311,8 @@ json tool_get_scene(const json &)
             jobjs.push_back(jo);
         }
         j["objects"] = jobjs;
-        j["coordinates"] = "mm; x/y on a plate are measured from that plate's front left corner (its origin), z is the height above the plate";
+        j["coordinates"] = "mm; x/y on a plate are measured from that plate's origin (its front left corner on most printers; "
+                           "printable_area_on_plate_mm says where the printable area is), z is the height above the plate";
         j["how_filaments_work"] = "A part prints with its own filament (or the object's) where it is not painted; painted triangles print "
                                   "with the painted filament through the paint depth; an object's inside_filament (interior_filament setting) "
                                   "overrides both deeper than interior_skin_layers below top / above bottom surfaces. Use the layers tool after "
@@ -1246,7 +1499,12 @@ json tool_slice(const json &args)
             continue;
         }
         if (idle_since >= 0. && elapsed - idle_since > 5. && (seen_busy || elapsed > 8.))
-            throw ToolError("slicing stopped without a result - MiniMe shows the reason in its notifications (render_view can show it)");
+        {
+            const std::string why = ClaudeBridge::last_slicing_error();
+            throw ToolError(why.empty() ? std::string("slicing stopped without a result - MiniMe shows the reason in its notifications "
+                                                      "(render_view can show it)") :
+                                          "slicing stopped: " + why);
+        }
         if (elapsed > wait_s) {
             // still slicing: say how far it got, the caller asks again
             return on_gui([elapsed]() -> json {
@@ -1283,6 +1541,18 @@ json tool_slice(const json &args)
             for (const auto &w : res->warnings)
                 warnings.push_back({{"level", w.level == 2 ? "error" : w.level == 1 ? "warning" : "tip"}, {"message", w.msg}, {"code", w.error_code}});
             j["warnings"] = warnings;
+            // grams per kind of use, as the preview's filament table shows them
+            const auto &st    = res->print_statistics;
+            auto        grams = [res](const std::map<size_t, double> &m) {
+                double g = 0.;
+                for (const auto &[id, v] : m)
+                    g += v * (id < res->filament_densities.size() && res->filament_densities[id] > 0.f ? res->filament_densities[id] : 1.24) / 1000.;
+                return r2(g);
+            };
+            j["filament_breakdown_g"] = {{"model", grams(st.model_volumes_per_extruder)}, {"support", grams(st.support_volumes_per_extruder)},
+                                         {"flushed_at_filament_changes", grams(st.flush_per_filament)},
+                                         {"prime_tower", grams(st.wipe_tower_volumes_per_extruder)},
+                                         {"purge_start_and_other", grams(st.purge_volumes_per_extruder)}};
         }
         if (Print *print = plate->fff_print()) {
             const PrintStatistics &ps = print->print_statistics();
@@ -2628,6 +2898,261 @@ json tool_calibration_test(const json &args)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// printers: any brand's printer profile (Bambu Lab, Anycubic, Creality, Prusa, Voron...) or the user's own
+
+// which settings have unsaved changes, for messages ("" when none)
+static std::string unsaved_settings_text()
+{
+    std::string text;
+    for (Tab *tab : wxGetApp().tabs_list) {
+        if (tab == nullptr || !tab->current_preset_is_dirty())
+            continue;
+        PresetCollection *presets = tab->get_presets();
+        if (presets == nullptr)
+            continue;
+        std::vector<std::string> keys = presets->current_dirty_options();
+        std::string               list;
+        for (size_t i = 0; i < keys.size() && i < 8; ++i)
+            list += (i ? ", " : "") + keys[i];
+        if (keys.size() > 8)
+            list += ", ...";
+        text += (text.empty() ? "" : "; ") + std::string("'") + presets->get_edited_preset().name + "'" +
+                (list.empty() ? std::string() : " (" + list + ")");
+    }
+    return text;
+}
+
+// what MiniMe changed by itself when set_printer last loaded a printer ("" when nothing)
+static std::string s_adjusted_on_load;
+
+// every printer profile MiniMe ships, installed or not (MiniMe loads a brand's profiles once the brand is added)
+struct ShippedPrinter
+{
+    std::string vendor, name, model, variant;
+    double      nozzle = 0.;
+};
+static const std::vector<ShippedPrinter> &shipped_printers()
+{
+    static std::vector<ShippedPrinter> list;
+    static bool                        done = false;
+    if (done)
+        return list;
+    done = true;
+    namespace fs = boost::filesystem;
+    const fs::path dir = fs::path(resources_dir()) / "profiles";
+    try {
+        for (const auto &entry : fs::directory_iterator(dir)) {
+            if (entry.path().extension() != ".json")
+                continue;
+            const std::string vendor = entry.path().stem().string();
+            try {
+                boost::nowide::ifstream in(entry.path().string());
+                json idx = json::parse(in);
+                if (!idx.contains("machine_list"))
+                    continue;
+                for (const json &it : idx["machine_list"]) {
+                    boost::nowide::ifstream mf((dir / vendor / it.value("sub_path", std::string())).string());
+                    if (!mf)
+                        continue;
+                    json m = json::parse(mf, nullptr, false);
+                    if (m.is_discarded() || m.value("instantiation", std::string("true")) != "true")
+                        continue;
+                    ShippedPrinter sp;
+                    sp.vendor  = vendor;
+                    sp.name    = m.value("name", std::string());
+                    sp.model   = m.value("printer_model", std::string());
+                    sp.variant = m.value("printer_variant", std::string());
+                    if (m.contains("nozzle_diameter") && m["nozzle_diameter"].is_array() && !m["nozzle_diameter"].empty())
+                    {
+                        const json &nd0 = m["nozzle_diameter"][0];
+                        sp.nozzle = nd0.is_string() ? std::atof(nd0.get<std::string>().c_str()) : nd0.is_number() ? nd0.get<double>() : 0.;
+                    }
+                    if (sp.nozzle <= 0. && !sp.variant.empty())
+                        sp.nozzle = std::atof(sp.variant.c_str());
+                    if (!sp.name.empty() && !sp.model.empty())
+                        list.push_back(sp);
+                }
+            } catch (const std::exception &e) {
+                BOOST_LOG_TRIVIAL(warning) << "MiniMe bridge: printer list of " << vendor << ": " << e.what();
+            }
+        }
+    } catch (const std::exception &e) {
+        BOOST_LOG_TRIVIAL(warning) << "MiniMe bridge: printer list: " << e.what();
+    }
+    return list;
+}
+
+json tool_set_printer(const json &args)
+{
+    const std::string query  = lower(str(args, "printer", ""));
+    const double      nozzle = num(args, "nozzle", 0.);
+    const bool        list   = args.value("list", false);
+    return on_gui([query, nozzle, list]() -> json {
+        PresetBundle *pb = wxGetApp().preset_bundle;
+        auto norm = [](std::string s) {
+            s = lower(s);
+            for (char &c : s)
+                if (c == '-' || c == '_')
+                    c = ' ';
+            return s;
+        };
+        std::vector<std::string> words;
+        {
+            std::string q = norm(query), w;
+            for (char c : q + " ") {
+                if (c == ' ' || c == '\t') {
+                    if (!w.empty())
+                        words.push_back(w);
+                    w.clear();
+                } else
+                    w += c;
+            }
+        }
+        // the shipped printers of every brand, and the user's own printer presets
+        struct Found { std::string vendor, name, model, variant; double nozzle; bool user; };
+        std::vector<Found> all;
+        for (const ShippedPrinter &sp : shipped_printers())
+            all.push_back({sp.vendor, sp.name, sp.model, sp.variant, sp.nozzle, false});
+        for (const Preset &pr : pb->printers.get_presets())
+            if (pr.is_user() && !pr.is_default && pr.printer_technology() == ptFFF) {
+                const auto *nd = pr.config.option<ConfigOptionFloats>("nozzle_diameter");
+                all.push_back({"user", pr.name, pr.name, "", nd && !nd->values.empty() ? nd->values.front() : 0., true});
+            }
+        std::vector<Found> found;
+        for (const Found &f : all) {
+            const std::string hay = norm(f.vendor + " " + f.name);
+            bool ok = true;
+            for (const std::string &w : words)
+                ok = ok && hay.find(w) != std::string::npos;
+            if (ok && nozzle > 0.)
+                ok = std::abs(f.nozzle - nozzle) < 0.01;
+            if (ok)
+                found.push_back(f);
+        }
+        if (words.empty() && !list)
+            throw ToolError("give 'printer' (brand and/or model, e.g. \"Anycubic Kobra 3\"), or list=true with a brand to see its printers");
+        if (list) {
+            std::map<std::string, std::set<std::string>> by_vendor;
+            for (const Found &f : found)
+                by_vendor[f.vendor].insert(f.name);
+            json   out = json::object();
+            size_t n   = 0;
+            for (const auto &[v, names] : by_vendor)
+                for (const std::string &nm : names)
+                    if (n++ < 150)
+                        out[v].push_back(nm);
+            json j{{"printers", out}, {"count", found.size()}};
+            if (found.size() > 150)
+                j["note"] = "only the first 150 are listed: add the brand or model to 'printer'";
+            return j;
+        }
+        if (found.empty())
+            throw ToolError("no printer profile matches '" + query + "'. Try the brand alone with list=true (e.g. printer=\"Anycubic\", "
+                            "list=true). For a printer MiniMe has no profile for, the user can copy a similar printer's profile and change "
+                            "its bed size and start G-code in the printer settings.");
+        // an exact name wins; else one model, with its 0.4 mm nozzle unless another was asked
+        const Found *pick = nullptr;
+        for (const Found &f : found)
+            if (norm(f.name) == norm(query))
+                pick = &f;
+        if (pick == nullptr) {
+            // "Kobra 3" is the Kobra 3, not also the Kobra 3 Max: a model named exactly as asked (with or without the brand) wins
+            {
+                auto strip_brand = [&](const std::string &text, const std::string &vendor) {
+                    std::string t = norm(text), v = norm(vendor) + " ";
+                    return t.rfind(v, 0) == 0 ? t.substr(v.size()) : t;
+                };
+                std::vector<Found> exact;
+                for (const Found &f : found)
+                    if (strip_brand(f.model, f.vendor) == strip_brand(query, f.vendor))
+                        exact.push_back(f);
+                if (!exact.empty())
+                    found = exact;
+            }
+            std::set<std::string> models;
+            for (const Found &f : found)
+                models.insert(f.vendor + "/" + f.model);
+            if (models.size() > 1) {
+                json names = json::array();
+                for (const Found &f : found)
+                    if (names.size() < 40)
+                        names.push_back(f.name);
+                throw ToolError("'" + query + "' matches " + std::to_string(models.size()) + " printers; give the full name, e.g. one of: " +
+                                names.dump());
+            }
+            for (const Found &f : found)
+                if (pick == nullptr || std::abs(f.nozzle - 0.4) < 0.01)
+                    pick = &f;
+        }
+        const std::string name = pick->name;
+        if (pb->printers.get_edited_preset().name != name) {
+            if (wxGetApp().has_current_preset_changes()) {
+                const std::string unsaved = unsaved_settings_text();
+                if (!s_adjusted_on_load.empty() && unsaved == s_adjusted_on_load) {
+                    // only what MiniMe itself changed when the last set_printer loaded that printer (no edits since): drop it
+                    for (Tab *tab : wxGetApp().tabs_list)
+                        if (tab != nullptr && tab->current_preset_is_dirty() && tab->get_presets() != nullptr)
+                            tab->get_presets()->discard_current_changes();
+                } else
+                    throw ToolError("these settings have unsaved changes: " + unsaved + ". Switching printers would ask the user what to "
+                                    "do with them: ask the user to save or discard them first.");
+            }
+            if (pb->printers.find_preset(name, false) == nullptr && !pick->user) {
+                // a brand not added yet: add it as the setup wizard does
+                if (wxGetApp().preset_updater == nullptr || !wxGetApp().preset_updater->install_bundles_rsrc({pick->vendor}, false))
+                    throw ToolError("could not add " + pick->vendor + "'s printer profiles");
+                wxGetApp().app_config->set_variant(pick->vendor, pick->model, pick->variant, true);
+                auto loaded = pb->load_presets(*wxGetApp().app_config, ForwardCompatibilitySubstitutionRule::EnableSilentDisableSystem,
+                                               {pick->model, pick->variant, std::string(), std::string()});
+                if (!loaded.second.empty())
+                    BOOST_LOG_TRIVIAL(warning) << "MiniMe bridge: loading " << pick->vendor << ": " << loaded.second;
+                wxGetApp().load_current_presets();
+                if (pb->printers.find_preset(name, false) == nullptr)
+                    throw ToolError(pick->vendor + "'s profiles were added but '" + name + "' did not load" +
+                                    (loaded.second.empty() ? std::string() : ": " + loaded.second));
+            }
+            if (pb->printers.get_edited_preset().name != name) {
+                Tab *tab = wxGetApp().get_tab(Preset::TYPE_PRINTER);
+                if (tab == nullptr)
+                    throw ToolError("the printer settings are not available");
+                tab->select_preset(name);
+            }
+            if (pb->printers.get_edited_preset().name != name)
+                throw ToolError("MiniMe did not switch to '" + name + "'");
+            // a profile MiniMe adjusts as it loads it (printers with several nozzles) shows as modified right away
+            s_adjusted_on_load = wxGetApp().has_current_preset_changes() ? unsaved_settings_text() : std::string();
+        }
+        Preset                   &pr  = pb->printers.get_edited_preset();
+        const DynamicPrintConfig &cfg = pr.config;
+        BoundingBoxf              bed(cfg.option<ConfigOptionPoints>("printable_area")->values);
+        json                      filaments = json::array();
+        for (const std::string &f : pb->filament_presets)
+            filaments.push_back(f);
+        const auto *host = cfg.option<ConfigOptionString>("print_host");
+        json j{{"printer", pr.name},
+               {"brand", pr.vendor ? pr.vendor->name : std::string("user preset")},
+               {"nozzle_mm", cfg.option<ConfigOptionFloats>("nozzle_diameter")->values},
+               {"bed_mm", json::array({r2(bed.size().x()), r2(bed.size().y())})},
+               {"bed_center_on_plate_mm", json::array({r2(bed.center().x()), r2(bed.center().y())})},
+               {"max_height_mm", cfg.opt_float("printable_height")},
+               {"gcode_flavor", cfg.opt_serialize("gcode_flavor")},
+               {"process", pb->prints.get_edited_preset().name},
+               {"filaments", filaments}};
+        if (!s_adjusted_on_load.empty() && s_adjusted_on_load == unsaved_settings_text())
+            j["adjusted_on_load"] = "MiniMe adjusted these settings when it loaded this printer (they show as modified): " + s_adjusted_on_load;
+        if (pr.is_bbl_vendor_preset(pb))
+            j["how_to_print"] = "the Print button sends the plate through Bambu Connect";
+        else if (host && !host->value.empty())
+            j["how_to_print"] = "the Print button uploads the G-code to " + host->value;
+        else
+            j["how_to_print"] = "the Print button saves a G-code file for the printer's USB stick or SD card; to print over the network "
+                                "(OctoPrint, Klipper/Moonraker, PrusaLink, Duet) the user enters the printer's address with the connection "
+                                "button next to the printer";
+        return j;
+    });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // height ranges: other settings (layer height, infill, walls...) for a band of an object's height
 
 json tool_height_range(const json &args)
@@ -2938,6 +3463,41 @@ const std::vector<Tool> &tools()
             "parts after that. A part with filament 0 follows the object. Painted areas keep their paint.",
             R"J({"type": "object", "properties": {"object": $OBJ, "part": {"type": ["integer", "string"], "description": "part index or name (get_scene lists them); leave out for the whole object"},
                 "filament": {"type": "integer", "description": "filament number, 1-based as in MiniMe"}}, "required": ["object", "filament"]})J", tool_set_filament);
+        add("set_filament_colour",
+            "Sets the colour of a filament slot, as the user's Filament look window does: one colour (solid; #RRGGBBAA for a translucent "
+            "one), 2 to 4 for a gradient (changes along the spool) or a multi-color (dual / tri-color) filament, and an optional glow "
+            "colour. It changes what the plate shows and the filament list, not the filament profile. Use it to match the colours the "
+            "user wants (e.g. from a picture), then set_filament / paint_color to put them on the model.",
+            R"J({"type": "object", "properties": {
+                "filament": {"type": "integer", "description": "filament number, 1-based as in MiniMe"},
+                "colours": {"type": "array", "items": {"type": "string"}, "description": "#RRGGBB or #RRGGBBAA, 1 to 4"},
+                "style": {"type": "string", "enum": ["solid", "gradient", "multi"], "description": "default solid for one colour, gradient for more"},
+                "glow": {"type": "string", "description": "glow-in-the-dark colour #RRGGBB, \"\" for none; leave out to keep"}},
+                "required": ["filament", "colours"]})J",
+            tool_set_filament_colour);
+        add("mix_filaments",
+            "Adds a mixed filament (as the sidebar's add mixed filament): a new filament number whose colour comes from printing two or "
+            "more real filaments in alternating layers, e.g. 50 % red + 50 % yellow for an orange look. Then set_filament or paint_color "
+            "it like any filament.",
+            R"J({"type": "object", "properties": {
+                "filaments": {"type": "array", "items": {"type": "integer"}, "description": "real filament numbers to mix, 2 or more"},
+                "percent": {"type": "array", "items": {"type": "number"}, "description": "share of each, adding up to 100; default even"}},
+                "required": ["filaments"]})J",
+            tool_mix_filaments);
+        if (std::getenv("MINIME_BRIDGE_TEST") != nullptr)
+            add("test_filament_look", "Test only: opens the Filament look window and clicks through it.",
+                R"J({"type": "object", "properties": {"filament": {"type": "integer"}}})J", tool_test_filament_look);
+        add("layer_gcode",
+            "Pauses and custom G-code at a layer of the current plate, as the preview's layer slider adds them (one undo step): "
+            "add_pause stops the printer before that layer (to insert magnets, nuts, a label...), add_gcode runs G-code there, remove "
+            "takes one away, list shows them. Give 'layer' (1-based, from the slice; the action runs before that layer prints) or "
+            "'height_mm'. Slice again afterwards so the G-code has it.",
+            R"J({"type": "object", "properties": {
+                "action": {"type": "string", "enum": ["list", "add_pause", "add_gcode", "remove"]},
+                "layer": {"type": "integer", "description": "layer number, 1 = first layer"},
+                "height_mm": {"type": "number"},
+                "gcode": {"type": "string", "description": "add_gcode: the G-code text"}}, "required": ["action"]})J",
+            tool_layer_gcode);
         add("assemble_objects",
             "Joins several objects into one object with several parts, keeping every part where it is (one undo step). Put the pieces in "
             "place first (transform_object), then assemble; inside one object, parts can sit at any height (move_part).",
@@ -3095,6 +3655,17 @@ const std::vector<Tool> &tools()
                 "freq_x": {"type": "number", "description": "input_shaping_damp: X frequency from the frequency test"},
                 "freq_y": {"type": "number", "description": "input_shaping_damp: Y frequency"}}, "required": ["test"]})J",
             tool_calibration_test);
+        add("set_printer",
+            "Switches to a printer profile: Bambu Lab's or another brand's (Anycubic, Creality, Elegoo, Prusa, Voron, Qidi, Sovol, "
+            "Flashforge, Artillery, Snapmaker... and generic Klipper / Marlin / RepRapFirmware printers), or the user's own. Matches "
+            "the words given (e.g. \"Kobra 3\") and takes the 0.4 mm nozzle unless 'nozzle' is given; list=true lists the printers "
+            "that match instead (e.g. printer=\"Anycubic\", list=true). Picks compatible filament and process presets. Not while "
+            "settings have unsaved changes.",
+            R"J({"type": "object", "properties": {
+                "printer": {"type": "string", "description": "brand and/or model words, or the full profile name"},
+                "nozzle": {"type": "number", "description": "nozzle diameter in mm, default 0.4"},
+                "list": {"type": "boolean", "description": "only list the matching printers"}}})J",
+            tool_set_printer);
         add("height_range",
             "Different process settings for a band of an object's height (MiniMe's height range modifier, one undo step): e.g. "
             "thicker layers (layer_height_mm) in a hidden body and thin ones where the details and color changes are, or less "
@@ -3121,6 +3692,12 @@ const char *INSTRUCTIONS =
     "WORK FROM DATA. get_scene first. After every change read the result back (get_scene, section, or slice + layers) and check the "
     "numbers before you say it worked; never say something is done that a tool did not confirm. render_view is for showing the user, "
     "or for what no number tells.\n"
+    "\n"
+    "BE THOROUGH. Before you propose a change to the model itself (scaling, thicker parts, a redesign), check the settings that "
+    "solve the problem without it (find_settings / get_settings): e.g. thin text and fine details print with wall_generator = "
+    "arachne and a smaller min_feature_size / min_bead_width; weak or stringy prints have filament and speed settings. Use every "
+    "tool that fits before saying you cannot do something (pauses: layer_gcode; colours: set_filament_colour, mix_filaments). "
+    "When there are several good ways, say which you chose and why, and the others in one line each.\n"
     "\n"
     "WHAT YOU CAN DO\n"
     "- Look: get_scene (filaments; plates; objects; every part with type, filament, box and z range, painted filaments with their "
@@ -3149,6 +3726,11 @@ const char *INSTRUCTIONS =
     "supports-only-here areas on the plate), support_report after slicing.\n"
     "- Height ranges: height_range gives a band of an object's height its own layer height or other settings (thick layers in a "
     "hidden body, thin ones at the details). Objects printed side by side need the same ranges to change filament on the same layers.\n"
+    "- Filament colours: set_filament_colour gives a filament slot its colour (solid, translucent #RRGGBBAA, gradient, multi-color, "
+    "glow), e.g. to match a picture; mix_filaments adds a mixed filament (alternating layers of two or more filaments).\n"
+    "- Pauses: layer_gcode adds a pause (to insert magnets, nuts...) or custom G-code before a layer, lists and removes them.\n"
+    "- Printer: set_printer switches to any brand's printer (or lists them); get_scene says which printer is used. Printers "
+    "that are not Bambu Lab print from a G-code file (USB stick / SD card), or over the network once the user set its address.\n"
     "- Calibration: calibration_test starts a test of the Calibration menu (temperature, max flowrate, pressure advance, flow "
     "ratio, retraction, VFA, cornering, input shaping) as a new project, only from an empty project with no unsaved settings. "
     "Read the user's result with its value_by_height; to keep a result, tell the user which setting to change in their filament "
@@ -3418,6 +4000,19 @@ void ClaudeBridge::stop()
 
 bool ClaudeBridge::running() { return s_running; }
 
+static std::mutex  s_slice_error_mutex;
+static std::string s_slice_error;
+void ClaudeBridge::note_slicing_error(const std::string &message)
+{
+    std::lock_guard<std::mutex> lock(s_slice_error_mutex);
+    s_slice_error = message;
+}
+std::string ClaudeBridge::last_slicing_error()
+{
+    std::lock_guard<std::mutex> lock(s_slice_error_mutex);
+    return s_slice_error;
+}
+
 int ClaudeBridge::port() { return s_port; }
 
 void ClaudeBridge::set_needed_by_chat(bool needed)
@@ -3435,6 +4030,14 @@ std::string ClaudeBridge::status()
 void ClaudeBridge::apply_preference()
 {
     AppConfig *config = wxGetApp().app_config;
+    // a second MiniMe (e.g. a test copy next to the user's) takes another port: MINIME_BRIDGE_PORT=13710
+    if (const char *env = std::getenv("MINIME_BRIDGE_PORT"); env != nullptr && std::atoi(env) > 0) {
+        if (s_chat_needs || (config != nullptr && config->get_bool(CONFIG_KEY)))
+            start(std::atoi(env));
+        else
+            stop();
+        return;
+    }
     if (s_chat_needs)
         // the chat finds a free port itself; an external Claude uses the default one
         start(DEFAULT_PORT, 10);

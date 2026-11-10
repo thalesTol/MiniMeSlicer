@@ -1681,6 +1681,9 @@ void PresetUpdater::sync(std::string http_url, std::string language, std::string
         this->p->prune_tmps();
         if (p->cancel)
             return;
+        // SliceOfMe: MiniMe ships its own profiles and stays on the network plug-in it was built with: no profile, printer
+        // or plug-in updates from Bambu's servers (they offered Bambu Studio's packages and kept popping up).
+        return;
         //not used
         //this->p->sync_version();
         //if (p->cancel)

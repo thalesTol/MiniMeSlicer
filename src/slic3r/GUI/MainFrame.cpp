@@ -4412,10 +4412,20 @@ void MainFrame::set_print_button_to_default(PrintSelectType select_type)
         m_print_btn->Enable(m_print_enable);
         this->Layout();
     } else if (select_type == PrintSelectType::eSendGcode) {
-        m_print_btn->SetLabel(_L("Print"));
-        m_print_select = eSendGcode;
-        if (m_print_enable)
-            m_print_enable = get_enable_print_status() && can_send_gcode();
+        // SliceOfMe: a printer with no network address (OctoPrint, Klipper/Moonraker, PrusaLink, Duet...) set takes its print
+        // as a G-code file on a USB stick or SD card, so the button saves the file instead of being greyed out
+        const auto *host = wxGetApp().preset_bundle->printers.get_edited_preset().config.option<ConfigOptionString>("print_host");
+        if (host == nullptr || host->value.empty()) {
+            m_print_btn->SetLabel(_L("Export G-code file"));
+            m_print_select = eExportGcode;
+            if (m_print_enable)
+                m_print_enable = get_enable_print_status();
+        } else {
+            m_print_btn->SetLabel(_L("Print"));
+            m_print_select = eSendGcode;
+            if (m_print_enable)
+                m_print_enable = get_enable_print_status() && can_send_gcode();
+        }
         m_print_btn->Enable(m_print_enable);
         this->Layout();
     } else {

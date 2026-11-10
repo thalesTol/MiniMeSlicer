@@ -3776,6 +3776,36 @@ void PrintConfigDef::init_fff_params()
     def->mode = comDevelop;
     def->set_default_value(new ConfigOptionEnum<PrinterStructure>(psUndefine));
 
+    // SliceOfMe: adaptive bed mesh area, as in OrcaSlicer, for printer profiles whose start G-code probes only where the print is
+    def          = this->add("bed_mesh_min", coPoint);
+    def->label   = L("Bed mesh min");
+    def->tooltip = L("The min point of the area the printer can probe. adaptive_bed_mesh_min/adaptive_bed_mesh_max stay inside it.");
+    def->sidetext = L("mm");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionPoint(Vec2d(-99999, -99999)));
+
+    def          = this->add("bed_mesh_max", coPoint);
+    def->label   = L("Bed mesh max");
+    def->tooltip = L("The max point of the area the printer can probe. adaptive_bed_mesh_min/adaptive_bed_mesh_max stay inside it.");
+    def->sidetext = L("mm");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionPoint(Vec2d(99999, 99999)));
+
+    def          = this->add("bed_mesh_probe_distance", coPoint);
+    def->label   = L("Probe point distance");
+    def->tooltip = L("The preferred distance between probe points in X and Y.");
+    def->min     = 0;
+    def->sidetext = L("mm");
+    def->mode    = comAdvanced;
+    def->set_default_value(new ConfigOptionPoint(Vec2d(50, 50)));
+
+    def          = this->add("adaptive_bed_mesh_margin", coFloat);
+    def->label   = L("Mesh margin");
+    def->tooltip = L("How far the adaptive bed mesh area reaches beyond the first layer, in X and Y.");
+    def->sidetext = L("mm");
+    def->mode    = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
     def = this->add("best_object_pos", coPoint);
     def->label = L("Best object position");
     def->tooltip = L("Best auto arranging position in range [0,1] w.r.t. bed shape.");

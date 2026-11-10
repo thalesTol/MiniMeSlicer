@@ -13,12 +13,17 @@
 - **Brazilian filament profiles**: STLFLIX, Voolt3D, GTMax3D, National3D and Masterprint for all Bambu Lab printers.
 - **Print with Bambu Connect**: Bambu Lab printers only accept prints from slicers Bambu Lab signs, so MiniMe sends them
   through [Bambu Connect](https://wiki.bambulab.com/en/software/bambu-connect) (install it once).
+- **Any printer**: about 350 printer models of 65 brands (Anycubic, Creality, Elegoo, Prusa, Voron, Qidi, Sovol, Flashforge,
+  Artillery, Snapmaker and many more, plus generic Klipper, Marlin and RepRapFirmware printers), from
+  [OrcaSlicer](https://github.com/OrcaSlicer/OrcaSlicer)'s printer profiles. Their prints go out as a G-code file (USB stick
+  or SD card), or over the network to OctoPrint, Klipper (Moonraker), PrusaLink, Duet and similar. Printers with
+  several nozzles (IDEX, tool changers) and belt printers are not supported yet.
 
-**Download for Windows:** [latest release](../../releases/latest) (run the installer; Windows may warn that it is unsigned:
-More info, Run anyway).
+**Download:** [latest release](../../releases/latest), for Windows (run the installer; Windows may warn that it is unsigned:
+More info, Run anyway) and macOS (Apple Silicon and Intel).
 
-MiniMe Slicer is licensed under the GNU Affero General Public License v3, like Bambu Studio. It is not made or endorsed by
-Bambu Lab. The original Bambu Studio README follows.
+MiniMe Slicer is licensed under the GNU Affero General Public License v3, like Bambu Studio. The printer profiles of other
+brands come from OrcaSlicer (also AGPL v3). MiniMe is not made or endorsed by Bambu Lab or OrcaSlicer. The original Bambu Studio README follows.
 
 ---
 

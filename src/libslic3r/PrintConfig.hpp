@@ -1560,6 +1560,11 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionString,             printer_notes))
     ((ConfigOptionFloat,              printable_height))
     ((ConfigOptionFloatsNullable,     extruder_printable_height))
+    // SliceOfMe: adaptive bed mesh, as in OrcaSlicer
+    ((ConfigOptionPoint,              bed_mesh_min))
+    ((ConfigOptionPoint,              bed_mesh_max))
+    ((ConfigOptionPoint,              bed_mesh_probe_distance))
+    ((ConfigOptionFloat,              adaptive_bed_mesh_margin))
     ((ConfigOptionPoint,              best_object_pos))
     ((ConfigOptionFloats,             slow_down_min_speed))
     ((ConfigOptionFloatsNullable,     nozzle_diameter))

@@ -27,6 +27,9 @@ public:
     static void set_needed_by_chat(bool needed);
     // what to tell the user: the address, or why it does not run
     static std::string status();
+    // the error the last slicing stopped with (the slice tool reports it); empty when it went well
+    static void        note_slicing_error(const std::string &message);
+    static std::string last_slicing_error();
 };
 
 } // namespace Slic3r::GUI

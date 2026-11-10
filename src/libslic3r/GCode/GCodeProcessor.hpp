@@ -99,6 +99,9 @@ namespace Slic3r {
         std::map<size_t, double>                            total_volumes_per_extruder;
         //BBS: the flush amount of every filament
         std::map<size_t, double>                            flush_per_filament;
+        // SliceOfMe: filament purged outside the tower and the filament-change flushes: the start G-code's purge and
+        // calibration lines, and every other "poop" a custom G-code asks for
+        std::map<size_t, double>                            purge_volumes_per_extruder;
         std::map<ExtrusionRole, std::pair<double, double>>  used_filaments_per_role;
         std::map<size_t, double>                            load_time_per_filament;
         std::map<size_t, double>                            unload_time_per_filament;
@@ -120,6 +123,7 @@ namespace Slic3r {
             support_volumes_per_extruder.clear();
             total_volumes_per_extruder.clear();
             flush_per_filament.clear();
+            purge_volumes_per_extruder.clear();
             used_filaments_per_role.clear();
             load_time_per_filament.clear();
             unload_time_per_filament.clear();
@@ -743,6 +747,10 @@ namespace Slic3r {
             //BBS: the flush amount of every filament
             std::map<size_t, double> flush_per_filament;
 
+            // SliceOfMe: purges outside the tower and the flushes (see PrintEstimatedStatistics::purge_volumes_per_extruder)
+            double purge_cache;
+            std::map<size_t, double> purge_volumes_per_filament;
+
             double total_volume_cache;
             std::map<size_t, double>total_volumes_per_filament;
 
@@ -754,11 +762,13 @@ namespace Slic3r {
             void increase_support_caches(double extruded_volume);
             void increase_model_caches(double extruded_volume);
             void increase_wipe_tower_caches(double extruded_volume);
+            void increase_purge_caches(double extruded_volume);
 
             void process_color_change_cache();
             void process_model_cache(GCodeProcessor* processor);
             void process_wipe_tower_cache(GCodeProcessor* processor);
             void process_support_cache(GCodeProcessor* processor);
+            void process_purge_cache(GCodeProcessor* processor);
             void process_total_volume_cache(GCodeProcessor* processor);
 
             void update_flush_per_filament(size_t extrude_id, float flush_length);
@@ -1146,6 +1156,12 @@ namespace Slic3r {
         bool m_wiping;
         bool m_flushing; // mark a section with real flush
         bool m_virtual_flushing; // mark a section with virtual flush, only for statistics
+        // SliceOfMe: for counting purges: filament retracted and not pushed back yet, per extruder, and whether the
+        // lines are between M628 S1 and M629 (Bambu pushing back the filament it pulled when cutting it)
+        std::map<int, float> m_purge_retracted;
+        bool m_cut_reload{false};
+        void account_extrusion(float volume);
+        void account_e_only_move(float volume);
         bool m_wipe_tower;
         bool m_skippable;
         SkipType m_skippable_type;

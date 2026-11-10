@@ -203,6 +203,7 @@
 #include "ImageMessageDialog.hpp"
 
 #include "HelioReleaseNote.hpp"
+#include "MiniMeBridge.hpp"
 
 using boost::optional;
 namespace fs = boost::filesystem;
@@ -6139,6 +6140,29 @@ static bool create_mixed_filament_from_result(
     return !created.empty() && created.front() >= 0;
 }
 
+// SliceOfMe: the Claude bridge's mix_filaments tool adds a mixed filament as the sidebar's "add mixed filament" does.
+// Returns the new filament's config index, or -1.
+int minime_add_mixed_filament(const std::vector<unsigned int> &components, const std::vector<int> &ratios)
+{
+    Sidebar &sidebar = wxGetApp().sidebar();
+    const size_t num_physical = sidebar.combos_filament().size();
+    auto &project_config = wxGetApp().preset_bundle->project_config;
+    const auto *is_mixed_opt = project_config.option<ConfigOptionBools>("filament_is_mixed");
+    const auto *colours_opt  = project_config.option<ConfigOptionStrings>("filament_colour");
+    std::vector<std::string> color_strs;
+    const size_t total = wxGetApp().preset_bundle->filament_presets.size();
+    for (size_t i = 0; i < total && color_strs.size() < num_physical; ++i)
+        if (!is_mixed_opt || i >= is_mixed_opt->values.size() || !is_mixed_opt->values[i])
+            color_strs.push_back(colours_opt && i < colours_opt->values.size() ? colours_opt->values[i] : std::string("#FFFFFF"));
+    while (color_strs.size() < num_physical)
+        color_strs.push_back("#FFFFFF");
+    MixedFilamentResult result;
+    result.components = components;
+    result.ratios     = ratios;
+    const std::vector<int> created = create_mixed_filaments_from_results(&sidebar, {result}, color_strs);
+    return created.empty() ? -1 : created.front();
+}
+
 void Sidebar::add_mixed_filament()
 {
     auto* plater = dynamic_cast<Plater*>(GetParent());
@@ -8256,6 +8280,16 @@ void Plater::priv::select_view_3D(const std::string& name, bool no_slice)
     selection_changed();
 
     apply_free_camera_correction(false);
+
+    // SliceOfMe: keep the Prepare / Preview tab on the view that is shown. Slicing (also when Claude slices) and other code
+    // switch the view here without the tab bar, which then showed the other tab until the user clicked one. select_tab()
+    // does nothing when the tab is already right; only while the plater is on screen, never pulling away from Home etc.
+    if (MainFrame *mf = wxGetApp().mainframe; mf != nullptr && q->IsShownOnScreen()) {
+        if (current_panel == view3D)
+            mf->select_tab(size_t(MainFrame::tp3DEditor));
+        else if (current_panel == preview)
+            mf->select_tab(size_t(MainFrame::tpPreview));
+    }
 }
 
 void Plater::priv::select_next_view_3D()
@@ -11311,6 +11345,8 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
         // update string by type
         q->post_process_string_object_exception(err);
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": validate err=%1%, warning=%2%")%err.string%warning.string;
+        // SliceOfMe: the Claude bridge's slice tool tells why nothing was sliced
+        ClaudeBridge::note_slicing_error(err.string);
 
         if (err.string.empty()) {
             this->partplate_list.get_curr_plate()->update_apply_result_invalid(false);
@@ -13143,6 +13179,8 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
     this->background_process.reset_export();
     // This bool stops showing export finished notification even when process_completed_with_error is false
     bool has_error = false;
+    // SliceOfMe: the Claude bridge's slice tool tells the reason
+    ClaudeBridge::note_slicing_error(evt.error() ? into_u8(evt.format_error_message().first) : std::string());
     if (evt.error()) {
         auto message = evt.format_error_message();
         if (evt.critical_error()) {

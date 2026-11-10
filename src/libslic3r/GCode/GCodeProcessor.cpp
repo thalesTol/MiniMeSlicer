@@ -1364,6 +1364,9 @@ void GCodeProcessor::UsedFilaments::reset()
 
     flush_per_filament.clear();
 
+    purge_cache = 0.0f;
+    purge_volumes_per_filament.clear();
+
     role_cache = 0.0f;
     filaments_per_role.clear();
 
@@ -1397,6 +1400,55 @@ void GCodeProcessor::UsedFilaments::increase_wipe_tower_caches(double extruded_v
     wipe_tower_cache += extruded_volume;
     role_cache += extruded_volume;
     total_volume_cache += extruded_volume;
+}
+
+void GCodeProcessor::UsedFilaments::increase_purge_caches(double extruded_volume)
+{
+    purge_cache += extruded_volume;
+    role_cache += extruded_volume;
+    total_volume_cache += extruded_volume;
+}
+
+void GCodeProcessor::UsedFilaments::process_purge_cache(GCodeProcessor* processor)
+{
+    const int active_filament_id = processor->get_filament_id();
+    if (purge_cache != 0.0f) {
+        if (active_filament_id != -1)
+            purge_volumes_per_filament[active_filament_id] += purge_cache;
+        purge_cache = 0.0f;
+    }
+}
+
+// SliceOfMe: an extrusion with movement. Custom G-code (start G-code calibration and purge lines, filament changes...) is
+// purge, not model.
+void GCodeProcessor::account_extrusion(float volume)
+{
+    if (m_extrusion_role == ExtrusionRole::erSupportMaterial || m_extrusion_role == ExtrusionRole::erSupportMaterialInterface ||
+        m_extrusion_role == ExtrusionRole::erSupportTransition)
+        m_used_filaments.increase_support_caches(volume);
+    else if (m_extrusion_role == ExtrusionRole::erWipeTower)
+        m_used_filaments.increase_wipe_tower_caches(volume);
+    else if (m_extrusion_role == ExtrusionRole::erCustom)
+        m_used_filaments.increase_purge_caches(volume);
+    else
+        m_used_filaments.increase_model_caches(volume);
+}
+
+// SliceOfMe: an extruder-only move outside a flush: a retraction, the push back after one, or a purge ("poop"). What is
+// pushed beyond what was retracted is purged.
+void GCodeProcessor::account_e_only_move(float volume)
+{
+    if (m_cut_reload || volume == 0.f)
+        return;
+    float &retracted = m_purge_retracted[get_extruder_id()];
+    if (volume < 0.f) {
+        retracted -= volume;
+        return;
+    }
+    const float purged = volume - retracted;
+    retracted          = std::max(0.f, retracted - volume);
+    if (purged > 0.f)
+        m_used_filaments.increase_purge_caches(purged);
 }
 
 void GCodeProcessor::UsedFilaments::process_color_change_cache()
@@ -1507,6 +1559,7 @@ void GCodeProcessor::UsedFilaments::process_caches(GCodeProcessor* processor)
     process_role_cache(processor);
     process_wipe_tower_cache(processor);
     process_support_cache(processor);
+    process_purge_cache(processor);
     process_total_volume_cache(processor);
 }
 
@@ -1733,6 +1786,8 @@ void GCodeProcessor::register_commands()
         {"VM104", [this](const GCodeReader::GCodeLine& line) { process_VM104(line); }},
         {"VM109", [this](const GCodeReader::GCodeLine& line) { process_VM109(line); }},
         {"M622", [this](const GCodeReader::GCodeLine& line) { process_M622(line);}},
+        {"M628", [this](const GCodeReader::GCodeLine& line) { float s = 0.f; m_cut_reload = line.has_value('S', s) && s > 0.5f; }},
+        {"M629", [this](const GCodeReader::GCodeLine&) { m_cut_reload = false; }},
         {"M623", [this](const GCodeReader::GCodeLine& line) { process_M623(line);}}
     };
 
@@ -2499,6 +2554,8 @@ void GCodeProcessor::reset()
     m_wiping = false;
     m_flushing = false;
     m_virtual_flushing = false;
+    m_purge_retracted.clear();
+    m_cut_reload = false;
     m_skippable = false;
     m_skippable_type = SkipType::stNone;
     m_wipe_tower = false;
@@ -4086,15 +4143,7 @@ void GCodeProcessor::process_G1(const GCodeReader::GCodeLine& line)
         float volume_extruded_filament = area_filament_cross_section * delta_pos[E];
         float area_toolpath_cross_section = volume_extruded_filament / delta_xyz;
 
-        if(m_extrusion_role == ExtrusionRole::erSupportMaterial || m_extrusion_role == ExtrusionRole::erSupportMaterialInterface || m_extrusion_role ==ExtrusionRole::erSupportTransition)
-            m_used_filaments.increase_support_caches(volume_extruded_filament);
-        else if (m_extrusion_role==ExtrusionRole::erWipeTower) {
-            m_used_filaments.increase_wipe_tower_caches(volume_extruded_filament);
-        }
-        else {
-            // save extruded volume to the cache
-            m_used_filaments.increase_model_caches(volume_extruded_filament);
-        }
+        account_extrusion(volume_extruded_filament);
         // volume extruded filament / tool displacement = area toolpath cross section
         m_mm3_per_mm = area_toolpath_cross_section;
 #if ENABLE_GCODE_VIEWER_DATA_CHECKING
@@ -4159,6 +4208,9 @@ void GCodeProcessor::process_G1(const GCodeReader::GCodeLine& line)
             m_remaining_volume[extruder_id] = 0.f;
         }
     }
+    // SliceOfMe: retractions (also while moving or wiping), push backs and purges outside the flushes
+    else if (!m_flushing && (delta_pos[E] < 0.0f || type == EMoveType::Unretract))
+        account_e_only_move(area_filament_cross_section * delta_pos[E]);
 
     // time estimate section
     auto move_length = [](const AxisCoords& delta_pos) {
@@ -4488,15 +4540,7 @@ void GCodeProcessor::process_VG1(const GCodeReader::GCodeLine& line)
         float volume_extruded_filament = area_filament_cross_section * delta_pos[E];
         float area_toolpath_cross_section = volume_extruded_filament / delta_xyz;
 
-        if(m_extrusion_role == ExtrusionRole::erSupportMaterial || m_extrusion_role == ExtrusionRole::erSupportMaterialInterface || m_extrusion_role ==ExtrusionRole::erSupportTransition)
-            m_used_filaments.increase_support_caches(volume_extruded_filament);
-        else if (m_extrusion_role==ExtrusionRole::erWipeTower) {
-            m_used_filaments.increase_wipe_tower_caches(volume_extruded_filament);
-        }
-        else {
-            // save extruded volume to the cache
-            m_used_filaments.increase_model_caches(volume_extruded_filament);
-        }
+        account_extrusion(volume_extruded_filament);
         // volume extruded filament / tool displacement = area toolpath cross section
         m_mm3_per_mm = area_toolpath_cross_section;
 #if ENABLE_GCODE_VIEWER_DATA_CHECKING
@@ -4922,16 +4966,7 @@ void  GCodeProcessor::process_G2_G3(const GCodeReader::GCodeLine& line)
         float volume_extruded_filament = area_filament_cross_section * delta_pos[E];
         float area_toolpath_cross_section = volume_extruded_filament / delta_xyz;
 
-        if(m_extrusion_role == ExtrusionRole::erSupportMaterial || m_extrusion_role == ExtrusionRole::erSupportMaterialInterface || m_extrusion_role ==ExtrusionRole::erSupportTransition)
-            m_used_filaments.increase_support_caches(volume_extruded_filament);
-        else if (m_extrusion_role == ExtrusionRole::erWipeTower) {
-            //BBS: save wipe tower volume to the cache
-            m_used_filaments.increase_wipe_tower_caches(volume_extruded_filament);
-        }
-        else {
-            //BBS: save extruded volume to the cache
-            m_used_filaments.increase_model_caches(volume_extruded_filament);
-        }
+        account_extrusion(volume_extruded_filament);
         //BBS: volume extruded filament / tool displacement = area toolpath cross section
         m_mm3_per_mm = area_toolpath_cross_section;
 #if ENABLE_GCODE_VIEWER_DATA_CHECKING
@@ -6279,6 +6314,7 @@ void GCodeProcessor::process_filaments(CustomGCode::Type code)
     if (code == CustomGCode::ToolChange) {
         m_used_filaments.process_model_cache(this);
         m_used_filaments.process_support_cache(this);
+        m_used_filaments.process_purge_cache(this);
         m_used_filaments.process_total_volume_cache(this);
         //BBS: reset remaining filament
         size_t last_extruder_id = get_extruder_id();
@@ -6322,6 +6358,7 @@ void GCodeProcessor::update_estimated_times_stats()
     m_result.print_statistics.wipe_tower_volumes_per_extruder = m_used_filaments.wipe_tower_volumes_per_filament;
     m_result.print_statistics.support_volumes_per_extruder = m_used_filaments.support_volumes_per_filament;
     m_result.print_statistics.flush_per_filament      = m_used_filaments.flush_per_filament;
+    m_result.print_statistics.purge_volumes_per_extruder = m_used_filaments.purge_volumes_per_filament;
     m_result.print_statistics.used_filaments_per_role   = m_used_filaments.filaments_per_role;
     m_result.print_statistics.total_volumes_per_extruder = m_used_filaments.total_volumes_per_filament;
 }

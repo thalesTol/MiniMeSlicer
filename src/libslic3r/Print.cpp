@@ -219,6 +219,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         "filament_notes",
         "process_notes",
         "printer_notes",
+        "bed_mesh_min", "bed_mesh_max", "bed_mesh_probe_distance", "adaptive_bed_mesh_margin",
         "filament_velocity_adaptation_factor",
         "filament_tower_interface_purge_volume",
         "default_ams_type",
@@ -1702,6 +1703,10 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
     assert(bed_type_def != nullptr);
 
     const t_config_enum_values* bed_type_keys_map = bed_type_def->enum_keys_map;
+    // SliceOfMe: a plate temperature of 0 means "not for this plate" on Bambu Lab printers only; on other printers it means the
+    // bed is not heated (some have no heated bed at all)
+    if (!this->is_BBL_Printer())
+        bed_type_keys_map = nullptr;
     for (unsigned int extruder_id : extruders) {
         const ConfigOptionInts* bed_temp_opt = m_config.option<ConfigOptionInts>(get_bed_temp_key(m_config.curr_bed_type));
         for (unsigned int extruder_id : extruders) {

@@ -1,6 +1,7 @@
 #include "FilamentLookDialog.hpp"
 
 #include <algorithm>
+#include <sstream>
 
 #include <wx/bmpbuttn.h>
 #include <wx/dcmemory.h>
@@ -13,6 +14,12 @@
 #include <wx/statbmp.h>
 #include <wx/stattext.h>
 #include <wx/wrapsizer.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+#include <cstdlib>
+#include <thread>
 
 #include <boost/log/trivial.hpp>
 
@@ -254,6 +261,7 @@ wxScrolledWindow *FilamentLookDialog::create_page(Page page)
             add_swatch(win, grid, make_color(std::vector<const char *>{c.hex}, FilamentColor::ColorType::SINGLE_CLR), _(c.name));
         add_section(win, sizer, _L("Custom"), _L("Any colour. Set transparency on the Translucent tab."));
         Button *custom = new Button(win, _L("Choose a colour") + "...");
+        m_custom_btn   = custom;
         custom->SetFont(Label::Body_12);
         custom->SetCornerRadius(FromDIP(12));
         custom->SetMinSize(wxSize(-1, FromDIP(26)));
@@ -671,6 +679,89 @@ wxColour FilamentLookDialog::pick_colour(const wxColour &initial)
         return wxNullColour;
     // The system dialog has no alpha: keep the one we started with.
     return with_alpha(picked, initial.Alpha());
+}
+
+std::string FilamentLookDialog::exercise_for_test()
+{
+    std::ostringstream log;
+    auto pump = [this]() {
+        for (int i = 0; i < 5; ++i)
+            wxTheApp->SafeYield(nullptr, true);
+    };
+    if (!IsModal())
+        Show();
+    pump();
+#ifdef _WIN32
+    if (std::getenv("MINIME_TEST_PICKER") != nullptr && m_custom_btn != nullptr) {
+        // as a click on "Choose a colour...": focus on that button, then the picker; a helper closes the picker after a moment
+        select_page(pgSolid);
+        pump();
+        m_custom_btn->SetFocus();
+        pump();
+        std::thread([]() {
+            for (int i = 0; i < 100; ++i) {
+                ::Sleep(200);
+                HWND found = nullptr;
+                ::EnumWindows([](HWND h, LPARAM out) -> BOOL {
+                    wchar_t cls[64];
+                    if (::GetClassNameW(h, cls, 64) && wcscmp(cls, L"#32770") == 0 && ::IsWindowVisible(h) &&
+                        ::GetWindowThreadProcessId(h, nullptr) != 0) {
+                        DWORD pid = 0;
+                        ::GetWindowThreadProcessId(h, &pid);
+                        if (pid == ::GetCurrentProcessId()) {
+                            *reinterpret_cast<HWND *>(out) = h;
+                            return FALSE;
+                        }
+                    }
+                    return TRUE;
+                }, reinterpret_cast<LPARAM>(&found));
+                if (found != nullptr) {
+                    ::Sleep(800);
+                    ::PostMessageW(found, WM_COMMAND, IDCANCEL, 0);
+                    return;
+                }
+            }
+        }).detach();
+        pick_colour(m_color.GetColors().front());
+        log << "picker ok; ";
+    }
+#endif
+    for (int p = 0; p < pgCount; ++p) {
+        select_page(Page(p));
+        pump();
+    }
+    log << "tabs ok; ";
+    select_page(pgSolid);
+    for (size_t i = 0; i < m_swatches.size(); ++i) {
+        // the swatch's own tab, as a click can only reach a visible swatch
+        for (int p = 0; p < pgCount; ++p)
+            if (m_swatches[i].button->GetParent() == m_pages[p])
+                select_page(Page(p));
+        select_swatch(i);
+        pump();
+    }
+    log << m_swatches.size() << " swatches ok; ";
+    for (const char *text : {"blue", "10900", "zzz", ""}) {
+        m_filter->GetTextCtrl()->SetValue(wxString::FromUTF8(text)); // sends wxEVT_TEXT -> apply_filter
+        pump();
+    }
+    log << "filter ok; ";
+    if (m_opacity_slider != nullptr) {
+        select_page(pgTranslucent);
+        for (int v : {50, 5, 100}) {
+            m_opacity_slider->SetValue(v);
+            wxCommandEvent evt(wxEVT_SLIDER, m_opacity_slider->GetId());
+            evt.SetInt(v);
+            m_opacity_slider->GetEventHandler()->ProcessEvent(evt);
+            pump();
+        }
+        log << "opacity ok; ";
+    }
+    if (!IsModal())
+        Hide();
+    pump();
+    log << "colour now " << m_color.ColorCount() << " colour(s)";
+    return log.str();
 }
 
 void FilamentLookDialog::on_dpi_changed(const wxRect &suggested_rect)

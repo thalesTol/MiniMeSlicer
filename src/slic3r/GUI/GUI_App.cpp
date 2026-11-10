@@ -118,6 +118,7 @@
 #include "DownloadProgressDialog.hpp"
 #include "HttpServer.hpp"
 #include "MiniMeBridge.hpp"
+#include "MiniMeWatchdog.hpp"
 
 #include "BitmapCache.hpp"
 #include "Notebook.hpp"
@@ -1216,6 +1217,8 @@ void GUI_App::post_init()
 
     // SliceOfMe: the Claude tool bridge, when switched on in Preferences
     ClaudeBridge::apply_preference();
+    // SliceOfMe: writes where the window is stuck if it ever stops responding (log\hang_<time>.txt)
+    HangWatchdog::start();
     // SliceOfMe: the Claude chat comes back open if it was open last time
     if (mainframe != nullptr && app_config->get("minime_chat_open") == "1")
         mainframe->show_chat(true);
@@ -1449,12 +1452,7 @@ void GUI_App::post_init()
             //BBS: check new version
             this->check_new_version();
 
-            //BBS: pull the studio version policy, the startup check point waits for it
-            VersionPolicyManager::inst().init([this] {
-                CallAfter([this] {
-                    this->check_startup_version_policy();
-                });
-            });
+            // SliceOfMe: no Bambu Studio version policy (see check_version_policy)
 
             //BBS: check privacy version
             if (is_user_login()) {
@@ -2964,6 +2962,7 @@ int GUI_App::OnExit()
 {
     // SliceOfMe: no more Claude tool calls
     ClaudeBridge::stop();
+    HangWatchdog::stop();
     // SliceOfMe: also when the app is closed from outside (another installer, Windows shutting down), let the backup
     // worker finish the object it is writing before anything it uses is destroyed
     Slic3r::stop_backup();
@@ -5743,6 +5742,8 @@ void GUI_App::check_update(bool show_tips, int by_user)
 
 PolicyCheckResult GUI_App::check_version_policy(PolicyCheckPoint point)
 {
+    // SliceOfMe: Bambu's version policy is about Bambu Studio's versions; it must not warn about or block MiniMe.
+    return PolicyCheckResult();
     try {
         return VersionPolicyManager::inst().check(point);
     } catch (...) {
@@ -5833,6 +5834,11 @@ bool GUI_App::check_send_print_version_policy()
 
 void GUI_App::check_new_version(bool show_tips, int by_user)
 {
+    // SliceOfMe: Bambu's server only knows Bambu Studio's versions; MiniMe's own releases are on GitHub. Asked by the
+    // user (Help > Check for updates), open that page; never prompt to install Bambu Studio.
+    if (show_tips || by_user != 0)
+        wxLaunchDefaultBrowser("https://github.com/thalesTol/MiniMeSlicer/releases");
+    return;
     std::string platform = "windows";
 
 #ifdef __WINDOWS__
@@ -5904,6 +5910,7 @@ void GUI_App::check_new_version(bool show_tips, int by_user)
 
 void GUI_App::check_beta_version(bool show_tips_when_no_beta)
 {
+    return; // SliceOfMe: Bambu Studio's beta releases are not MiniMe's
     // When the beta channel is off the stable callers have already shown the toast
     // (see check_update / check_new_version), so we just bail out here.
     if (app_config->get("enable_beta_version_update") != "true") {
