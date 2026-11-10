@@ -1,0 +1,26 @@
+{
+    "type": "filament",
+    "name": "Snapmaker PLA Metal @U1 base",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "filament_id": "OFtybfNX",
+    "instantiation": "false",
+    "filament_end_gcode": [
+        ""
+    ],
+    "filament_cost": [
+        "90"
+    ],
+    "filament_density": [
+        "1.25"
+    ],
+    "filament_max_volumetric_speed": [
+        "16"
+    ],
+    "nozzle_temperature": [
+        "220"
+    ],
+    "temperature_vitrification": [
+        "45"
+    ]
+}

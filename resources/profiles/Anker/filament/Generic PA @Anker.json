@@ -1,21 +1,15 @@
 {
     "type": "filament",
-    "filament_id": "GFN99",
-    "setting_id": "GFSN99_Anker_00",
     "name": "Generic PA @Anker",
+    "renamed_from": "Anker Generic PA",
+    "inherits": "Generic PA @Anker base",
     "from": "system",
+    "setting_id": "sLWVtBxpAC53eUwo",
     "instantiation": "true",
-    "inherits": "fdm_filament_pa",
-    "nozzle_temperature_initial_layer": [
-        "280"
-    ],
-    "nozzle_temperature": [
-        "280"
-    ],
-    "filament_max_volumetric_speed": [
-        "12"
-    ],
     "compatible_printers": [
-        "Anker M5C 0.4 nozzle"
+        "Anker M5 All-Metal 0.4 nozzle",
+        "Anker M5 All-Metal 0.6 nozzle",
+        "Anker M5C 0.4 nozzle",
+        "Anker M5C 0.6 nozzle"
     ]
 }

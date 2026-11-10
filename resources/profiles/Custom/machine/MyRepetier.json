@@ -1,0 +1,12 @@
+{
+    "type": "machine_model",
+    "name": "Generic Repetier Printer",
+    "model_id": "my_repetier_01",
+    "nozzle_diameter": "0.4",
+    "machine_tech": "FFF",
+    "family": "MyPrinter",
+    "bed_model": "",
+    "bed_texture": "orcaslicer_bed_texture.svg",
+    "hotend_model": "",
+    "default_materials": "Generic ABS @Custom;Generic PLA @Custom;Generic PLA-CF @Custom;Generic PETG @Custom;Generic TPU @Custom;Generic ASA @Custom;Generic PC @Custom;Generic PVA @Custom;Generic PA @Custom;Generic PA-CF @Custom"
+}

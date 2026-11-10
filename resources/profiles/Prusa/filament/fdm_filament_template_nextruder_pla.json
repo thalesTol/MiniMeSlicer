@@ -1,0 +1,6 @@
+{
+    "type": "filament",
+    "name": "fdm_filament_template_nextruder_pla",
+    "from": "system",
+    "instantiation": "false"
+}

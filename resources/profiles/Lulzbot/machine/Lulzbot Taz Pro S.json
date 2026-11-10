@@ -1,0 +1,12 @@
+{
+    "type": "machine_model",
+    "name": "Lulzbot Taz Pro S",
+    "model_id": "Lulzbot-Taz-Pro-S",
+    "nozzle_diameter": "0.5",
+    "machine_tech": "FFF",
+    "family": "Lulzbot",
+    "bed_model": "taz_pro_dual_build_plate.stl",
+    "bed_texture": "lulzbot_logo.svg",
+    "hotend_model": "",
+    "default_materials": "Generic PLA @Lulzbot;Generic PETG @Lulzbot;Generic ABS @Lulzbot"
+}

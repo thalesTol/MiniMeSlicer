@@ -1,14 +1,14 @@
 {
     "type": "machine",
-    "setting_id": "GM_CREALITY_028",
     "name": "Creality Ender-3 V3 0.4 nozzle",
-    "from": "system",
-    "instantiation": "true",
     "inherits": "fdm_creality_common",
+    "from": "system",
+    "setting_id": "FUmSsB1Xk6FJC0tl",
+    "instantiation": "true",
     "printer_model": "Creality Ender-3 V3",
     "gcode_flavor": "klipper",
-	"printer_structure": "i3",
-    "default_print_profile": "0.20mm Standard @Creality Ender3V3 0.4 nozzle",
+    "printer_structure": "i3",
+    "default_print_profile": "0.20mm Standard @Creality Ender3 V3",
     "nozzle_diameter": [
         "0.4"
     ],
@@ -22,7 +22,6 @@
     "printable_height": "250",
     "auxiliary_fan": "1",
     "support_air_filtration": "0",
-    "support_multi_bed_types": "1",
     "machine_max_acceleration_e": [
         "5000",
         "5000"
@@ -111,7 +110,6 @@
     "extruder_clearance_height_to_lid": "250",
     "extruder_clearance_height_to_rod": "14",
     "extruder_clearance_max_radius": "70",
-    "extruder_clearance_dist_to_rod": "35",
     "z_hop": [
         "0.2"
     ],
@@ -122,16 +120,12 @@
         "2"
     ],
     "single_extruder_multi_material": "1",
-    "manual_filament_change": "1",
     "change_filament_gcode": "PAUSE",
     "machine_pause_gcode": "PAUSE",
-	"default_filament_profile": [
-		"Generic PLA @Creality"
-	],
+    "default_filament_profile": [
+        "Generic PLA @Ender-3 V3-all"
+    ],
     "machine_start_gcode": "M140 S0\nM104 S0\nSTART_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer_single]",
     "machine_end_gcode": "END_PRINT",
-    "scan_first_layer": "0",
-    "thumbnails": [
-        "96x96/PNG, 300x300/PNG"
-    ]
+    "scan_first_layer": "0"
 }

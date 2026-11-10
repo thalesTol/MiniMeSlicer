@@ -1,16 +1,25 @@
 {
     "type": "filament",
-    "filament_id": "GFT01",
-    "setting_id": "GFST01_Qidi_15",
     "name": "QIDI PETG Tough @Qidi X-Plus 4 0.6 nozzle",
+    "inherits": "QIDI PETG Tough",
     "from": "system",
+    "setting_id": "SmywHXjvv1Ju150F",
+    "filament_id": "OFQ40XeN",
     "instantiation": "true",
-    "inherits": "QIDI PETG Tough @Qidi",
+    "fan_max_speed": [
+        "40"
+    ],
+    "fan_min_speed": [
+        "10"
+    ],
     "filament_max_volumetric_speed": [
         "13"
     ],
-    "pressure_advance": [
-        "0.032"
+    "filament_settings_id": [
+        "QIDI PETG Tough @Qidi X-Plus 4 0.6 nozzle"
+    ],
+    "overhang_fan_speed": [
+        "90"
     ],
     "compatible_printers": [
         "Qidi X-Plus 4 0.6 nozzle"

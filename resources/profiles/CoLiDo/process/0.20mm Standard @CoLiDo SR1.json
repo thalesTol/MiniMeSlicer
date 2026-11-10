@@ -1,0 +1,18 @@
+{
+    "type": "process",
+    "name": "0.20mm Standard @CoLiDo SR1",
+    "inherits": "fdm_process_colidosr1_common",
+    "from": "system",
+    "setting_id": "xYCS2o1r2isLD7pB",
+    "instantiation": "true",
+    "layer_height": "0.2",
+    "print_settings_id": "0.20mm Standard @CoLiDo SR1",
+    "internal_solid_infill_line_width": "0.48",
+    "outer_wall_line_width": "0.4",
+    "support_line_width": "0.384",
+    "initial_layer_line_width": "0.48",
+    "line_width": "0.44",
+    "sparse_infill_line_width": "0.44",
+    "inner_wall_line_width": "0.44",
+    "top_surface_line_width": "0.375"
+}

@@ -1,11 +1,12 @@
 {
     "type": "filament",
-    "filament_id": "GFN98",
-    "setting_id": "GFSN98_Qidi_00",
     "name": "Generic PA-CF @Qidi",
-    "from": "system",
-    "instantiation": "true",
+    "renamed_from": "Qidi Generic PA-CF",
     "inherits": "fdm_filament_pa",
+    "from": "system",
+    "setting_id": "qLuGt33iENH6QTjv",
+    "filament_id": "OFQLcbps",
+    "instantiation": "true",
     "filament_type": [
         "PA-CF"
     ],
@@ -36,9 +37,6 @@
     "full_fan_speed_layer": [
         "2"
     ],
-    "additional_fan_full_speed_layer": [
-        "2"
-    ],
     "enable_pressure_advance": [
         "1"
     ],
@@ -66,6 +64,9 @@
         "Qidi Q1 Pro 0.8 nozzle",
         "Qidi X-Plus 4 0.4 nozzle",
         "Qidi X-Plus 4 0.6 nozzle",
-        "Qidi X-Plus 4 0.8 nozzle"
+        "Qidi X-Plus 4 0.8 nozzle",
+        "Qidi Q2 0.4 nozzle",
+        "Qidi Q2 0.6 nozzle",
+        "Qidi Q2 0.8 nozzle"
     ]
 }

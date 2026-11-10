@@ -1,10 +1,10 @@
 {
     "type": "process",
-    "setting_id": "GP_PRUSA_000",
     "name": "0.20mm Standard @MINI",
-    "from": "system",
-    "instantiation": "true",
     "inherits": "fdm_process_common",
+    "from": "system",
+    "setting_id": "H5UpQUDCmsn9Amnq",
+    "instantiation": "true",
     "initial_layer_speed": "20",
     "initial_layer_infill_speed": "25",
     "gap_infill_speed": "40",
@@ -13,7 +13,6 @@
     "initial_layer_acceleration": "700",
     "inner_wall_speed": "50",
     "internal_solid_infill_speed": "140",
-    "is_custom_defined": "0",
     "outer_wall_speed": "40",
     "overhang_2_4_speed": "30",
     "print_settings_id": "MINI - Copy",
@@ -22,5 +21,13 @@
     "travel_speed": "150",
     "compatible_printers": [
         "Prusa MINI 0.4 nozzle"
-    ]
+    ],
+    "internal_solid_infill_line_width": "0.48",
+    "outer_wall_line_width": "0.4",
+    "support_line_width": "0.384",
+    "initial_layer_line_width": "0.48",
+    "line_width": "0.44",
+    "inner_wall_line_width": "0.44",
+    "top_surface_line_width": "0.375",
+    "sparse_infill_line_width": "0.44"
 }

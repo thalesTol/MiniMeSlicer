@@ -1,25 +1,28 @@
 {
     "type": "filament",
     "name": "fdm_filament_pva",
+    "inherits": "fdm_filament_common",
     "from": "system",
     "instantiation": "false",
-    "inherits": "fdm_filament_common",
-    "cool_plate_temp" : [
+    "filament_type": [
+        "PVA"
+    ],
+    "cool_plate_temp": [
         "35"
     ],
-    "eng_plate_temp" : [
+    "eng_plate_temp": [
         "0"
     ],
-    "hot_plate_temp" : [
+    "hot_plate_temp": [
         "45"
     ],
-    "cool_plate_temp_initial_layer" : [
+    "cool_plate_temp_initial_layer": [
         "35"
     ],
-    "eng_plate_temp_initial_layer" : [
+    "eng_plate_temp_initial_layer": [
         "0"
     ],
-    "hot_plate_temp_initial_layer" : [
+    "hot_plate_temp_initial_layer": [
         "45"
     ],
     "fan_cooling_layer_time": [
@@ -33,9 +36,6 @@
     ],
     "filament_is_support": [
         "1"
-    ],
-    "filament_type": [
-        "PVA"
     ],
     "filament_density": [
         "1.24"
@@ -65,9 +65,6 @@
         "50%"
     ],
     "close_fan_the_first_x_layers": [
-        "1"
-    ],
-    "close_additional_fan_first_x_layers": [
         "1"
     ],
     "nozzle_temperature": [

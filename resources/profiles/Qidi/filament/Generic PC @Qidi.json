@@ -1,22 +1,50 @@
 {
     "type": "filament",
-    "filament_id": "GFC99",
-    "setting_id": "GFSC99_Qidi_00",
     "name": "Generic PC @Qidi",
-    "from": "system",
-    "instantiation": "true",
+    "renamed_from": "Qidi Generic PC",
     "inherits": "fdm_filament_pc",
+    "from": "system",
+    "setting_id": "m1fBauBqqvKdIAAr",
+    "filament_id": "OFLakOUI",
+    "instantiation": "true",
+    "filament_type": [
+        "PC"
+    ],
     "filament_max_volumetric_speed": [
         "8"
     ],
     "filament_flow_ratio": [
-        "0.92"
+        "0.94"
     ],
     "enable_pressure_advance": [
         "1"
     ],
     "pressure_advance": [
-        "0.04"
+        "0.03"
+    ],
+    "activate_air_filtration": [
+        "1"
+    ],
+    "during_print_exhaust_fan_speed": [
+        "0"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "270"
+    ],
+    "nozzle_temperature": [
+        "280"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "110"
+    ],
+    "hot_plate_temp": [
+        "110"
+    ],
+    "slow_down_min_speed": [
+        "20"
+    ],
+    "overhang_fan_speed": [
+        "60"
     ],
     "filament_vendor": [
         "Generic"
@@ -30,15 +58,6 @@
         "Qidi X-Max 3 0.4 nozzle",
         "Qidi X-Smart 3 0.6 nozzle",
         "Qidi X-Plus 3 0.6 nozzle",
-        "Qidi X-Max 3 0.6 nozzle",
-        "Qidi X-Smart 3 0.8 nozzle",
-        "Qidi X-Plus 3 0.8 nozzle",
-        "Qidi X-Max 3 0.8 nozzle",
-        "Qidi Q1 Pro 0.4 nozzle",
-        "Qidi Q1 Pro 0.6 nozzle",
-        "Qidi Q1 Pro 0.8 nozzle",
-        "Qidi X-Plus 4 0.4 nozzle",
-        "Qidi X-Plus 4 0.6 nozzle",
-        "Qidi X-Plus 4 0.8 nozzle"
+        "Qidi X-Max 3 0.6 nozzle"
     ]
 }

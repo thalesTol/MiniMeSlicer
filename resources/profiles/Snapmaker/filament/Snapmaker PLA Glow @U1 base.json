@@ -1,0 +1,20 @@
+{
+    "type": "filament",
+    "name": "Snapmaker PLA Glow @U1 base",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "filament_id": "OFfD87Gy",
+    "instantiation": "false",
+    "filament_end_gcode": [
+        ""
+    ],
+    "filament_retraction_length": [
+        "nil"
+    ],
+    "nozzle_temperature": [
+        "220"
+    ],
+    "temperature_vitrification": [
+        "45"
+    ]
+}

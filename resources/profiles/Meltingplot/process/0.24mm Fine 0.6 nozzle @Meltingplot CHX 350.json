@@ -1,0 +1,20 @@
+{
+    "type": "process",
+    "name": "0.24mm Fine 0.6 nozzle @Meltingplot CHX 350",
+    "inherits": "fdm_process_meltingplot_chx_small_nozzle",
+    "from": "system",
+    "setting_id": "KrZSDq4Tsnlnu0Dm",
+    "instantiation": "true",
+    "layer_height": "0.24",
+    "compatible_printers": [
+        "Meltingplot CHX 350 0.6 nozzle"
+    ],
+    "internal_solid_infill_line_width": "0.69",
+    "outer_wall_line_width": "0.69",
+    "support_line_width": "0.66",
+    "initial_layer_line_width": "0.72",
+    "line_width": "0.72",
+    "sparse_infill_line_width": "0.66",
+    "inner_wall_line_width": "0.66",
+    "top_surface_line_width": "0.66"
+}

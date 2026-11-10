@@ -1,0 +1,114 @@
+{
+    "type": "filament",
+    "name": "Generic PP @K2 Pro-all",
+    "inherits": "fdm_filament_pp",
+    "from": "system",
+    "setting_id": "bAxYHHsv8COKiIFG",
+    "filament_id": "OF1UNk9P",
+    "instantiation": "true",
+    "activate_air_filtration": [
+        "0"
+    ],
+    "additional_cooling_fan_speed": [
+        "80"
+    ],
+    "complete_print_exhaust_fan_speed": [
+        "80"
+    ],
+    "cool_plate_temp": [
+        "100"
+    ],
+    "cool_plate_temp_initial_layer": [
+        "100"
+    ],
+    "during_print_exhaust_fan_speed": [
+        "60"
+    ],
+    "eng_plate_temp": [
+        "105"
+    ],
+    "eng_plate_temp_initial_layer": [
+        "105"
+    ],
+    "fan_cooling_layer_time": [
+        "100"
+    ],
+    "fan_min_speed": [
+        "100"
+    ],
+    "filament_cost": [
+        "40"
+    ],
+    "filament_density": [
+        "0.91"
+    ],
+    "filament_flow_ratio": [
+        "0.97"
+    ],
+    "filament_is_support": [
+        "0"
+    ],
+    "filament_max_volumetric_speed": [
+        "10"
+    ],
+    "filament_retract_before_wipe": [
+        "100%"
+    ],
+    "filament_retraction_length": [
+        "1.2"
+    ],
+    "filament_type": [
+        "PP"
+    ],
+    "hot_plate_temp": [
+        "45"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "45"
+    ],
+    "nozzle_temperature": [
+        "250"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "255"
+    ],
+    "nozzle_temperature_range_high": [
+        "260"
+    ],
+    "nozzle_temperature_range_low": [
+        "220"
+    ],
+    "overhang_fan_threshold": [
+        "0%"
+    ],
+    "reduce_fan_stop_start_freq": [
+        "1"
+    ],
+    "required_nozzle_HRC": [
+        "0"
+    ],
+    "slow_down_layer_time": [
+        "12"
+    ],
+    "temperature_vitrification": [
+        "60"
+    ],
+    "textured_plate_temp": [
+        "45"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "45"
+    ],
+    "filament_start_gcode": [
+        "; filament start gcode\n{if (layer_z > first_layer_height) }\nM104 S[nozzle_temperature]\n{else} \nM104 S[first_layer_temperature]\n{endif}"
+    ],
+    "default_filament_colour": "\"\"",
+    "enable_overhang_bridge_fan": "1",
+    "enable_pressure_advance": "0",
+    "filament_notes": "\"\"",
+    "filament_shrink": "100%",
+    "pressure_advance": "0.08",
+    "compatible_printers": [
+        "Creality K2 Pro 0.4 nozzle"
+    ]
+}

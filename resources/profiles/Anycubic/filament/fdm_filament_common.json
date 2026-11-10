@@ -3,22 +3,22 @@
     "name": "fdm_filament_common",
     "from": "system",
     "instantiation": "false",
-    "cool_plate_temp" : [
+    "cool_plate_temp": [
         "60"
     ],
-    "eng_plate_temp" : [
+    "eng_plate_temp": [
         "60"
     ],
-    "hot_plate_temp" : [
+    "hot_plate_temp": [
         "60"
     ],
-    "cool_plate_temp_initial_layer" : [
+    "cool_plate_temp_initial_layer": [
         "60"
     ],
-    "eng_plate_temp_initial_layer" : [
+    "eng_plate_temp_initial_layer": [
         "60"
     ],
-    "hot_plate_temp_initial_layer" : [
+    "hot_plate_temp_initial_layer": [
         "60"
     ],
     "overhang_fan_threshold": [
@@ -31,9 +31,6 @@
         "1"
     ],
     "close_fan_the_first_x_layers": [
-        "3"
-    ],
-    "close_additional_fan_first_x_layers": [
         "3"
     ],
     "filament_end_gcode": [
@@ -60,11 +57,8 @@
     "filament_diameter": [
         "1.75"
     ],
-    "filament_is_support": [
-        "0"
-    ],
     "filament_max_volumetric_speed": [
-        "0"
+        "12"
     ],
     "filament_minimal_purge_on_wipe_tower": [
         "15"
@@ -117,17 +111,11 @@
     "full_fan_speed_layer": [
         "0"
     ],
-    "additional_fan_full_speed_layer": [
-        "0"
-    ],
     "fan_max_speed": [
         "100"
     ],
     "fan_min_speed": [
         "35"
-    ],
-    "required_nozzle_HRC": [
-        "3"
     ],
     "slow_down_min_speed": [
         "10"

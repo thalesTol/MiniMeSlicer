@@ -1,10 +1,10 @@
 {
     "type": "process",
-    "setting_id": "GP_PRUSA_001",
     "name": "0.20mm Standard @MK3S",
-    "from": "system",
-    "instantiation": "true",
     "inherits": "fdm_process_common",
+    "from": "system",
+    "setting_id": "6h0Wz3WHr5VUcJor",
+    "instantiation": "true",
     "initial_layer_speed": "20",
     "initial_layer_infill_speed": "25",
     "outer_wall_speed": "35",
@@ -16,5 +16,13 @@
     "travel_speed": "180",
     "compatible_printers": [
         "Prusa MK3S 0.4 nozzle"
-    ]
+    ],
+    "internal_solid_infill_line_width": "0.48",
+    "outer_wall_line_width": "0.4",
+    "support_line_width": "0.384",
+    "initial_layer_line_width": "0.48",
+    "line_width": "0.44",
+    "inner_wall_line_width": "0.44",
+    "top_surface_line_width": "0.375",
+    "sparse_infill_line_width": "0.44"
 }

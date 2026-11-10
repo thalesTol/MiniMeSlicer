@@ -1,0 +1,13 @@
+{
+    "type": "machine_model",
+    "name": "Eryone ER20 Klipper",
+    "bed_model": "eryone_er20_buildplate_model.stl",
+    "bed_texture": "Eryone ER20_texture.svg",
+    "default_bed_type": "Textured PEI Plate",
+    "family": "Eryone",
+    "hotend_model": "",
+    "machine_tech": "FFF",
+    "model_id": "Eryone ER20 Klipper",
+    "default_materials": "Generic PLA @Eryone",
+    "nozzle_diameter": "0.4;0.2;0.5;0.6;0.8"
+}

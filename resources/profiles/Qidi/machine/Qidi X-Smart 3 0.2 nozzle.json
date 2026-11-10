@@ -1,10 +1,10 @@
 {
     "type": "machine",
-    "setting_id": "GM_Qidi_017",
     "name": "Qidi X-Smart 3 0.2 nozzle",
-    "from": "system",
-    "instantiation": "true",
     "inherits": "Qidi X-Smart 3 0.4 nozzle",
+    "from": "system",
+    "setting_id": "y61rAluWLMdxyx7v",
+    "instantiation": "true",
     "nozzle_diameter": [
         "0.2"
     ],

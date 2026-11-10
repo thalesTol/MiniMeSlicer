@@ -1,0 +1,32 @@
+{
+    "type": "process",
+    "name": "0.18mm Fine @Xplorer 0.6",
+    "inherits": "fdm_process_xplorer_common_0_6",
+    "from": "system",
+    "setting_id": "tQHKzSbBNyoPQkup",
+    "instantiation": "true",
+    "bottom_shell_layers": "4",
+    "initial_layer_print_height": "0.3",
+    "inner_wall_speed": "190",
+    "outer_wall_speed": "130",
+    "skirt_distance": "3",
+    "skirt_loops": "1",
+    "small_perimeter_speed": "50%",
+    "sparse_infill_acceleration": "100%",
+    "top_shell_layers": "5",
+    "top_solid_infill_flow_ratio": "0.87",
+    "layer_height": "0.18",
+    "compatible_printers": [
+        "Xplorer Single 0.6 nozzle"
+    ],
+    "internal_solid_infill_line_width": "0.72",
+    "outer_wall_line_width": "0.6",
+    "support_line_width": "0.6",
+    "initial_layer_line_width": "0.72",
+    "line_width": "0.66",
+    "sparse_infill_line_width": "0.66",
+    "inner_wall_line_width": "0.66",
+    "skeleton_infill_line_width": "0.6",
+    "top_surface_line_width": "0.48",
+    "skin_infill_line_width": "0.6"
+}

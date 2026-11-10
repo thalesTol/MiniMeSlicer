@@ -1,6 +1,7 @@
 {
     "name": "Voxelab",
-    "version": "02.00.00.02",
+    "url": "",
+    "version": "02.04.00.02",
     "force_update": "0",
     "description": "Voxelab configurations",
     "machine_model_list": [
@@ -24,22 +25,6 @@
         }
     ],
     "filament_list": [
-        {
-            "name": "fdm_filament_common",
-            "sub_path": "filament/fdm_filament_common.json"
-        },
-        {
-            "name": "fdm_filament_abs",
-            "sub_path": "filament/fdm_filament_abs.json"
-        },
-        {
-            "name": "fdm_filament_pet",
-            "sub_path": "filament/fdm_filament_pet.json"
-        },
-        {
-            "name": "fdm_filament_pla",
-            "sub_path": "filament/fdm_filament_pla.json"
-        },
         {
             "name": "Generic ABS @Voxelab",
             "sub_path": "filament/Generic ABS @Voxelab.json"

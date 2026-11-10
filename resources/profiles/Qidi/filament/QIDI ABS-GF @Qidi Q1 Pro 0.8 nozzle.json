@@ -1,19 +1,34 @@
-{    
+{
     "type": "filament",
-    "filament_id": "GFB00",
-    "setting_id": "GFSB00_Qidi_17",
     "name": "QIDI ABS-GF @Qidi Q1 Pro 0.8 nozzle",
+    "inherits": "QIDI ABS-GF",
     "from": "system",
+    "setting_id": "v0K7uK7rq54uGbrE",
+    "filament_id": "OFt3HtlG",
     "instantiation": "true",
-    "inherits": "QIDI ABS-GF @Qidi",
+    "fan_max_speed": [
+        "20"
+    ],
+    "fan_min_speed": [
+        "20"
+    ],
     "filament_max_volumetric_speed": [
         "22"
+    ],
+    "filament_settings_id": [
+        "QIDI ABS-GF @Qidi Q1 Pro 0.8 nozzle"
     ],
     "nozzle_temperature": [
         "260"
     ],
     "nozzle_temperature_initial_layer": [
         "260"
+    ],
+    "overhang_fan_speed": [
+        "80"
+    ],
+    "pressure_advance": [
+        "0.01"
     ],
     "slow_down_min_speed": [
         "20"

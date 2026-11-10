@@ -1,0 +1,25 @@
+{
+    "type": "process",
+    "name": "0.32mm Standard @The Positron",
+    "inherits": "fdm_process_the_positron_common",
+    "from": "system",
+    "setting_id": "yIZoMnh68LVdids0",
+    "instantiation": "true",
+    "support_top_z_distance": "0.24",
+    "support_bottom_z_distance": "0.24",
+    "layer_height": "0.32",
+    "initial_layer_print_height": "0.2",
+    "compatible_printers": [
+        "The Positron 0.4 nozzle",
+        "The Positron 0.6 nozzle",
+        "The Positron 0.8 nozzle"
+    ],
+    "internal_solid_infill_line_width": "0.48",
+    "outer_wall_line_width": "0.4",
+    "support_line_width": "0.384",
+    "initial_layer_line_width": "0.48",
+    "line_width": "0.44",
+    "sparse_infill_line_width": "0.44",
+    "inner_wall_line_width": "0.44",
+    "top_surface_line_width": "0.375"
+}

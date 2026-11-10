@@ -1,0 +1,23 @@
+{
+    "type": "filament",
+    "name": "Snapmaker Dual PLA Metal @base",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "filament_id": "OFg3cWVt",
+    "instantiation": "false",
+    "filament_cost": [
+        "90"
+    ],
+    "filament_density": [
+        "1.25"
+    ],
+    "filament_max_volumetric_speed": [
+        "16"
+    ],
+    "nozzle_temperature": [
+        "220"
+    ],
+    "default_filament_colour": [
+        ""
+    ]
+}

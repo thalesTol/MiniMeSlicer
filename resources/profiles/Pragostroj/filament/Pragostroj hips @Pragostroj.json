@@ -1,0 +1,21 @@
+{
+    "type": "filament",
+    "name": "Pragostroj hips @Pragostroj",
+    "inherits": "fdm_filament_hips",
+    "from": "system",
+    "setting_id": "K2nm1PBtMp2msIN9",
+    "filament_id": "OF0g2qrF",
+    "instantiation": "true",
+    "filament_vendor": [
+        "Pragostroj"
+    ],
+    "compatible_printers": [
+        "KINARB 1HB 0.4 nozzle",
+        "KINARB 1HB 0.5 nozzle",
+        "KINARB 1HB 0.6 nozzle",
+        "KINARB 1HB 0.8 nozzle",
+        "KINARB 1HB 1.0 nozzle",
+        "KINARB 1HB 1.2 nozzle",
+        "KINARB 1HB 1.6 nozzle"
+    ]
+}

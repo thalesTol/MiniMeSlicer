@@ -1,11 +1,15 @@
 {
     "type": "filament",
-    "filament_id": "GFN99",
-    "setting_id": "GFSN99_Qidi_00",
     "name": "Generic PA @Qidi",
-    "from": "system",
-    "instantiation": "true",
+    "renamed_from": "Qidi Generic PA",
     "inherits": "fdm_filament_pa",
+    "from": "system",
+    "setting_id": "la9e4F5ns9eWv7Lg",
+    "filament_id": "OFg8ndtj",
+    "instantiation": "true",
+    "filament_type": [
+        "PA"
+    ],
     "required_nozzle_HRC": [
         "3"
     ],
@@ -45,6 +49,9 @@
         "Qidi Q1 Pro 0.8 nozzle",
         "Qidi X-Plus 4 0.4 nozzle",
         "Qidi X-Plus 4 0.6 nozzle",
-        "Qidi X-Plus 4 0.8 nozzle"
+        "Qidi X-Plus 4 0.8 nozzle",
+        "Qidi Q2 0.4 nozzle",
+        "Qidi Q2 0.6 nozzle",
+        "Qidi Q2 0.8 nozzle"
     ]
 }

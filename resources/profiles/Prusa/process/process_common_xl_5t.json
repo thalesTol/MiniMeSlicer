@@ -1,0 +1,11 @@
+{
+    "type": "process",
+    "name": "process_common_xl_5t",
+    "inherits": "process_common_xl",
+    "from": "system",
+    "instantiation": "false",
+    "enable_prime_tower": "1",
+    "wipe_tower_rotation_angle": "90",
+    "ooze_prevention": "1",
+    "standby_temperature_delta": "-40"
+}

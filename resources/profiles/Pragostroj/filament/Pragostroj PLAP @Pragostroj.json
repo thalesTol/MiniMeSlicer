@@ -1,0 +1,42 @@
+{
+    "type": "filament",
+    "name": "Pragostroj PLAP @Pragostroj",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "setting_id": "zN1e8RYMoHXldKsZ",
+    "filament_id": "OFjKU9JG",
+    "instantiation": "true",
+    "filament_vendor": [
+        "Pragostroj"
+    ],
+    "filament_settings_id": [
+        "PLAP"
+    ],
+    "filament_flow_ratio": [
+        "0.93"
+    ],
+    "filament_max_volumetric_speed": [
+        "14"
+    ],
+    "nozzle_temperature": [
+        "215"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "215"
+    ],
+    "pressure_advance": [
+        "0.17"
+    ],
+    "slow_down_layer_time": [
+        "0"
+    ],
+    "compatible_printers": [
+        "KINARB 1HB 0.4 nozzle",
+        "KINARB 1HB 0.5 nozzle",
+        "KINARB 1HB 0.6 nozzle",
+        "KINARB 1HB 0.8 nozzle",
+        "KINARB 1HB 1.0 nozzle",
+        "KINARB 1HB 1.2 nozzle",
+        "KINARB 1HB 1.6 nozzle"
+    ]
+}

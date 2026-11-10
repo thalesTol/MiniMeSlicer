@@ -1,0 +1,139 @@
+{
+    "name": "Kingroon",
+    "url": "https://kingroon.com/",
+    "version": "02.04.00.04",
+    "force_update": "1",
+    "description": "Kingroon configuration files",
+    "machine_model_list": [
+        {
+            "name": "Kingroon KLP1",
+            "sub_path": "machine/Kingroon KLP1.json"
+        },
+        {
+            "name": "Kingroon KP3S 3.0",
+            "sub_path": "machine/Kingroon KP3S 3.0.json"
+        },
+        {
+            "name": "Kingroon KP3S PRO S1",
+            "sub_path": "machine/Kingroon KP3S PRO S1.json"
+        },
+        {
+            "name": "Kingroon KP3S PRO V2",
+            "sub_path": "machine/Kingroon KP3S PRO V2.json"
+        },
+        {
+            "name": "Kingroon KP3S V1",
+            "sub_path": "machine/Kingroon KP3S V1.json"
+        }
+    ],
+    "process_list": [
+        {
+            "name": "fdm_process_common",
+            "sub_path": "process/fdm_process_common.json"
+        },
+        {
+            "name": "0.08mm Standard @Kingroon KP3S PRO S1",
+            "sub_path": "process/0.08mm Standard @Kingroon KP3S PRO S1.json"
+        },
+        {
+            "name": "0.12mm Standard @Kingroon KLP1",
+            "sub_path": "process/0.12mm Standard @Kingroon KLP1.json"
+        },
+        {
+            "name": "0.12mm Standard @Kingroon KP3S PRO S1",
+            "sub_path": "process/0.12mm Standard @Kingroon KP3S PRO S1.json"
+        },
+        {
+            "name": "0.20mm Standard @Kingroon KLP1",
+            "sub_path": "process/0.20mm Standard @Kingroon KLP1.json"
+        },
+        {
+            "name": "0.20mm Standard @Kingroon KP3S PRO S1",
+            "sub_path": "process/0.20mm Standard @Kingroon KP3S PRO S1.json"
+        },
+        {
+            "name": "0.20mm Standard @Kingroon KP3S PRO V2",
+            "sub_path": "process/0.20mm Standard @Kingroon KP3S PRO V2.json"
+        },
+        {
+            "name": "0.20mm Standard @Kingroon KP3S V1",
+            "sub_path": "process/0.20mm Standard @Kingroon KP3S V1.json"
+        },
+        {
+            "name": "0.30mm Standard @Kingroon KP3S 3.0",
+            "sub_path": "process/0.30mm Standard @Kingroon KP3S 3.0.json"
+        }
+    ],
+    "filament_list": [
+        {
+            "name": "Generic ABS @Kingroon",
+            "sub_path": "filament/Generic ABS @Kingroon.json"
+        },
+        {
+            "name": "Generic ASA @Kingroon",
+            "sub_path": "filament/Generic ASA @Kingroon.json"
+        },
+        {
+            "name": "Generic PA @Kingroon",
+            "sub_path": "filament/Generic PA @Kingroon.json"
+        },
+        {
+            "name": "Generic PA-CF @Kingroon",
+            "sub_path": "filament/Generic PA-CF @Kingroon.json"
+        },
+        {
+            "name": "Generic PC @Kingroon",
+            "sub_path": "filament/Generic PC @Kingroon.json"
+        },
+        {
+            "name": "Generic PETG @Kingroon",
+            "sub_path": "filament/Generic PETG @Kingroon.json"
+        },
+        {
+            "name": "Generic PLA @Kingroon",
+            "sub_path": "filament/Generic PLA @Kingroon.json"
+        },
+        {
+            "name": "Generic PLA-CF @Kingroon",
+            "sub_path": "filament/Generic PLA-CF @Kingroon.json"
+        },
+        {
+            "name": "Generic PVA @Kingroon",
+            "sub_path": "filament/Generic PVA @Kingroon.json"
+        },
+        {
+            "name": "Generic TPU @Kingroon",
+            "sub_path": "filament/Generic TPU @Kingroon.json"
+        }
+    ],
+    "machine_list": [
+        {
+            "name": "fdm_machine_common",
+            "sub_path": "machine/fdm_machine_common.json"
+        },
+        {
+            "name": "Kingroon KP3S 3.0 0.4 nozzle",
+            "sub_path": "machine/Kingroon KP3S 3.0 0.4 nozzle.json"
+        },
+        {
+            "name": "Kingroon KP3S PRO S1 0.4 nozzle",
+            "sub_path": "machine/Kingroon KP3S PRO S1 0.4 nozzle.json"
+        },
+        {
+            "name": "fdm_klipper_common",
+            "sub_path": "machine/fdm_klipper_common.json"
+        },
+        {
+            "name": "Kingroon KLP1 0.4 nozzle",
+            "sub_path": "machine/Kingroon KLP1 0.4 nozzle.json"
+        },
+        {
+            "name": "Kingroon KP3S PRO V2 0.4 nozzle",
+            "sub_path": "machine/Kingroon KP3S PRO V2 0.4 nozzle.json"
+        },
+        {
+            "name": "Kingroon KP3S V1 0.4 nozzle",
+            "sub_path": "machine/Kingroon KP3S V1 0.4 nozzle.json"
+        }
+    ]
+}

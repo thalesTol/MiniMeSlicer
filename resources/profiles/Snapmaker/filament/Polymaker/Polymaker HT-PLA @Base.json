@@ -1,0 +1,17 @@
+{
+    "type": "filament",
+    "name": "Polymaker HT-PLA @Base",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "instantiation": "false",
+    "filament_density": [
+        "1.28"
+    ],
+    "filament_soluble": [
+        "0"
+    ],
+    "description": "",
+    "filament_vendor": [
+        "Polymaker"
+    ]
+}

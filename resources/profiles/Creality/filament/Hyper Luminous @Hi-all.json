@@ -1,0 +1,110 @@
+{
+    "type": "filament",
+    "name": "Hyper Luminous @Hi-all",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "setting_id": "8PNVp96HmPvjOBVq",
+    "filament_id": "OFC1PzXz",
+    "instantiation": "true",
+    "activate_air_filtration": [
+        "0"
+    ],
+    "additional_cooling_fan_speed": [
+        "0"
+    ],
+    "complete_print_exhaust_fan_speed": [
+        "0"
+    ],
+    "during_print_exhaust_fan_speed": [
+        "0"
+    ],
+    "filament_cost": [
+        "28.9"
+    ],
+    "filament_density": [
+        "1.3"
+    ],
+    "filament_deretraction_speed": [
+        "40"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_flow_ratio": [
+        "0.97"
+    ],
+    "filament_is_support": [
+        "0"
+    ],
+    "filament_max_volumetric_speed": [
+        "21"
+    ],
+    "filament_minimal_purge_on_wipe_tower": [
+        "15"
+    ],
+    "filament_retract_before_wipe": [
+        "90%"
+    ],
+    "filament_retract_restart_extra": [
+        "0"
+    ],
+    "filament_retract_when_changing_layer": [
+        "nil"
+    ],
+    "filament_retraction_length": [
+        "0.8"
+    ],
+    "filament_retraction_minimum_travel": [
+        "2"
+    ],
+    "filament_retraction_speed": [
+        "40"
+    ],
+    "filament_soluble": [
+        "0"
+    ],
+    "filament_vendor": [
+        "Creality"
+    ],
+    "filament_wipe": [
+        "nil"
+    ],
+    "filament_wipe_distance": [
+        "2"
+    ],
+    "filament_z_hop": [
+        "0.4"
+    ],
+    "filament_z_hop_types": [
+        "Slope Lift"
+    ],
+    "full_fan_speed_layer": [
+        "0"
+    ],
+    "required_nozzle_HRC": [
+        "0"
+    ],
+    "slow_down_layer_time": [
+        "8"
+    ],
+    "slow_down_min_speed": [
+        "20"
+    ],
+    "filament_start_gcode": [
+        ";filament start gcode"
+    ],
+    "filament_end_gcode": [
+        " ; filament end gcode"
+    ],
+    "default_filament_colour": "\"\"",
+    "enable_overhang_bridge_fan": "1",
+    "enable_pressure_advance": "0",
+    "filament_notes": "\"\"",
+    "filament_shrink": "100%",
+    "pressure_advance": "0.052",
+    "compatible_printers": [
+        "Creality Hi 0.4 nozzle",
+        "Creality Hi 0.6 nozzle",
+        "Creality Hi 0.8 nozzle"
+    ]
+}

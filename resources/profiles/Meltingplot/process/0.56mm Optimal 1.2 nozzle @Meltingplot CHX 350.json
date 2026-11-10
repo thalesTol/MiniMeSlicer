@@ -1,0 +1,20 @@
+{
+    "type": "process",
+    "name": "0.56mm Optimal 1.2 nozzle @Meltingplot CHX 350",
+    "inherits": "fdm_process_meltingplot_chx_large_nozzle",
+    "from": "system",
+    "setting_id": "l6wYSAIFuyQFgT5X",
+    "instantiation": "true",
+    "layer_height": "0.56",
+    "compatible_printers": [
+        "Meltingplot CHX 350 1.2 nozzle"
+    ],
+    "internal_solid_infill_line_width": "1.38",
+    "outer_wall_line_width": "1.32",
+    "support_line_width": "1.32",
+    "initial_layer_line_width": "1.44",
+    "line_width": "1.44",
+    "sparse_infill_line_width": "1.32",
+    "inner_wall_line_width": "1.32",
+    "top_surface_line_width": "1.32"
+}

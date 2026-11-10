@@ -1,11 +1,12 @@
 {
     "type": "filament",
-    "filament_id": "GFN99",
-    "setting_id": "GFSN99_ANYCUBIC_00",
     "name": "Generic PA @Anycubic",
-    "from": "system",
-    "instantiation": "true",
+    "renamed_from": "Anycubic Generic PA",
     "inherits": "fdm_filament_pa",
+    "from": "system",
+    "setting_id": "5MJsYpJIimshIDZm",
+    "filament_id": "OFg8ndtj",
+    "instantiation": "true",
     "nozzle_temperature_initial_layer": [
         "280"
     ],
@@ -19,6 +20,7 @@
         "Anycubic i3 Mega S 0.4 nozzle",
         "Anycubic Chiron 0.4 nozzle",
         "Anycubic Vyper 0.4 nozzle",
+        "Anycubic Kobra 0.4 nozzle",
         "Anycubic Kobra Max 0.4 nozzle",
         "Anycubic Kobra Plus 0.4 nozzle",
         "Anycubic 4Max Pro 0.4 nozzle",

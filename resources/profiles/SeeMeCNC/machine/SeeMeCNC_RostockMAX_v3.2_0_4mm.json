@@ -1,0 +1,280 @@
+{
+    "type": "machine",
+    "name": "SeeMeCNC RostockMAX v3.2 0.4 nozzle",
+    "from": "System",
+    "setting_id": "bUvbKp9xiJEdV37g",
+    "instantiation": "true",
+    "adaptive_bed_mesh_margin": "0",
+    "auxiliary_fan": "0",
+    "bed_exclude_area": [
+        "-135x-135",
+        "-89.14x-135",
+        "-89.14x-101.25",
+        "-135x-101.25",
+        "89.14x-135",
+        "135x-135",
+        "135x-101.25",
+        "89.14x-101.25",
+        "-135x-101.25",
+        "-116.91x-101.25",
+        "-116.91x-67.5",
+        "-135x-67.5",
+        "116.91x-101.25",
+        "135x-101.25",
+        "135x-67.5",
+        "116.91x-67.5",
+        "-135x-67.5",
+        "-130.66x-67.5",
+        "-130.66x-33.75",
+        "-135x-33.75",
+        "130.66x-67.5",
+        "135x-67.5",
+        "135x-33.75",
+        "130.66x-33.75",
+        "-135x33.75",
+        "-130.66x33.75",
+        "-130.66x67.5",
+        "-135x67.5",
+        "130.66x33.75",
+        "135x33.75",
+        "135x67.5",
+        "130.66x67.5",
+        "-135x67.5",
+        "-116.91x67.5",
+        "-116.91x101.25",
+        "-135x101.25",
+        "116.91x67.5",
+        "135x67.5",
+        "135x101.25",
+        "116.91x101.25",
+        "-135x101.25",
+        "-89.14x101.25",
+        "-89.14x135",
+        "-135x135",
+        "89.14x101.25",
+        "135x101.25",
+        "135x135",
+        "89.14x135"
+    ],
+    "bed_mesh_max": "99999,99999",
+    "bed_mesh_min": "-99999,-99999",
+    "bed_mesh_probe_distance": "50,50",
+    "bed_temperature_formula": "by_first_filament",
+    "before_layer_change_gcode": ";BEFORE_LAYER_CHANGE\n;[layer_z]\n{if layer_num == 1}M104 S[nozzle_temperature] ; Step down from first layer temp to print temp{endif}\nG92 E0\n",
+    "best_object_pos": "0.5,0.5",
+    "change_filament_gcode": "{if layer_num >= 0}\nG92 E0\nG1 E-5 F3000\nG1 E-155 F5000\nT[next_extruder]\n{if layer_num == 0}\nM109 S[first_layer_temperature]\n{else}\nM109 S[nozzle_temperature]\n{endif}\nG1 E160 F5000\nG92 E0\n{endif}",
+    "default_filament_profile": [
+        "SeeMeCNC PLA"
+    ],
+    "default_nozzle_volume_type": [
+        "Standard"
+    ],
+    "default_print_profile": "0.20mm Standard @SeeMeCNC RostockMAX v3.2 0.4",
+    "deretraction_speed": [
+        "60"
+    ],
+    "enable_long_retraction_when_cut": "0",
+    "extruder_clearance_height_to_lid": "70",
+    "extruder_clearance_height_to_rod": "70",
+    "extruder_clearance_max_radius": "75",
+    "extruder_colour": [
+        "#FCE94F"
+    ],
+    "extruder_offset": [
+        "0x0"
+    ],
+    "extruder_printable_area": [],
+    "extruder_printable_height": [
+        "385"
+    ],
+    "extruder_type": [
+        "Bowden"
+    ],
+    "extruder_variant_list": [
+        "Bowden Standard"
+    ],
+    "gcode_flavor": "reprapfirmware",
+    "grab_length": [
+        "0"
+    ],
+    "head_wrap_detect_zone": [],
+    "host_type": "duet",
+    "layer_change_gcode": ";AFTER_LAYER_CHANGE\n;[layer_z]",
+    "long_retractions_when_cut": [
+        "0"
+    ],
+    "machine_end_gcode": ";======= SEEMECNC ROSTOCKMAX V3.2 END G-CODE =======\nM104 S0          ; Turn off hotend\nM140 S0          ; Turn off heated bed\nM107 T0          ; Turn off part cooling fan\nG91              ; Relative positioning\nG1 Z2 E-160 F6000  ; Lift 2mm and retract 160mm\nG92 E0\nG90              ; Absolute positioning\nM203 Z18000      ; Allow fast Z for homing\nG28              ; Home all axes - clears part immediately on a delta\n;======= END G-CODE =======",
+    "machine_load_filament_time": "4",
+    "machine_max_acceleration_e": [
+        "5000",
+        "5000"
+    ],
+    "machine_max_acceleration_extruding": [
+        "5000",
+        "5000"
+    ],
+    "machine_max_acceleration_retracting": [
+        "5000",
+        "5000"
+    ],
+    "machine_max_acceleration_travel": [
+        "5000",
+        "5000"
+    ],
+    "machine_max_acceleration_x": [
+        "5000",
+        "5000"
+    ],
+    "machine_max_acceleration_y": [
+        "5000",
+        "5000"
+    ],
+    "machine_max_acceleration_z": [
+        "5000",
+        "5000"
+    ],
+    "machine_max_jerk_e": [
+        "15",
+        "15"
+    ],
+    "machine_max_jerk_x": [
+        "15",
+        "15"
+    ],
+    "machine_max_jerk_y": [
+        "15",
+        "15"
+    ],
+    "machine_max_jerk_z": [
+        "15",
+        "15"
+    ],
+    "machine_max_speed_e": [
+        "150",
+        "25"
+    ],
+    "machine_max_speed_x": [
+        "300",
+        "300"
+    ],
+    "machine_max_speed_y": [
+        "300",
+        "300"
+    ],
+    "machine_max_speed_z": [
+        "200",
+        "200"
+    ],
+    "machine_min_extruding_rate": [
+        "0",
+        "0"
+    ],
+    "machine_min_travel_rate": [
+        "0",
+        "0"
+    ],
+    "machine_pause_gcode": "M601",
+    "machine_start_gcode": ";======= SEEMECNC ROSTOCKMAX V3.2 START G-CODE =======\nG21              ; Set units to mm\nG90              ; Absolute positioning\nM82              ; Extruder to absolute mode\nG28              ; Home all axes\nG1 Z50 F9000     ; Lift nozzle for safe heating\n; --- SELECT STARTING TOOL ---\nT[initial_tool]  ; Activate the first assigned filament in OrcaSlicer\n; --- PREHEAT ---\nM140 S[first_layer_bed_temperature]  ; Start bed heating\nM104 S[first_layer_temperature]      ; Start nozzle heating\nM190 S[first_layer_bed_temperature]  ; Wait for bed to reach temp\nM109 S[first_layer_temperature]      ; Wait for nozzle to reach temp\n; --- RE-PRIME BOWDEN TUBE ---\nG92 E0\nG1 E160.5 F3000  ; Retract 160mm\nG92 E0\n; --- PURGE LINE (curved arc near front edge, 270mm bed) ---\nG92 E0\nG1 X-50 Y-119.6 Z0.4 F5000   ; Move to arc start (inside 135mm radius)\nG1 Z0.3 F1000                    ; Drop to prime height\nG3 X50 Y-119.6 R129.6 E40 F600  ; Arc purge, 100mm sweep, heavy extrusion\nG1 E38 F4500                     ; Retract 2mm before wipe (Bowden)\nG1 X65 Y-109.6 Z0.2 F6000     ; Wipe move at Z0.2\nG92 E0                           ; Zero extruder before print\n;======= END START G-CODE =======",
+    "machine_unload_filament_time": "4",
+    "master_extruder_id": "1",
+    "max_layer_height": [
+        "0.32"
+    ],
+    "min_layer_height": [
+        "0.08"
+    ],
+    "nozzle_diameter": [
+        "0.4"
+    ],
+    "nozzle_flush_dataset": [
+        "0"
+    ],
+    "nozzle_height": "3.0",
+    "nozzle_volume": [
+        "0"
+    ],
+    "physical_extruder_map": [
+        "0"
+    ],
+    "printable_area": [
+        "-135x-135",
+        "135x-135",
+        "135x135",
+        "-135x135"
+    ],
+    "printable_height": "385",
+    "printer_extruder_id": [
+        "1"
+    ],
+    "printer_extruder_variant": [
+        "Bowden Standard"
+    ],
+    "printer_model": "SeeMeCNC RostockMAX v3.2",
+    "printer_notes": "",
+    "printer_settings_id": "SeeMeCNC RostockMAX v3.2 0.4 nozzle",
+    "printer_structure": "delta",
+    "printer_technology": "FFF",
+    "printer_variant": "0.4",
+    "printhost_authorization_type": "key",
+    "printhost_ssl_ignore_revoke": "0",
+    "printing_by_object_gcode": "",
+    "retract_before_wipe": [
+        "70%"
+    ],
+    "retract_length_toolchange": [
+        "3"
+    ],
+    "retract_lift_above": [
+        "0"
+    ],
+    "retract_lift_below": [
+        "0"
+    ],
+    "retract_restart_extra": [
+        "0"
+    ],
+    "retract_restart_extra_toolchange": [
+        "2"
+    ],
+    "retract_when_changing_layer": [
+        "1"
+    ],
+    "retraction_distances_when_cut": [
+        "18"
+    ],
+    "retraction_length": [
+        "6"
+    ],
+    "retraction_minimum_travel": [
+        "1"
+    ],
+    "retraction_speed": [
+        "60"
+    ],
+    "scan_first_layer": "0",
+    "single_extruder_multi_material": "1",
+    "support_air_filtration": "1",
+    "support_chamber_temp_control": "1",
+    "support_object_skip_flush": "0",
+    "template_custom_gcode": "",
+    "time_lapse_gcode": "",
+    "upward_compatible_machine": [],
+    "use_firmware_retraction": "0",
+    "use_relative_e_distances": "1",
+    "wipe": [
+        "1"
+    ],
+    "wipe_distance": [
+        "1"
+    ],
+    "wrapping_detection_gcode": "",
+    "wrapping_detection_layers": "20",
+    "wrapping_exclude_area": [],
+    "z_hop": [
+        "0.4"
+    ],
+    "z_hop_types": [
+        "Auto Lift"
+    ],
+    "description": "SeeMeCNC configurations"
+}

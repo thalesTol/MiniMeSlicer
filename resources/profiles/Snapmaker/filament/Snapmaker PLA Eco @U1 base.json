@@ -1,0 +1,20 @@
+{
+    "type": "filament",
+    "name": "Snapmaker PLA Eco @U1 base",
+    "inherits": "fdm_filament_pla_eco",
+    "from": "system",
+    "filament_id": "OFpu74Qe",
+    "instantiation": "false",
+    "filament_end_gcode": [
+        ""
+    ],
+    "filament_density": [
+        "1.26"
+    ],
+    "filament_max_volumetric_speed": [
+        "12"
+    ],
+    "temperature_vitrification": [
+        "45"
+    ]
+}

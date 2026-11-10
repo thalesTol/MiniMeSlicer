@@ -1,0 +1,12 @@
+{
+    "type": "machine_model",
+    "name": "M1",
+    "model_id": "m1_1",
+    "nozzle_diameter": "0.4;0.2;0.6;0.8",
+    "machine_tech": "FFF",
+    "family": "Mellow",
+    "bed_model": "M1_bed_model.stl",
+    "bed_texture": "mellow_bed_texture.svg",
+    "hotend_model": "",
+    "default_materials": "Generic ABS @Mellow;Generic PLA @Mellow;Generic PLA-CF @Mellow;Generic PETG @Mellow;Generic TPU @Mellow;Generic ASA @Mellow;Generic PC @Mellow;Generic PVA @Mellow;Generic PA @Mellow;Generic PA-CF @Mellow"
+}

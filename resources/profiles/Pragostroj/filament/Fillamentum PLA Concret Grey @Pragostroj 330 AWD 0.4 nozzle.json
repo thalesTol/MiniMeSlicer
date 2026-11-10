@@ -1,0 +1,21 @@
+{
+    "type": "filament",
+    "name": "Fillamentum PLA Concret Grey @Pragostroj 330 AWD 0.4 nozzle",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "setting_id": "WMVkoSEAS0OVhEgL",
+    "filament_id": "OFyKW1DX",
+    "instantiation": "true",
+    "filament_vendor": [
+        "Fillamentum"
+    ],
+    "compatible_printers": [
+        "KINARB 1HB 0.4 nozzle",
+        "KINARB 1HB 0.5 nozzle",
+        "KINARB 1HB 0.6 nozzle",
+        "KINARB 1HB 0.8 nozzle",
+        "KINARB 1HB 1.0 nozzle",
+        "KINARB 1HB 1.2 nozzle",
+        "KINARB 1HB 1.6 nozzle"
+    ]
+}

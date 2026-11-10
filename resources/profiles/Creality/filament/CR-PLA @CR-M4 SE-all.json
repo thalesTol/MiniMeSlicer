@@ -1,0 +1,120 @@
+{
+    "type": "filament",
+    "name": "CR-PLA @CR-M4 SE-all",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "setting_id": "tABggke8tUaNmEEh",
+    "filament_id": "OFp4ETDP",
+    "instantiation": "true",
+    "activate_air_filtration": [
+        "0"
+    ],
+    "additional_cooling_fan_speed": [
+        "0"
+    ],
+    "complete_print_exhaust_fan_speed": [
+        "80"
+    ],
+    "during_print_exhaust_fan_speed": [
+        "60"
+    ],
+    "eng_plate_temp": [
+        "45"
+    ],
+    "eng_plate_temp_initial_layer": [
+        "45"
+    ],
+    "fan_min_speed": [
+        "50"
+    ],
+    "filament_cost": [
+        "22"
+    ],
+    "filament_deretraction_speed": [
+        "50"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_flow_ratio": [
+        "0.9"
+    ],
+    "filament_is_support": [
+        "0"
+    ],
+    "filament_max_volumetric_speed": [
+        "20"
+    ],
+    "filament_minimal_purge_on_wipe_tower": [
+        "15"
+    ],
+    "filament_retract_before_wipe": [
+        "70"
+    ],
+    "filament_retract_restart_extra": [
+        "0"
+    ],
+    "filament_retract_when_changing_layer": [
+        "0"
+    ],
+    "filament_retraction_length": [
+        "0.8"
+    ],
+    "filament_retraction_minimum_travel": [
+        "0.05"
+    ],
+    "filament_retraction_speed": [
+        "50"
+    ],
+    "filament_soluble": [
+        "0"
+    ],
+    "filament_vendor": [
+        "Creality"
+    ],
+    "filament_wipe": [
+        "0"
+    ],
+    "filament_wipe_distance": [
+        "2"
+    ],
+    "filament_z_hop": [
+        "0.2"
+    ],
+    "filament_z_hop_types": [
+        "Normal Lift"
+    ],
+    "full_fan_speed_layer": [
+        "0"
+    ],
+    "nozzle_temperature_range_high": [
+        "240"
+    ],
+    "overhang_fan_threshold": [
+        "95%"
+    ],
+    "required_nozzle_HRC": [
+        "0"
+    ],
+    "slow_down_layer_time": [
+        "10"
+    ],
+    "temperature_vitrification": [
+        "100"
+    ],
+    "filament_start_gcode": [
+        "\" \""
+    ],
+    "filament_end_gcode": [
+        "\" \""
+    ],
+    "default_filament_colour": "\"\"",
+    "enable_overhang_bridge_fan": "1",
+    "enable_pressure_advance": "1",
+    "filament_notes": "\"\"",
+    "filament_shrink": "100%",
+    "pressure_advance": "0.04",
+    "compatible_printers": [
+        "Creality CR-M4 SE 0.4 nozzle"
+    ]
+}

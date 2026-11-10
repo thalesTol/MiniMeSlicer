@@ -1,19 +1,100 @@
 {
     "type": "filament",
-    "filament_id": "GFC99",
-    "setting_id": "GFSC99_PRUSA_00",
     "name": "Generic PC @Prusa",
+    "renamed_from": "Prusa Generic PC;Generic PC @Prusa CORE One MMU3;Generic PC @MMU3",
+    "inherits": "Generic PC @System",
     "from": "system",
+    "setting_id": "UJ5KpqIb5mpcNXzl",
     "instantiation": "true",
-    "inherits": "fdm_filament_pc",
-    "filament_max_volumetric_speed": [
-        "12"
+    "eng_plate_temp": [
+        "100"
     ],
-    "filament_flow_ratio": [
-        "0.94"
+    "hot_plate_temp": [
+        "100"
+    ],
+    "eng_plate_temp_initial_layer": [
+        "100"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "100"
     ],
     "compatible_printers": [
+        "Prusa MK3S 0.25 nozzle",
         "Prusa MK3S 0.4 nozzle",
-        "Prusa MINI 0.4 nozzle"
+        "Prusa MK3S 0.6 nozzle",
+        "Prusa MK3S 0.8 nozzle",
+        "Prusa MINI 0.25 nozzle",
+        "Prusa MINI 0.4 nozzle",
+        "Prusa MINI 0.6 nozzle",
+        "Prusa MINI 0.8 nozzle"
+    ],
+    "supertack_plate_temp": [
+        "35"
+    ],
+    "textured_plate_temp": [
+        "45"
+    ],
+    "filament_retraction_distances_when_cut": [
+        "18",
+        "18",
+        "18",
+        "18",
+        "18",
+        "18"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "45"
+    ],
+    "temperature_vitrification": [
+        "140"
+    ],
+    "filament_long_retractions_when_cut": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+    ],
+    "required_nozzle_HRC": [
+        "0"
+    ],
+    "nozzle_temperature_range_high": [
+        "280",
+        "280",
+        "280",
+        "280",
+        "280",
+        "280"
+    ],
+    "during_print_exhaust_fan_speed": [
+        "60",
+        "60",
+        "60",
+        "60",
+        "60",
+        "60"
+    ],
+    "supertack_plate_temp_initial_layer": [
+        "35"
+    ],
+    "filament_z_hop_types": [
+        "nil",
+        "nil",
+        "nil",
+        "nil",
+        "nil",
+        "nil"
+    ],
+    "filament_end_gcode": [
+        "; filament end gcode \n"
+    ],
+    "complete_print_exhaust_fan_speed": [
+        "80",
+        "80",
+        "80",
+        "80",
+        "80",
+        "80"
     ]
 }

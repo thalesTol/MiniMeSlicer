@@ -1,0 +1,24 @@
+# Printer models left out because they did not slice in MiniMe (brand | model), one per line.
+Elegoo | Elegoo OrangeStorm Giga
+Prusa | Prusa MINI IS
+Prusa | Prusa MK3.5
+Prusa | Prusa MK4
+Prusa | Prusa CORE One HF
+Prusa | Prusa CORE One
+Prusa | Prusa MK4S
+Prusa | Prusa CORE One MMU3
+Prusa | Prusa MK4 MMU3
+Prusa | Prusa MK4 MMU3 HF
+Prusa | Prusa MK4S HF
+Ratrig | RatRig V-Cast
+Ratrig | RatRig V-Core 3 200
+Ratrig | RatRig V-Core 3 300
+Ratrig | RatRig V-Core 3 400
+Ratrig | RatRig V-Core 3 500
+Ratrig | RatRig V-Core 4 300
+Ratrig | RatRig V-Core 4 400
+Ratrig | RatRig V-Core 4 500
+Ratrig | RatRig V-Core 4 HYBRID 300
+Ratrig | RatRig V-Core 4 HYBRID 400
+Ratrig | RatRig V-Core 4 HYBRID 500
+Ratrig | RatRig V-Minion

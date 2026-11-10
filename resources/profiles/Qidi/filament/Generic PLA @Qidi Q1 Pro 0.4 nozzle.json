@@ -1,22 +1,20 @@
 {
     "type": "filament",
-    "filament_id": "GFL99",
-    "setting_id": "GFSL99_Qidi_03",
     "name": "Generic PLA @Qidi Q1 Pro 0.4 nozzle",
-    "from": "system",
-    "instantiation": "true",
+    "renamed_from": "Qidi Generic PLA @Qidi Q1 Pro 0.4 nozzle;Qidi Generic PLA Qidi Q1 Pro 0.4 nozzle",
     "inherits": "Generic PLA @Qidi",
+    "from": "system",
+    "setting_id": "PNCPMC8uMY9h5SZr",
+    "filament_id": "OFDSrzZ8",
+    "instantiation": "true",
+    "filament_max_volumetric_speed": [
+        "14"
+    ],
+    "filament_settings_id": [
+        "Generic PLA @Qidi Q1 Pro 0.4 nozzle"
+    ],
     "full_fan_speed_layer": [
-        "0"
-    ],
-    "additional_fan_full_speed_layer": [
-        "0"
-    ],
-    "hot_plate_temp": [
-        "60"
-    ],
-    "hot_plate_temp_initial_layer": [
-        "60"
+        "3"
     ],
     "nozzle_temperature": [
         "210"

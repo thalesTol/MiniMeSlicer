@@ -1,0 +1,33 @@
+{
+    "type": "machine",
+    "name": "Xplorer common",
+    "inherits": "fdm_klipper_common",
+    "from": "system",
+    "instantiation": "false",
+    "default_filament_profile": [
+        "Generic PLA @Vivedino"
+    ],
+    "adaptive_bed_mesh_margin": "0",
+    "bed_mesh_max": "99999,99999",
+    "bed_mesh_min": "-99999,-99999",
+    "bed_mesh_probe_distance": "50,50",
+    "best_object_pos": "0.5,0.5",
+    "enable_long_retraction_when_cut": "0",
+    "extruder_clearance_height_to_rod": "43",
+    "extruder_clearance_max_radius": "70",
+    "head_wrap_detect_zone": [],
+    "machine_end_gcode": "end_print",
+    "nozzle_height": "2.5",
+    "nozzle_volume": "0",
+    "printable_area": [
+        "10x0",
+        "410x0",
+        "410x400",
+        "10x400"
+    ],
+    "single_extruder_multi_material": "0",
+    "support_air_filtration": "1",
+    "support_chamber_temp_control": "1",
+    "use_firmware_retraction": "0",
+    "use_relative_e_distances": "1"
+}

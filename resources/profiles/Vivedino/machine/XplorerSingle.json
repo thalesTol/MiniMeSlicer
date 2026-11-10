@@ -1,0 +1,12 @@
+{
+    "type": "machine_model",
+    "name": "Xplorer Single",
+    "model_id": "XplorerSingle",
+    "nozzle_diameter": "0.4;0.6;0.8",
+    "machine_tech": "FFF",
+    "family": "Vivedino",
+    "bed_model": "Xplorer_buildplate_model.stl",
+    "bed_texture": "",
+    "hotend_model": "",
+    "default_materials": "Generic ABS @Vivedino;Generic PLA @Vivedino;Generic PLA-CF @Vivedino;Generic PETG @Vivedino;Generic TPU @Vivedino;Generic ASA @Vivedino;Generic PC @Vivedino;Generic PVA @Vivedino;Generic PA @Vivedino;Generic PA-CF @Vivedino"
+}

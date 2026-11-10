@@ -1,0 +1,141 @@
+{
+    "type": "filament",
+    "name": "Hyper ABS @K2 Plus-all",
+    "inherits": "fdm_filament_abs",
+    "from": "system",
+    "setting_id": "lGXmZiCrrwfTeERC",
+    "filament_id": "OF8GnyFU",
+    "instantiation": "true",
+    "activate_air_filtration": [
+        "0"
+    ],
+    "additional_cooling_fan_speed": [
+        "0"
+    ],
+    "complete_print_exhaust_fan_speed": [
+        "80"
+    ],
+    "cool_plate_temp": [
+        "80"
+    ],
+    "cool_plate_temp_initial_layer": [
+        "80"
+    ],
+    "during_print_exhaust_fan_speed": [
+        "60"
+    ],
+    "eng_plate_temp": [
+        "80"
+    ],
+    "eng_plate_temp_initial_layer": [
+        "80"
+    ],
+    "fan_max_speed": [
+        "60"
+    ],
+    "filament_cost": [
+        "22"
+    ],
+    "filament_density": [
+        "1.08"
+    ],
+    "filament_deretraction_speed": [
+        "nil"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_flow_ratio": [
+        "0.95"
+    ],
+    "filament_is_support": [
+        "0"
+    ],
+    "filament_max_volumetric_speed": [
+        "23"
+    ],
+    "filament_minimal_purge_on_wipe_tower": [
+        "15"
+    ],
+    "filament_retract_before_wipe": [
+        "nil"
+    ],
+    "filament_retract_restart_extra": [
+        "nil"
+    ],
+    "filament_retract_when_changing_layer": [
+        "nil"
+    ],
+    "filament_retraction_length": [
+        "nil"
+    ],
+    "filament_retraction_minimum_travel": [
+        "nil"
+    ],
+    "filament_retraction_speed": [
+        "nil"
+    ],
+    "filament_soluble": [
+        "0"
+    ],
+    "filament_vendor": [
+        "Creality"
+    ],
+    "filament_wipe": [
+        "nil"
+    ],
+    "filament_wipe_distance": [
+        "nil"
+    ],
+    "filament_z_hop": [
+        "nil"
+    ],
+    "filament_z_hop_types": [
+        "nil"
+    ],
+    "full_fan_speed_layer": [
+        "0"
+    ],
+    "hot_plate_temp": [
+        "80"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "80"
+    ],
+    "nozzle_temperature_range_high": [
+        "280"
+    ],
+    "required_nozzle_HRC": [
+        "0"
+    ],
+    "slow_down_layer_time": [
+        "12"
+    ],
+    "slow_down_min_speed": [
+        "20"
+    ],
+    "textured_plate_temp": [
+        "80"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "80"
+    ],
+    "filament_start_gcode": [
+        "; filament start gcode\n{if (layer_z > first_layer_height) }\nM104 S[nozzle_temperature]\n{else} \nM104 S[first_layer_temperature]\n{endif}"
+    ],
+    "filament_end_gcode": [
+        "; filament end gcode \n"
+    ],
+    "default_filament_colour": "\"\"",
+    "enable_overhang_bridge_fan": "1",
+    "enable_pressure_advance": "1",
+    "filament_notes": "\"\"",
+    "filament_shrink": "100%",
+    "pressure_advance": "0.03",
+    "compatible_printers": [
+        "Creality K2 Plus 0.2 nozzle",
+        "Creality K2 Plus 0.4 nozzle",
+        "Creality K2 Plus 0.6 nozzle",
+        "Creality K2 Plus 0.8 nozzle"
+    ]
+}

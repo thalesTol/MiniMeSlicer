@@ -1,18 +1,15 @@
 {
     "type": "filament",
-    "filament_id": "GFC99",
-    "setting_id": "GFSC99_Anker_00",
     "name": "Generic PC @Anker",
+    "renamed_from": "Anker Generic PC",
+    "inherits": "Generic PC @Anker base",
     "from": "system",
+    "setting_id": "ffufXVvW95sunH1B",
     "instantiation": "true",
-    "inherits": "fdm_filament_pc",
-    "filament_max_volumetric_speed": [
-        "12"
-    ],
-    "filament_flow_ratio": [
-        "0.94"
-    ],
     "compatible_printers": [
-        "Anker M5C 0.4 nozzle"
+        "Anker M5 All-Metal 0.4 nozzle",
+        "Anker M5 All-Metal 0.6 nozzle",
+        "Anker M5C 0.4 nozzle",
+        "Anker M5C 0.6 nozzle"
     ]
 }

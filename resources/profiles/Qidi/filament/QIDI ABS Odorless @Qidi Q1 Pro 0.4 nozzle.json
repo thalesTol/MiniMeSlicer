@@ -1,13 +1,31 @@
 {
     "type": "filament",
-    "filament_id": "GFB00",
-    "setting_id": "GFSB00_Qidi_11",
     "name": "QIDI ABS Odorless @Qidi Q1 Pro 0.4 nozzle",
+    "inherits": "QIDI ABS Odorless",
     "from": "system",
+    "setting_id": "1hhkoG2E1z6ya5hY",
+    "filament_id": "OFma5TXH",
     "instantiation": "true",
-    "inherits": "QIDI ABS Odorless @Qidi",
+    "during_print_exhaust_fan_speed": [
+        "0"
+    ],
+    "filament_flow_ratio": [
+        "0.92"
+    ],
+    "enable_pressure_advance": [
+        "1"
+    ],
+    "fan_max_speed": [
+        "80"
+    ],
+    "filament_max_volumetric_speed": [
+        "22"
+    ],
     "nozzle_temperature": [
         "260"
+    ],
+    "overhang_fan_speed": [
+        "80"
     ],
     "pressure_advance": [
         "0.023"
@@ -17,5 +35,5 @@
     ],
     "compatible_printers": [
         "Qidi Q1 Pro 0.4 nozzle"
-	]
+    ]
 }

@@ -1,7 +1,7 @@
 {
     "type": "process",
     "name": "fdm_process_Geeetech_HS",
-	"inherits": "fdm_process_geeetech_common",
+    "inherits": "fdm_process_geeetech_common",
     "from": "system",
     "instantiation": "false",
     "default_acceleration": "7000",
@@ -20,7 +20,6 @@
     "gap_infill_speed": "150",
     "sparse_infill_speed": "250",
     "support_speed": "80",
-    "support_interface_speed": "100%",
     "ironing_speed": "15",
     "bridge_speed": "25",
     "default_jerk": "9",

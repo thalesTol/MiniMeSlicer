@@ -1,0 +1,24 @@
+{
+    "type": "process",
+    "name": "0.20mm Fast @VIRTU E3",
+    "inherits": "process_Fast_VIRTU E3",
+    "from": "system",
+    "setting_id": "cSol8x6vF51GUloq",
+    "instantiation": "true",
+    "layer_height": "0.2",
+    "initial_layer_print_height": "0.2",
+    "compatible_printers": [
+        "VIRTU E3 - 0.3 nozzle",
+        "VIRTU E3 - 0.4 nozzle",
+        "VIRTU E3 - 0.5 nozzle",
+        "VIRTU E3 - 0.6 nozzle"
+    ],
+    "internal_solid_infill_line_width": "0.375",
+    "outer_wall_line_width": "0.3",
+    "support_line_width": "0.3",
+    "initial_layer_line_width": "0.33",
+    "line_width": "0.33",
+    "sparse_infill_line_width": "0.375",
+    "inner_wall_line_width": "0.33",
+    "top_surface_line_width": "0.27"
+}

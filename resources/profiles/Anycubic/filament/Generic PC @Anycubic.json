@@ -1,11 +1,12 @@
 {
     "type": "filament",
-    "filament_id": "GFC99",
-    "setting_id": "GFSC99_ANYCUBIC_00",
     "name": "Generic PC @Anycubic",
-    "from": "system",
-    "instantiation": "true",
+    "renamed_from": "Anycubic Generic PC",
     "inherits": "fdm_filament_pc",
+    "from": "system",
+    "setting_id": "3jP8aWkWw2dT2fNM",
+    "filament_id": "OFLakOUI",
+    "instantiation": "true",
     "filament_max_volumetric_speed": [
         "12"
     ],
@@ -16,6 +17,7 @@
         "Anycubic i3 Mega S 0.4 nozzle",
         "Anycubic Chiron 0.4 nozzle",
         "Anycubic Vyper 0.4 nozzle",
+        "Anycubic Kobra 0.4 nozzle",
         "Anycubic Kobra Max 0.4 nozzle",
         "Anycubic Kobra Plus 0.4 nozzle",
         "Anycubic 4Max Pro 0.4 nozzle",

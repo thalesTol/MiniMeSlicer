@@ -1,0 +1,165 @@
+{
+    "type": "machine",
+    "name": "FLSun T1 0.4 nozzle",
+    "inherits": "fdm_machine_common",
+    "from": "system",
+    "setting_id": "M1YWzai2pJOT8PmC",
+    "instantiation": "true",
+    "printer_model": "FLSun T1",
+    "default_print_profile": "0.20mm Standard @FLSun T1",
+    "gcode_flavor": "klipper",
+    "printer_structure": "delta",
+    "nozzle_diameter": [
+        "0.4"
+    ],
+    "bed_exclude_area": [
+        "-130x-130",
+        "-85.84x-130",
+        "-85.84x-97.5",
+        "-130x-97.5",
+        "85.84x-130",
+        "130x-130",
+        "130x-97.5",
+        "85.84x-97.5",
+        "-130x-97.5",
+        "-112.58x-97.5",
+        "-112.58x-65",
+        "-130x-65",
+        "112.58x-97.5",
+        "130x-97.5",
+        "130x-65",
+        "112.58x-65",
+        "-130x-65",
+        "-125.82x-65",
+        "-125.82x-32.5",
+        "-130x-32.5",
+        "125.82x-65",
+        "130x-65",
+        "130x-32.5",
+        "125.82x-32.5",
+        "-130x32.5",
+        "-125.82x32.5",
+        "-125.82x65",
+        "-130x65",
+        "125.82x32.5",
+        "130x32.5",
+        "130x65",
+        "125.82x65",
+        "-130x65",
+        "-112.58x65",
+        "-112.58x97.5",
+        "-130x97.5",
+        "112.58x65",
+        "130x65",
+        "130x97.5",
+        "112.58x97.5",
+        "-130x97.5",
+        "-85.84x97.5",
+        "-85.84x130",
+        "-130x130",
+        "85.84x97.5",
+        "130x97.5",
+        "130x130",
+        "85.84x130"
+    ],
+    "deretraction_speed": [
+        "70"
+    ],
+    "max_layer_height": [
+        "0.3"
+    ],
+    "retract_before_wipe": [
+        "30%"
+    ],
+    "retract_length_toolchange": [
+        "1"
+    ],
+    "retract_restart_extra": [
+        "-0.05"
+    ],
+    "retract_restart_extra_toolchange": [
+        "-0.05"
+    ],
+    "retraction_length": [
+        "1"
+    ],
+    "retraction_minimum_travel": [
+        "2"
+    ],
+    "retraction_speed": [
+        "70"
+    ],
+    "machine_max_acceleration_e": [
+        "30000",
+        "30000"
+    ],
+    "machine_max_acceleration_extruding": [
+        "30000",
+        "30000"
+    ],
+    "machine_max_acceleration_retracting": [
+        "30000",
+        "30000"
+    ],
+    "machine_max_acceleration_x": [
+        "30000",
+        "30000"
+    ],
+    "machine_max_acceleration_y": [
+        "30000",
+        "30000"
+    ],
+    "machine_max_acceleration_z": [
+        "30000",
+        "30000"
+    ],
+    "machine_max_jerk_e": [
+        "100",
+        "100"
+    ],
+    "machine_max_jerk_x": [
+        "20000",
+        "20000"
+    ],
+    "machine_max_jerk_y": [
+        "20000",
+        "20000"
+    ],
+    "machine_max_jerk_z": [
+        "10000",
+        "10000"
+    ],
+    "machine_max_speed_e": [
+        "1000",
+        "1000"
+    ],
+    "machine_max_speed_x": [
+        "1000",
+        "1000"
+    ],
+    "machine_max_speed_y": [
+        "1000",
+        "1000"
+    ],
+    "machine_max_speed_z": [
+        "1000",
+        "1000"
+    ],
+    "printable_area": [
+        "-130x-130",
+        "130x-130",
+        "130x130",
+        "-130x130"
+    ],
+    "support_air_filtration": "1",
+    "printable_height": "330",
+    "machine_end_gcode": "M107 T0\nM104 S0\nM104 S0 T1\nM140 S0\nG92 E0\nG91\nG1 E-1 F2100\nG1 Z+0.5 F6000\nG28\nG90",
+    "machine_start_gcode": "G21\nG90\nM82\nG28\nM140 S[first_layer_bed_temperature]\nM104 S[first_layer_temperature] T0\nM109 S[first_layer_temperature] T0\nM190 S[first_layer_bed_temperature]\nG1 Z150 F3000\nG1 X-130 Y0 Z0.4\nM107 T0\nG92 E0\nG3 X0 Y-130 I130 J0 Z0.3 E30 F2000\nG1 Z2 F2000\nG92 E0\nSET_TMC_CURRENT STEPPER=extruder CURRENT=0.8",
+    "change_filament_gcode": "PAUSE",
+    "machine_pause_gcode": "PAUSE",
+    "layer_change_gcode": "",
+    "support_chamber_temp_control": "0",
+    "scan_first_layer": "0",
+    "adaptive_bed_mesh_margin": "0",
+    "auxiliary_fan": "0"
+}

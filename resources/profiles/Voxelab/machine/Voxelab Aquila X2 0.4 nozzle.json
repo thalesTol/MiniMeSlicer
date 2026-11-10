@@ -1,15 +1,12 @@
 {
     "type": "machine",
-    "setting_id": "GM_Voxelab_001",
     "name": "Voxelab Aquila X2 0.4 nozzle",
-    "from": "system",
-    "instantiation": "true",
     "inherits": "fdm_machine_common",
+    "from": "system",
+    "setting_id": "7ODLRyfsqCsC3PID",
+    "instantiation": "true",
     "printer_model": "Voxelab Aquila X2",
     "default_print_profile": "0.20mm Standard @Voxelab AquilaX2",
-    "extruder_type": [
-        "Bowden"
-    ],
     "nozzle_diameter": [
         "0.4"
     ],
@@ -20,9 +17,6 @@
         "0x220"
     ],
     "printable_height": "250",
-    "retract_lift_below":[
-        "249"
-    ],
     "auxiliary_fan": "0",
     "machine_max_acceleration_extruding": [
         "500",
@@ -102,7 +96,7 @@
     "deretraction_speed": [
         "40"
     ],
-    "single_extruder_multi_material": "0",
+    "single_extruder_multi_material": "1",
     "change_filament_gcode": "M600",
     "machine_pause_gcode": "M0",
     "default_filament_profile": [

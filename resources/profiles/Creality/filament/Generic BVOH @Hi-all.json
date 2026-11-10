@@ -1,0 +1,103 @@
+{
+    "type": "filament",
+    "name": "Generic BVOH @Hi-all",
+    "inherits": "fdm_filament_common",
+    "from": "system",
+    "setting_id": "5HO5PysrHUKqReVb",
+    "filament_id": "OFo2UF2C",
+    "instantiation": "true",
+    "activate_air_filtration": [
+        "0"
+    ],
+    "additional_cooling_fan_speed": [
+        "60"
+    ],
+    "complete_print_exhaust_fan_speed": [
+        "80"
+    ],
+    "cool_plate_temp": [
+        "50"
+    ],
+    "cool_plate_temp_initial_layer": [
+        "50"
+    ],
+    "during_print_exhaust_fan_speed": [
+        "60"
+    ],
+    "eng_plate_temp": [
+        "105"
+    ],
+    "eng_plate_temp_initial_layer": [
+        "105"
+    ],
+    "fan_cooling_layer_time": [
+        "100"
+    ],
+    "fan_min_speed": [
+        "100"
+    ],
+    "filament_cost": [
+        "150"
+    ],
+    "filament_density": [
+        "1.138"
+    ],
+    "filament_is_support": [
+        "1"
+    ],
+    "filament_max_volumetric_speed": [
+        "6"
+    ],
+    "filament_retract_before_wipe": [
+        "100%"
+    ],
+    "filament_retraction_length": [
+        "0.6"
+    ],
+    "filament_retraction_minimum_travel": [
+        "2"
+    ],
+    "filament_soluble": [
+        "1"
+    ],
+    "filament_type": [
+        "BVOH"
+    ],
+    "nozzle_temperature": [
+        "220"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "220"
+    ],
+    "nozzle_temperature_range_high": [
+        "220"
+    ],
+    "nozzle_temperature_range_low": [
+        "200"
+    ],
+    "overhang_fan_threshold": [
+        "50%"
+    ],
+    "reduce_fan_stop_start_freq": [
+        "1"
+    ],
+    "required_nozzle_HRC": [
+        "0"
+    ],
+    "temperature_vitrification": [
+        "110"
+    ],
+    "filament_start_gcode": [
+        "; filament start gcode\n{if (layer_z > first_layer_height) }\nM104 S[nozzle_temperature]\n{else} \nM104 S[first_layer_temperature]\n{endif}\n\n{if(initial_extruder != current_extruder || layer_z > first_layer_height)}\n{if (layer_z +0.4  < printable_height) }\nG2 Z{layer_z  + 0.4} I0.86 J0.86 P1 F10000 ; spiral lift a little from second lift\nG1 X205 Y345 F20000\nG1 Z{layer_z } F1200\n{else}\nG1 X205 Y345 F20000\n{endif}\n{endif}"
+    ],
+    "default_filament_colour": "\"\"",
+    "enable_overhang_bridge_fan": "1",
+    "enable_pressure_advance": "0",
+    "filament_notes": "\"\"",
+    "filament_shrink": "100%",
+    "pressure_advance": "0.04",
+    "filament_adhesiveness_category": "797",
+    "compatible_printers": [
+        "Creality Hi 0.4 nozzle"
+    ]
+}

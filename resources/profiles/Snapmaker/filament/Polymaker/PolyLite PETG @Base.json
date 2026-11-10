@@ -1,0 +1,17 @@
+{
+    "type": "filament",
+    "name": "PolyLite PETG @Base",
+    "inherits": "fdm_filament_petg",
+    "from": "system",
+    "instantiation": "false",
+    "filament_density": [
+        "1.25"
+    ],
+    "filament_soluble": [
+        "0"
+    ],
+    "description": "",
+    "filament_vendor": [
+        "Polymaker"
+    ]
+}

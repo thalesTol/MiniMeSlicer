@@ -1,0 +1,96 @@
+{
+    "type": "machine",
+    "name": "Rolohaun Delta Flyer Refit 0.4 nozzle",
+    "inherits": "fdm_common_Rook MK1 LDO",
+    "from": "system",
+    "setting_id": "xRvK2POOU8rx7dLH",
+    "instantiation": "true",
+    "bed_custom_model": "",
+    "printer_structure": "delta",
+    "deretraction_speed": [
+        "60"
+    ],
+    "machine_max_acceleration_extruding": [
+        "10000",
+        "20000"
+    ],
+    "machine_max_acceleration_x": [
+        "10000",
+        "20000"
+    ],
+    "machine_max_acceleration_y": [
+        "10000",
+        "20000"
+    ],
+    "machine_start_gcode": "PRINT_START EXTRUDER=[nozzle_temperature_initial_layer] BED=[bed_temperature_initial_layer_single]\n",
+    "min_layer_height": [
+        "0.04"
+    ],
+    "printable_area": [
+        "-55x-55",
+        "55x-55",
+        "55x55",
+        "-55x55"
+    ],
+    "printer_model": "Rolohaun Delta Flyer Refit",
+    "printable_height": "115",
+    "retraction_length": [
+        "1.8"
+    ],
+    "retraction_speed": [
+        "60"
+    ],
+    "z_hop": [
+        "0.8"
+    ],
+    "bed_exclude_area": [
+        "-55x-55",
+        "-36.32x-55",
+        "-36.32x-41.25",
+        "-55x-41.25",
+        "36.32x-55",
+        "55x-55",
+        "55x-41.25",
+        "36.32x-41.25",
+        "-55x-41.25",
+        "-47.63x-41.25",
+        "-47.63x-27.5",
+        "-55x-27.5",
+        "47.63x-41.25",
+        "55x-41.25",
+        "55x-27.5",
+        "47.63x-27.5",
+        "-55x-27.5",
+        "-53.23x-27.5",
+        "-53.23x-13.75",
+        "-55x-13.75",
+        "53.23x-27.5",
+        "55x-27.5",
+        "55x-13.75",
+        "53.23x-13.75",
+        "-55x13.75",
+        "-53.23x13.75",
+        "-53.23x27.5",
+        "-55x27.5",
+        "53.23x13.75",
+        "55x13.75",
+        "55x27.5",
+        "53.23x27.5",
+        "-55x27.5",
+        "-47.63x27.5",
+        "-47.63x41.25",
+        "-55x41.25",
+        "47.63x27.5",
+        "55x27.5",
+        "55x41.25",
+        "47.63x41.25",
+        "-55x41.25",
+        "-36.32x41.25",
+        "-36.32x55",
+        "-55x55",
+        "36.32x41.25",
+        "55x41.25",
+        "55x55",
+        "36.32x55"
+    ]
+}

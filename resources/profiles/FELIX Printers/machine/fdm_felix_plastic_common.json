@@ -1,0 +1,11 @@
+{
+    "type": "machine",
+    "name": "fdm_felix_plastic_common",
+    "inherits": "fdm_all_machines_common",
+    "from": "system",
+    "instantiation": "false",
+    "extruder_offset": [
+        "0x0",
+        "0x0"
+    ]
+}

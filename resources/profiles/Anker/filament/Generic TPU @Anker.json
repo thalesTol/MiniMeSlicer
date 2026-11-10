@@ -1,16 +1,17 @@
 {
     "type": "filament",
-    "filament_id": "GFU99",
-    "setting_id": "GFSU99_Anker_00",
     "name": "Generic TPU @Anker",
+    "renamed_from": "Anker Generic TPU",
+    "inherits": "Generic TPU @Anker base",
     "from": "system",
+    "setting_id": "5YigkBBSP2RM1MbK",
     "instantiation": "true",
-    "inherits": "fdm_filament_tpu",
-    "filament_max_volumetric_speed": [
-        "3.2"
-    ],
     "compatible_printers": [
         "Anker M5 0.4 nozzle",
-        "Anker M5C 0.4 nozzle"
+        "Anker M5 0.6 nozzle",
+        "Anker M5 All-Metal 0.4 nozzle",
+        "Anker M5 All-Metal 0.6 nozzle",
+        "Anker M5C 0.4 nozzle",
+        "Anker M5C 0.6 nozzle"
     ]
 }
